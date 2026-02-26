@@ -191,6 +191,27 @@ module.exports = {
   register(/*{ strapi }*/) {},
 
   async bootstrap({ strapi }) {
+    // Disable email confirmation requirement so users can login immediately
+    const pluginStore = strapi.store({ type: 'plugin', name: 'users-permissions' });
+    const advancedSettings = await pluginStore.get({ key: 'advanced' });
+    if (advancedSettings && advancedSettings.email_confirmation) {
+      advancedSettings.email_confirmation = false;
+      await pluginStore.set({ key: 'advanced', value: advancedSettings });
+      console.log('📧 Disabled email confirmation requirement');
+    }
+
+    // Confirm any existing unconfirmed users
+    const unconfirmedUsers = await strapi.db.query('plugin::users-permissions.user').findMany({
+      where: { confirmed: false },
+    });
+    for (const u of unconfirmedUsers) {
+      await strapi.db.query('plugin::users-permissions.user').update({
+        where: { id: u.id },
+        data: { confirmed: true },
+      });
+      console.log(`  ✅ Confirmed user: ${u.email}`);
+    }
+
     // Seed movies if none exist
     const existingMovies = await strapi.documents('api::movie.movie').findMany({
       limit: 1,
