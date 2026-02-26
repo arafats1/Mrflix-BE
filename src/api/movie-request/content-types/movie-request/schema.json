@@ -1,0 +1,41 @@
+{
+  "kind": "collectionType",
+  "collectionName": "movie_requests",
+  "info": {
+    "singularName": "movie-request",
+    "pluralName": "movie-requests",
+    "displayName": "Movie Request",
+    "description": "User requests for movies/series"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "title": {
+      "type": "string",
+      "required": true
+    },
+    "description": {
+      "type": "text"
+    },
+    "type": {
+      "type": "enumeration",
+      "enum": ["movie", "series"],
+      "default": "movie"
+    },
+    "status": {
+      "type": "enumeration",
+      "enum": ["pending", "approved", "rejected", "fulfilled"],
+      "default": "pending"
+    },
+    "adminNote": {
+      "type": "text"
+    },
+    "requester": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user"
+    }
+  }
+}

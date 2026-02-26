@@ -1,0 +1,87 @@
+{
+  "kind": "collectionType",
+  "collectionName": "movies",
+  "info": {
+    "singularName": "movie",
+    "pluralName": "movies",
+    "displayName": "Movie",
+    "description": "Movies and TV series catalog"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "title": {
+      "type": "string",
+      "required": true
+    },
+    "overview": {
+      "type": "text"
+    },
+    "tmdbId": {
+      "type": "integer"
+    },
+    "posterUrl": {
+      "type": "string"
+    },
+    "backdropUrl": {
+      "type": "string"
+    },
+    "releaseDate": {
+      "type": "date"
+    },
+    "rating": {
+      "type": "decimal"
+    },
+    "genres": {
+      "type": "json"
+    },
+    "type": {
+      "type": "enumeration",
+      "enum": ["movie", "series"],
+      "default": "movie",
+      "required": true
+    },
+    "seasons": {
+      "type": "integer"
+    },
+    "priceUGX": {
+      "type": "integer",
+      "required": true,
+      "default": 2000
+    },
+    "videoUrl": {
+      "type": "string"
+    },
+    "embedUrl": {
+      "type": "string"
+    },
+    "trailerUrl": {
+      "type": "string"
+    },
+    "isAvailable": {
+      "type": "boolean",
+      "default": true
+    },
+    "isFeatured": {
+      "type": "boolean",
+      "default": false
+    },
+    "poster": {
+      "type": "media",
+      "multiple": false,
+      "allowedTypes": ["images"]
+    },
+    "backdrop": {
+      "type": "media",
+      "multiple": false,
+      "allowedTypes": ["images"]
+    },
+    "video": {
+      "type": "media",
+      "multiple": false,
+      "allowedTypes": ["videos"]
+    }
+  }
+}
