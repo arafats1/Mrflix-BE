@@ -469,6 +469,7 @@ export interface ApiMovieRequestMovieRequest
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    whatsappNumber: Schema.Attribute.String;
   };
 }
 

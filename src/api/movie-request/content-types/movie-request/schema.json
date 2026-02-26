@@ -32,6 +32,9 @@
     "adminNote": {
       "type": "text"
     },
+    "whatsappNumber": {
+      "type": "string"
+    },
     "requester": {
       "type": "relation",
       "relation": "manyToOne",
