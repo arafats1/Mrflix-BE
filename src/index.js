@@ -281,6 +281,66 @@ module.exports = {
         }
         console.log('🔐 Authenticated API permissions configured');
       }
+
+      // Create Admin role for frontend admins (users-permissions)
+      let adminRole = await strapi.db.query('plugin::users-permissions.role').findOne({
+        where: { type: 'admin' },
+      });
+
+      if (!adminRole) {
+        adminRole = await strapi.db.query('plugin::users-permissions.role').create({
+          data: {
+            name: 'Admin',
+            description: 'Admin users who can manage movies, purchases, and requests',
+            type: 'admin',
+          },
+        });
+        console.log('👑 Created Admin role for users-permissions');
+      }
+
+      if (adminRole) {
+        const adminPermissions = [
+          // Full movie CRUD
+          { action: 'api::movie.movie.find' },
+          { action: 'api::movie.movie.findOne' },
+          { action: 'api::movie.movie.create' },
+          { action: 'api::movie.movie.update' },
+          { action: 'api::movie.movie.delete' },
+          // Full purchase access
+          { action: 'api::purchase.purchase.find' },
+          { action: 'api::purchase.purchase.findOne' },
+          { action: 'api::purchase.purchase.create' },
+          { action: 'api::purchase.purchase.update' },
+          // Full request access
+          { action: 'api::movie-request.movie-request.find' },
+          { action: 'api::movie-request.movie-request.findOne' },
+          { action: 'api::movie-request.movie-request.create' },
+          { action: 'api::movie-request.movie-request.update' },
+          { action: 'api::movie-request.movie-request.delete' },
+          // User management
+          { action: 'plugin::users-permissions.user.me' },
+          { action: 'plugin::users-permissions.user.find' },
+          { action: 'plugin::users-permissions.user.findOne' },
+          { action: 'plugin::users-permissions.user.count' },
+          { action: 'plugin::users-permissions.auth.callback' },
+          { action: 'plugin::users-permissions.auth.connect' },
+          // Upload
+          { action: 'plugin::upload.content-api.upload' },
+          { action: 'plugin::upload.content-api.find' },
+        ];
+
+        for (const perm of adminPermissions) {
+          const existing = await strapi.db.query('plugin::users-permissions.permission').findOne({
+            where: { action: perm.action, role: adminRole.id },
+          });
+          if (!existing) {
+            await strapi.db.query('plugin::users-permissions.permission').create({
+              data: { action: perm.action, role: adminRole.id, enabled: true },
+            });
+          }
+        }
+        console.log('👑 Admin API permissions configured');
+      }
     } catch (err) {
       console.error('⚠️ Failed to set permissions:', err.message);
     }
