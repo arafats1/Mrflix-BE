@@ -9,17 +9,17 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
       return ctx.unauthorized('You must be logged in');
     }
 
-    ctx.query = {
-      ...ctx.query,
+    const purchases = await strapi.documents('api::purchase.purchase').findMany({
       filters: {
-        ...ctx.query.filters,
-        buyer: ctx.state.user.id,
+        buyer: { id: ctx.state.user.id },
       },
-      populate: ['movie', 'movie.poster'],
-    };
+      populate: {
+        movie: { populate: '*' },
+      },
+      sort: { createdAt: 'desc' },
+    });
 
-    const { data, meta } = await super.find(ctx);
-    return { data, meta };
+    return { data: purchases, meta: { pagination: { total: purchases.length } } };
   },
 
   // Create a purchase (buy a movie)
