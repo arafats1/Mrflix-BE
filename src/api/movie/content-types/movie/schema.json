@@ -68,6 +68,10 @@
       "type": "boolean",
       "default": false
     },
+    "isTrending": {
+      "type": "boolean",
+      "default": false
+    },
     "poster": {
       "type": "media",
       "multiple": false,

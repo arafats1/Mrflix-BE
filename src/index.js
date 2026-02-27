@@ -15,6 +15,7 @@ const movies = [
     trailerUrl: "https://www.youtube.com/embed/xjDjIWPwcPU",
     isAvailable: true,
     isFeatured: true,
+    isTrending: true,
   },
   {
     title: "Black Panther: Wakanda Forever",
@@ -45,6 +46,7 @@ const movies = [
     trailerUrl: "https://www.youtube.com/embed/uYPbbksJxIg",
     isAvailable: true,
     isFeatured: true,
+    isTrending: true,
   },
   {
     title: "Dune",
@@ -60,6 +62,7 @@ const movies = [
     trailerUrl: "https://www.youtube.com/embed/8g18jFHCLXk",
     isAvailable: true,
     isFeatured: false,
+    isTrending: true,
   },
   {
     title: "Extraction 2",
@@ -90,6 +93,7 @@ const movies = [
     trailerUrl: "https://www.youtube.com/embed/73_1biulkYk",
     isAvailable: true,
     isFeatured: true,
+    isTrending: true,
   },
   {
     title: "Money Heist",
@@ -106,6 +110,7 @@ const movies = [
     trailerUrl: "https://www.youtube.com/embed/hMbhKGmHThE",
     isAvailable: true,
     isFeatured: true,
+    isTrending: true,
   },
   {
     title: "Squid Game",
@@ -122,6 +127,7 @@ const movies = [
     trailerUrl: "https://www.youtube.com/embed/oqxAJKy0ii4",
     isAvailable: true,
     isFeatured: false,
+    isTrending: true,
   },
   {
     title: "Breaking Bad",
@@ -184,6 +190,7 @@ const movies = [
     trailerUrl: "https://www.youtube.com/embed/uLtkt8BonwM",
     isAvailable: true,
     isFeatured: true,
+    isTrending: true,
   },
 ];
 
