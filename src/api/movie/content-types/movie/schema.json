@@ -60,6 +60,9 @@
     "trailerUrl": {
       "type": "string"
     },
+    "subtitleUrl": {
+      "type": "string"
+    },
     "isAvailable": {
       "type": "boolean",
       "default": true

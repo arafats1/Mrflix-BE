@@ -508,6 +508,7 @@ export interface ApiMovieMovie extends Struct.CollectionTypeSchema {
     rating: Schema.Attribute.Decimal;
     releaseDate: Schema.Attribute.Date;
     seasons: Schema.Attribute.Integer;
+    subtitleUrl: Schema.Attribute.String;
     title: Schema.Attribute.String & Schema.Attribute.Required;
     tmdbId: Schema.Attribute.Integer;
     trailerUrl: Schema.Attribute.String;
