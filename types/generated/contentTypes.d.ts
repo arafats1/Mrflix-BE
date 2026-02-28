@@ -491,6 +491,7 @@ export interface ApiMovieMovie extends Struct.CollectionTypeSchema {
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
     embedUrl: Schema.Attribute.String;
+    episodes: Schema.Attribute.JSON;
     genres: Schema.Attribute.JSON;
     isAvailable: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<true>;
     isFeatured: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
@@ -520,6 +521,8 @@ export interface ApiMovieMovie extends Struct.CollectionTypeSchema {
       Schema.Attribute.Private;
     video: Schema.Attribute.Media<'videos'>;
     videoUrl: Schema.Attribute.String;
+    videoUrl480: Schema.Attribute.String;
+    videoUrl720: Schema.Attribute.String;
   };
 }
 

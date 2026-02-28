@@ -63,6 +63,15 @@
     "subtitleUrl": {
       "type": "string"
     },
+    "videoUrl720": {
+      "type": "string"
+    },
+    "videoUrl480": {
+      "type": "string"
+    },
+    "episodes": {
+      "type": "json"
+    },
     "isAvailable": {
       "type": "boolean",
       "default": true
