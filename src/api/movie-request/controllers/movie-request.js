@@ -11,10 +11,15 @@ module.exports = createCoreController('api::movie-request.movie-request', ({ str
 
     const isAdmin = ctx.state.user.role?.type === 'admin' || ctx.state.user.role?.name === 'Admin';
 
-    // Update query filters manually instead of using super.find to avoid Strapi 5 validation bugs
+    // Explicitly select all fields including whatsappNumber
     const query = {
       ...ctx.query,
-      populate: ['requester'],
+      fields: ['title', 'description', 'type', 'status', 'adminNote', 'whatsappNumber', 'createdAt', 'updatedAt'],
+      populate: {
+        requester: {
+          populate: '*' 
+        }
+      },
       sort: 'createdAt:desc',
     };
 
