@@ -1,6 +1,7 @@
 'use strict';
 
 const { createCoreController } = require('@strapi/strapi').factories;
+const { notifyAdminNewRequest, notifyUserMovieAvailable } = require('../../../utils/whatsapp');
 
 module.exports = createCoreController('api::movie-request.movie-request', ({ strapi }) => ({
   // Users see only their own requests
@@ -11,26 +12,20 @@ module.exports = createCoreController('api::movie-request.movie-request', ({ str
 
     const isAdmin = ctx.state.user.role?.type === 'admin' || ctx.state.user.role?.name === 'Admin';
 
-    // Explicitly select all fields including whatsappNumber
-    const query = {
-      ...ctx.query,
-      fields: ['title', 'description', 'type', 'status', 'adminNote', 'whatsappNumber', 'createdAt', 'updatedAt'],
+    const params = {
       populate: {
-        requester: {
-          populate: '*' 
-        }
+        requester: true,
       },
       sort: 'createdAt:desc',
     };
 
     if (!isAdmin) {
-      query.filters = {
-        ...query.filters,
+      params.filters = {
         requester: { id: ctx.state.user.id },
       };
     }
 
-    const entries = await strapi.entityService.findMany('api::movie-request.movie-request', query);
+    const entries = await strapi.documents('api::movie-request.movie-request').findMany(params);
     return { data: entries };
   },
 
@@ -43,7 +38,7 @@ module.exports = createCoreController('api::movie-request.movie-request', ({ str
     const inputData = ctx.request.body.data || ctx.request.body;
 
     try {
-      const entry = await strapi.entityService.create('api::movie-request.movie-request', {
+      const entry = await strapi.documents('api::movie-request.movie-request').create({
         data: {
           title: inputData.title,
           description: inputData.description,
@@ -53,6 +48,15 @@ module.exports = createCoreController('api::movie-request.movie-request', ({ str
           status: 'pending',
         },
       });
+
+      // Send WhatsApp alert to admin (fire-and-forget)
+      notifyAdminNewRequest({
+        title: inputData.title,
+        type: inputData.type || 'movie',
+        requesterName: ctx.state.user.fullName || ctx.state.user.username || 'Unknown',
+        whatsappNumber: inputData.whatsappNumber,
+      }).catch(err => console.error('[WhatsApp] Admin notify failed:', err.message));
+
       return { data: entry };
     } catch (err) {
       console.error('Request Create Error:', err.message);
@@ -74,9 +78,34 @@ module.exports = createCoreController('api::movie-request.movie-request', ({ str
     const { id } = ctx.params;
     const inputData = ctx.request.body.data || ctx.request.body;
 
-    const entry = await strapi.entityService.update('api::movie-request.movie-request', id, {
+    // Fetch current entry by documentId to get whatsapp number and requester
+    const existing = await strapi.documents('api::movie-request.movie-request').findOne({
+      documentId: id,
+      populate: { requester: true },
+    });
+
+    if (!existing) {
+      return ctx.notFound('Request not found');
+    }
+
+    // Update using documentId
+    const entry = await strapi.documents('api::movie-request.movie-request').update({
+      documentId: id,
       data: inputData,
     });
+
+    // If marked as available, notify the user via WhatsApp
+    if (inputData.status === 'available') {
+      const userWhatsApp = existing.whatsappNumber || existing.requester?.phone;
+      if (userWhatsApp) {
+        notifyUserMovieAvailable({
+          to: userWhatsApp,
+          title: existing.title,
+          adminNote: inputData.adminNote || existing.adminNote,
+        }).catch(err => console.error('[WhatsApp] User notify failed:', err.message));
+      }
+    }
+
     return { data: entry };
   },
 }));

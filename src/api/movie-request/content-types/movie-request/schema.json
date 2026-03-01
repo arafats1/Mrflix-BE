@@ -26,7 +26,7 @@
     },
     "status": {
       "type": "enumeration",
-      "enum": ["pending", "approved", "rejected", "fulfilled"],
+      "enum": ["pending", "approved", "available", "rejected", "fulfilled"],
       "default": "pending"
     },
     "adminNote": {

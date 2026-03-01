@@ -460,7 +460,7 @@ export interface ApiMovieRequestMovieRequest
       'plugin::users-permissions.user'
     >;
     status: Schema.Attribute.Enumeration<
-      ['pending', 'approved', 'rejected', 'fulfilled']
+      ['pending', 'approved', 'available', 'rejected', 'fulfilled']
     > &
       Schema.Attribute.DefaultTo<'pending'>;
     title: Schema.Attribute.String & Schema.Attribute.Required;
