@@ -253,6 +253,8 @@ module.exports = {
           // Movies - public can find and findOne
           { action: 'api::movie.movie.find' },
           { action: 'api::movie.movie.findOne' },
+          // Site settings - public can read pricing
+          { action: 'api::site-setting.site-setting.find' },
           // Auth - public can register, login, callback
           { action: 'plugin::users-permissions.auth.callback' },
           { action: 'plugin::users-permissions.auth.connect' },
@@ -286,6 +288,12 @@ module.exports = {
           { action: 'api::purchase.purchase.find' },
           { action: 'api::purchase.purchase.findOne' },
           { action: 'api::purchase.purchase.create' },
+          // Subscriptions
+          { action: 'api::subscription.subscription.find' },
+          { action: 'api::subscription.subscription.findOne' },
+          { action: 'api::subscription.subscription.create' },
+          // Site settings (read-only)
+          { action: 'api::site-setting.site-setting.find' },
           // Movie Requests
           { action: 'api::movie-request.movie-request.find' },
           { action: 'api::movie-request.movie-request.findOne' },
@@ -339,6 +347,15 @@ module.exports = {
           { action: 'api::purchase.purchase.findOne' },
           { action: 'api::purchase.purchase.create' },
           { action: 'api::purchase.purchase.update' },
+          // Full subscription access
+          { action: 'api::subscription.subscription.find' },
+          { action: 'api::subscription.subscription.findOne' },
+          { action: 'api::subscription.subscription.create' },
+          { action: 'api::subscription.subscription.update' },
+          { action: 'api::subscription.subscription.delete' },
+          // Site settings (full access)
+          { action: 'api::site-setting.site-setting.find' },
+          { action: 'api::site-setting.site-setting.createOrUpdate' },
           // Full request access
           { action: 'api::movie-request.movie-request.find' },
           { action: 'api::movie-request.movie-request.findOne' },
