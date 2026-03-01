@@ -1,0 +1,51 @@
+{
+  "kind": "collectionType",
+  "collectionName": "subscriptions",
+  "info": {
+    "singularName": "subscription",
+    "pluralName": "subscriptions",
+    "displayName": "Subscription",
+    "description": "Monthly user subscriptions"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "subscriber": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user"
+    },
+    "amount": {
+      "type": "integer",
+      "required": true
+    },
+    "paymentMethod": {
+      "type": "enumeration",
+      "enum": ["mtn_momo", "airtel_money"],
+      "required": true
+    },
+    "paymentPhone": {
+      "type": "string",
+      "required": true
+    },
+    "transactionId": {
+      "type": "string"
+    },
+    "status": {
+      "type": "enumeration",
+      "enum": ["active", "expired", "cancelled", "pending"],
+      "default": "pending",
+      "required": true
+    },
+    "startDate": {
+      "type": "datetime",
+      "required": true
+    },
+    "endDate": {
+      "type": "datetime",
+      "required": true
+    }
+  }
+}

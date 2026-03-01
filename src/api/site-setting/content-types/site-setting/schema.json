@@ -1,0 +1,35 @@
+{
+  "kind": "singleType",
+  "collectionName": "site_settings",
+  "info": {
+    "singularName": "site-setting",
+    "pluralName": "site-settings",
+    "displayName": "Site Setting",
+    "description": "Global site configuration including pricing"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "moviePrice": {
+      "type": "integer",
+      "required": true,
+      "default": 2000
+    },
+    "seriesPrice": {
+      "type": "integer",
+      "required": true,
+      "default": 5000
+    },
+    "subscriptionPrice": {
+      "type": "integer",
+      "required": true,
+      "default": 20000
+    },
+    "subscriptionEnabled": {
+      "type": "boolean",
+      "default": true
+    }
+  }
+}
