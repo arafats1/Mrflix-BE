@@ -26,5 +26,21 @@ module.exports = {
         policies: [],
       },
     },
+    {
+      method: 'POST',
+      path: '/subscriptions/grant',
+      handler: 'subscription.grant',
+      config: {
+        policies: [],
+      },
+    },
+    {
+      method: 'POST',
+      path: '/subscriptions/revoke',
+      handler: 'subscription.revoke',
+      config: {
+        policies: [],
+      },
+    },
   ],
 };

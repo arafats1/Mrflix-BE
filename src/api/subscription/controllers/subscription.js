@@ -114,4 +114,103 @@ module.exports = createCoreController('api::subscription.subscription', ({ strap
 
     return { data: entry, transactionId };
   },
+
+  // Admin: Grant premium subscription to a user without payment
+  async grant(ctx) {
+    if (!ctx.state.user) {
+      return ctx.unauthorized('You must be logged in');
+    }
+
+    const isAdmin = ctx.state.user.role?.type === 'admin' || ctx.state.user.role?.name === 'Admin';
+    if (!isAdmin) {
+      return ctx.forbidden('Only admins can grant subscriptions');
+    }
+
+    const { userId, durationDays } = ctx.request.body.data || ctx.request.body;
+
+    if (!userId) {
+      return ctx.badRequest('Missing required field: userId');
+    }
+
+    const days = parseInt(durationDays) || 30;
+
+    // Check if user exists
+    const targetUser = await strapi.entityService.findOne('plugin::users-permissions.user', userId);
+    if (!targetUser) {
+      return ctx.notFound('User not found');
+    }
+
+    // Cancel any existing active subscription
+    const now = new Date();
+    const existing = await strapi.entityService.findMany('api::subscription.subscription', {
+      filters: {
+        subscriber: { id: userId },
+        status: 'active',
+        endDate: { $gte: now.toISOString() },
+      },
+    });
+
+    for (const sub of existing) {
+      await strapi.entityService.update('api::subscription.subscription', sub.id, {
+        data: { status: 'cancelled' },
+      });
+    }
+
+    // Create granted subscription
+    const startDate = now;
+    const endDate = new Date(now);
+    endDate.setDate(endDate.getDate() + days);
+
+    const transactionId = `ADMIN_GRANT_${Date.now()}_${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+
+    const entry = await strapi.entityService.create('api::subscription.subscription', {
+      data: {
+        subscriber: userId,
+        amount: 0,
+        paymentMethod: 'mtn_momo',
+        paymentPhone: 'admin_granted',
+        transactionId,
+        status: 'active',
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString(),
+      },
+    });
+
+    return { data: entry };
+  },
+
+  // Admin: Revoke (cancel) a user's active subscription
+  async revoke(ctx) {
+    if (!ctx.state.user) {
+      return ctx.unauthorized('You must be logged in');
+    }
+
+    const isAdmin = ctx.state.user.role?.type === 'admin' || ctx.state.user.role?.name === 'Admin';
+    if (!isAdmin) {
+      return ctx.forbidden('Only admins can revoke subscriptions');
+    }
+
+    const { userId } = ctx.request.body.data || ctx.request.body;
+
+    if (!userId) {
+      return ctx.badRequest('Missing required field: userId');
+    }
+
+    const now = new Date();
+    const active = await strapi.entityService.findMany('api::subscription.subscription', {
+      filters: {
+        subscriber: { id: userId },
+        status: 'active',
+        endDate: { $gte: now.toISOString() },
+      },
+    });
+
+    for (const sub of active) {
+      await strapi.entityService.update('api::subscription.subscription', sub.id, {
+        data: { status: 'cancelled' },
+      });
+    }
+
+    return { data: { revoked: active.length } };
+  },
 }));
