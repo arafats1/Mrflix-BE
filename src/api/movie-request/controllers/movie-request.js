@@ -9,27 +9,24 @@ module.exports = createCoreController('api::movie-request.movie-request', ({ str
       return ctx.unauthorized('You must be logged in');
     }
 
-    // Admin sees all requests
     const isAdmin = ctx.state.user.role?.type === 'admin' || ctx.state.user.role?.name === 'Admin';
 
+    // Update query filters manually instead of using super.find to avoid Strapi 5 validation bugs
+    const query = {
+      ...ctx.query,
+      populate: ['requester'],
+      sort: 'createdAt:desc',
+    };
+
     if (!isAdmin) {
-      ctx.query = {
-        ...ctx.query,
-        filters: {
-          ...ctx.query.filters,
-          requester: ctx.state.user.id,
-        },
+      query.filters = {
+        ...query.filters,
+        requester: { id: ctx.state.user.id },
       };
     }
 
-    ctx.query = {
-      ...ctx.query,
-      populate: ['requester'],
-      sort: { createdAt: 'desc' },
-    };
-
-    const { data, meta } = await super.find(ctx);
-    return { data, meta };
+    const entries = await strapi.entityService.findMany('api::movie-request.movie-request', query);
+    return { data: entries };
   },
 
   // Create a new request
@@ -38,18 +35,24 @@ module.exports = createCoreController('api::movie-request.movie-request', ({ str
       return ctx.unauthorized('You must be logged in');
     }
 
-    const body = ctx.request.body.data || ctx.request.body;
+    const inputData = ctx.request.body.data || ctx.request.body;
 
-    ctx.request.body = {
-      data: {
-        ...body,
-        requester: ctx.state.user.id,
-        status: 'pending',
-      },
-    };
-
-    const response = await super.create(ctx);
-    return response;
+    try {
+      const entry = await strapi.entityService.create('api::movie-request.movie-request', {
+        data: {
+          title: inputData.title,
+          description: inputData.description,
+          type: inputData.type || 'movie',
+          whatsappNumber: inputData.whatsappNumber,
+          requester: ctx.state.user.id,
+          status: 'pending',
+        },
+      });
+      return { data: entry };
+    } catch (err) {
+      console.error('Request Create Error:', err.message);
+      ctx.throw(400, err.message);
+    }
   },
 
   // Update request status (admin only)
@@ -63,7 +66,12 @@ module.exports = createCoreController('api::movie-request.movie-request', ({ str
       return ctx.forbidden('Only admins can update request status');
     }
 
-    const response = await super.update(ctx);
-    return response;
+    const { id } = ctx.params;
+    const inputData = ctx.request.body.data || ctx.request.body;
+
+    const entry = await strapi.entityService.update('api::movie-request.movie-request', id, {
+      data: inputData,
+    });
+    return { data: entry };
   },
 }));
