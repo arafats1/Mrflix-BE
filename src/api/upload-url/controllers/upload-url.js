@@ -4,20 +4,71 @@ const { S3Client, PutObjectCommand, CreateMultipartUploadCommand, UploadPartComm
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const crypto = require('crypto');
 
-function getS3Client() {
+// ──────────────────────────────────────────
+// Storage provider: "backblaze" or "cloudflare"
+// Controlled by STORAGE_PROVIDER env var
+// ──────────────────────────────────────────
+const PROVIDER = (process.env.STORAGE_PROVIDER || 'cloudflare').toLowerCase();
+
+// ── Cloudflare R2 config ──
+// function getCloudflarS3Client() {
+//   return new S3Client({
+//     region: 'auto',
+//     endpoint: process.env.CF_ENDPOINT,
+//     credentials: {
+//       accessKeyId: process.env.CF_ACCESS_KEY_ID,
+//       secretAccessKey: process.env.CF_ACCESS_SECRET,
+//     },
+//     forcePathStyle: true,
+//   });
+// }
+// const CF_BUCKET = process.env.CF_BUCKET || 'mrflix';
+// const CF_PUBLIC_URL = process.env.CF_PUBLIC_URL;
+
+// ── Backblaze B2 config ──
+function getBackblazeS3Client() {
   return new S3Client({
-    region: 'auto',
-    endpoint: process.env.CF_ENDPOINT,
+    region: 'us-east-005',
+    endpoint: process.env.B2_ENDPOINT,
     credentials: {
-      accessKeyId: process.env.CF_ACCESS_KEY_ID,
-      secretAccessKey: process.env.CF_ACCESS_SECRET,
+      accessKeyId: process.env.B2_ACCESS_KEY_ID,
+      secretAccessKey: process.env.B2_ACCESS_SECRET,
     },
     forcePathStyle: true,
   });
 }
 
-const BUCKET = process.env.CF_BUCKET || 'mrflix';
-const PUBLIC_URL = process.env.CF_PUBLIC_URL;
+/**
+ * Returns the active S3 client, bucket name, and public URL
+ * based on the STORAGE_PROVIDER env var.
+ * Switch providers by changing STORAGE_PROVIDER in .env
+ */
+function getStorage() {
+  if (PROVIDER === 'backblaze') {
+    return {
+      s3: getBackblazeS3Client(),
+      bucket: process.env.B2_BUCKET || 'Mrflix',
+      publicUrl: process.env.B2_PUBLIC_URL,
+      provider: 'backblaze',
+    };
+  }
+
+  // Default: Cloudflare R2
+  return {
+    s3: new S3Client({
+      region: 'auto',
+      endpoint: process.env.CF_ENDPOINT,
+      credentials: {
+        accessKeyId: process.env.CF_ACCESS_KEY_ID,
+        secretAccessKey: process.env.CF_ACCESS_SECRET,
+      },
+      forcePathStyle: true,
+    }),
+    bucket: process.env.CF_BUCKET || 'mrflix',
+    publicUrl: process.env.CF_PUBLIC_URL,
+    provider: 'cloudflare',
+  };
+}
 
 module.exports = {
   /**
@@ -46,9 +97,9 @@ module.exports = {
     const ext = fileName.split('.').pop();
     const key = `videos/${Date.now()}_${crypto.randomBytes(8).toString('hex')}.${ext}`;
 
-    const s3 = getS3Client();
+    const { s3, bucket, publicUrl, provider } = getStorage();
     const command = new PutObjectCommand({
-      Bucket: BUCKET,
+      Bucket: bucket,
       Key: key,
       ContentType: contentType,
     });
@@ -58,7 +109,8 @@ module.exports = {
     ctx.body = {
       uploadUrl: presignedUrl,
       key,
-      publicUrl: `${PUBLIC_URL}/${key}`,
+      publicUrl: `${publicUrl}/${key}`,
+      provider,
     };
   },
 
@@ -87,9 +139,9 @@ module.exports = {
     const ext = fileName.split('.').pop();
     const key = `videos/${Date.now()}_${crypto.randomBytes(8).toString('hex')}.${ext}`;
 
-    const s3 = getS3Client();
+    const { s3, bucket, publicUrl, provider } = getStorage();
     const command = new CreateMultipartUploadCommand({
-      Bucket: BUCKET,
+      Bucket: bucket,
       Key: key,
       ContentType: contentType,
     });
@@ -99,7 +151,8 @@ module.exports = {
     ctx.body = {
       uploadId: UploadId,
       key,
-      publicUrl: `${PUBLIC_URL}/${key}`,
+      publicUrl: `${publicUrl}/${key}`,
+      provider,
     };
   },
 
@@ -116,9 +169,9 @@ module.exports = {
       return ctx.badRequest('key, uploadId, and partNumber are required');
     }
 
-    const s3 = getS3Client();
+    const { s3, bucket } = getStorage();
     const command = new UploadPartCommand({
-      Bucket: BUCKET,
+      Bucket: bucket,
       Key: key,
       UploadId: uploadId,
       PartNumber: partNumber,
@@ -142,9 +195,9 @@ module.exports = {
       return ctx.badRequest('key, uploadId, and parts are required');
     }
 
-    const s3 = getS3Client();
+    const { s3, bucket, publicUrl } = getStorage();
     const command = new CompleteMultipartUploadCommand({
-      Bucket: BUCKET,
+      Bucket: bucket,
       Key: key,
       UploadId: uploadId,
       MultipartUpload: {
@@ -158,7 +211,7 @@ module.exports = {
     await s3.send(command);
 
     ctx.body = {
-      publicUrl: `${PUBLIC_URL}/${key}`,
+      publicUrl: `${publicUrl}/${key}`,
       key,
     };
   },
@@ -176,9 +229,9 @@ module.exports = {
       return ctx.badRequest('key and uploadId are required');
     }
 
-    const s3 = getS3Client();
+    const { s3, bucket } = getStorage();
     const command = new AbortMultipartUploadCommand({
-      Bucket: BUCKET,
+      Bucket: bucket,
       Key: key,
       UploadId: uploadId,
     });
