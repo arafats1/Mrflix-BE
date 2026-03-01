@@ -101,7 +101,7 @@ module.exports = createCoreController('api::movie-request.movie-request', ({ str
         notifyUserMovieAvailable({
           to: userWhatsApp,
           title: existing.title,
-          adminNote: inputData.adminNote || existing.adminNote,
+          userName: existing.requester?.fullName || existing.requester?.username || 'there',
         }).catch(err => console.error('[WhatsApp] User notify failed:', err.message));
       }
     }
