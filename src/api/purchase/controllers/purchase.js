@@ -3,19 +3,31 @@
 const { createCoreController } = require('@strapi/strapi').factories;
 
 module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => ({
-  // Only allow users to see their own purchases
+  // Users see their own purchases, admins see all with buyer info
   async find(ctx) {
     if (!ctx.state.user) {
       return ctx.unauthorized('You must be logged in');
     }
 
+    // Check if admin
+    const userWithRole = await strapi.query('plugin::users-permissions.user').findOne({
+      where: { id: ctx.state.user.id },
+      populate: ['role'],
+    });
+    const isAdmin = userWithRole?.role?.type === 'admin' || userWithRole?.role?.name === 'Admin';
+
+    const filters = {};
+    if (!isAdmin) {
+      filters.buyer = { id: ctx.state.user.id };
+    }
+
+    const populate = isAdmin
+      ? { movie: { populate: '*' }, buyer: { populate: '*' } }
+      : { movie: { populate: '*' } };
+
     const purchases = await strapi.documents('api::purchase.purchase').findMany({
-      filters: {
-        buyer: { id: ctx.state.user.id },
-      },
-      populate: {
-        movie: { populate: '*' },
-      },
+      filters,
+      populate,
       sort: { createdAt: 'desc' },
     });
 
