@@ -89,13 +89,14 @@ module.exports = {
       return ctx.forbidden('Admin access required');
     }
 
-    const { fileName, contentType } = ctx.request.body;
+    const { fileName, contentType, folder } = ctx.request.body;
     if (!fileName || !contentType) {
       return ctx.badRequest('fileName and contentType are required');
     }
 
     const ext = fileName.split('.').pop();
-    const key = `videos/${Date.now()}_${crypto.randomBytes(8).toString('hex')}.${ext}`;
+    const prefix = folder || 'videos';
+    const key = `${prefix}/${Date.now()}_${crypto.randomBytes(8).toString('hex')}.${ext}`;
 
     const { s3, bucket, publicUrl, provider } = getStorage();
     const command = new PutObjectCommand({
@@ -131,13 +132,14 @@ module.exports = {
       return ctx.forbidden('Admin access required');
     }
 
-    const { fileName, contentType } = ctx.request.body;
+    const { fileName, contentType, folder } = ctx.request.body;
     if (!fileName || !contentType) {
       return ctx.badRequest('fileName and contentType are required');
     }
 
     const ext = fileName.split('.').pop();
-    const key = `videos/${Date.now()}_${crypto.randomBytes(8).toString('hex')}.${ext}`;
+    const prefix = folder || 'videos';
+    const key = `${prefix}/${Date.now()}_${crypto.randomBytes(8).toString('hex')}.${ext}`;
 
     const { s3, bucket, publicUrl, provider } = getStorage();
     const command = new CreateMultipartUploadCommand({

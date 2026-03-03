@@ -30,6 +30,18 @@
     "subscriptionEnabled": {
       "type": "boolean",
       "default": true
+    },
+    "apkUrl": {
+      "type": "string"
+    },
+    "apkVersion": {
+      "type": "string"
+    },
+    "apkSize": {
+      "type": "string"
+    },
+    "apkUpdatedAt": {
+      "type": "datetime"
     }
   }
 }

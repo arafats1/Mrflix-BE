@@ -579,6 +579,10 @@ export interface ApiSiteSettingSiteSetting extends Struct.SingleTypeSchema {
     draftAndPublish: false;
   };
   attributes: {
+    apkSize: Schema.Attribute.String;
+    apkUpdatedAt: Schema.Attribute.DateTime;
+    apkUrl: Schema.Attribute.String;
+    apkVersion: Schema.Attribute.String;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
