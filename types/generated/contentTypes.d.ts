@@ -655,6 +655,46 @@ export interface ApiSubscriptionSubscription
   };
 }
 
+export interface ApiTvCodeTvCode extends Struct.CollectionTypeSchema {
+  collectionName: 'tv_codes';
+  info: {
+    description: 'Pairing codes for linking TV app to user accounts';
+    displayName: 'TV Code';
+    pluralName: 'tv-codes';
+    singularName: 'tv-code';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    claimed: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
+    code: Schema.Attribute.String &
+      Schema.Attribute.Required &
+      Schema.Attribute.Unique &
+      Schema.Attribute.SetMinMaxLength<{
+        maxLength: 6;
+      }>;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    expiresAt: Schema.Attribute.DateTime & Schema.Attribute.Required;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::tv-code.tv-code'
+    > &
+      Schema.Attribute.Private;
+    publishedAt: Schema.Attribute.DateTime;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    user: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+  };
+}
+
 export interface PluginContentReleasesRelease
   extends Struct.CollectionTypeSchema {
   collectionName: 'strapi_releases';
@@ -1171,6 +1211,7 @@ declare module '@strapi/strapi' {
       'api::purchase.purchase': ApiPurchasePurchase;
       'api::site-setting.site-setting': ApiSiteSettingSiteSetting;
       'api::subscription.subscription': ApiSubscriptionSubscription;
+      'api::tv-code.tv-code': ApiTvCodeTvCode;
       'plugin::content-releases.release': PluginContentReleasesRelease;
       'plugin::content-releases.release-action': PluginContentReleasesReleaseAction;
       'plugin::i18n.locale': PluginI18NLocale;

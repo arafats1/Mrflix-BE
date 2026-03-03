@@ -1,0 +1,35 @@
+{
+  "kind": "collectionType",
+  "collectionName": "tv_codes",
+  "info": {
+    "singularName": "tv-code",
+    "pluralName": "tv-codes",
+    "displayName": "TV Code",
+    "description": "Pairing codes for linking TV app to user accounts"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "code": {
+      "type": "string",
+      "required": true,
+      "unique": true,
+      "maxLength": 6
+    },
+    "user": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user"
+    },
+    "expiresAt": {
+      "type": "datetime",
+      "required": true
+    },
+    "claimed": {
+      "type": "boolean",
+      "default": false
+    }
+  }
+}
