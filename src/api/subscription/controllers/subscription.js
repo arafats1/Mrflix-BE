@@ -213,4 +213,38 @@ module.exports = createCoreController('api::subscription.subscription', ({ strap
 
     return { data: { revoked: active.length } };
   },
+
+  async incrementDownload(ctx) {
+    if (!ctx.state.user) {
+      return ctx.unauthorized('You must be logged in');
+    }
+
+    const now = new Date().toISOString();
+
+    // Find active subscription for this user
+    const entries = await strapi.entityService.findMany('api::subscription.subscription', {
+      filters: {
+        subscriber: { id: ctx.state.user.id },
+        status: 'active',
+        endDate: { $gte: now },
+      },
+      sort: 'endDate:desc',
+      limit: 1,
+    });
+
+    if (!entries || entries.length === 0) {
+      return ctx.notFound('No active subscription found for this user');
+    }
+
+    const sub = entries[0];
+
+    // Update the download count
+    const updated = await strapi.entityService.update('api::subscription.subscription', sub.id, {
+      data: {
+        downloadCount: (sub.downloadCount || 0) + 1,
+      },
+    });
+
+    return { data: updated };
+  },
 }));

@@ -46,4 +46,17 @@ module.exports = createCoreController('api::site-setting.site-setting', ({ strap
 
     return { data: entry };
   },
+
+  async incrementDownload(ctx) {
+    const existing = await strapi.entityService.findMany('api::site-setting.site-setting');
+    if (!existing) {
+      return ctx.notFound('Site setting not found');
+    }
+    const updated = await strapi.entityService.update('api::site-setting.site-setting', existing.id, {
+      data: {
+        apkDownloadCount: (existing.apkDownloadCount || 0) + 1,
+      },
+    });
+    return { data: updated };
+  },
 }));

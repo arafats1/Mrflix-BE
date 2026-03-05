@@ -46,6 +46,10 @@
     "endDate": {
       "type": "datetime",
       "required": true
+    },
+    "downloadCount": {
+      "type": "integer",
+      "default": 0
     }
   }
 }

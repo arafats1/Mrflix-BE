@@ -42,5 +42,13 @@ module.exports = {
         policies: [],
       },
     },
+    {
+      method: 'POST',
+      path: '/subscriptions/increment-download',
+      handler: 'subscription.incrementDownload',
+      config: {
+        policies: [],
+      },
+    },
   ],
 };

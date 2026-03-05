@@ -18,5 +18,13 @@ module.exports = {
         policies: [],
       },
     },
+    {
+      method: 'POST',
+      path: '/site-setting/increment-download',
+      handler: 'site-setting.incrementDownload',
+      config: {
+        auth: false,
+      },
+    },
   ],
 };

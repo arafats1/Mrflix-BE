@@ -42,6 +42,10 @@
     },
     "apkUpdatedAt": {
       "type": "datetime"
+    },
+    "apkDownloadCount": {
+      "type": "integer",
+      "default": 0
     }
   }
 }

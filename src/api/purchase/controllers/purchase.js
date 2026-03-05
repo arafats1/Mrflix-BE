@@ -86,4 +86,43 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
 
     return { data: purchase, transactionId };
   },
+
+  async incrementDownload(ctx) {
+    if (!ctx.state.user) {
+      return ctx.unauthorized('You must be logged in');
+    }
+
+    const { movieId } = ctx.request.body.data || ctx.request.body;
+
+    if (!movieId) {
+      return ctx.badRequest('Missing movieId');
+    }
+
+    // Find the purchase for this user and movie
+    const purchases = await strapi.documents('api::purchase.purchase').findMany({
+      filters: {
+        buyer: ctx.state.user.id,
+        movie: { documentId: movieId },
+        status: 'completed',
+      },
+      sort: { createdAt: 'desc' },
+      limit: 1,
+    });
+
+    if (!purchases || purchases.length === 0) {
+      return ctx.notFound('Purchase record not found for this user and movie');
+    }
+
+    const purchase = purchases[0];
+
+    // Update the download count
+    const updated = await strapi.documents('api::purchase.purchase').update({
+      documentId: purchase.documentId,
+      data: {
+        downloadCount: (purchase.downloadCount || 0) + 1,
+      },
+    });
+
+    return { data: updated };
+  },
 }));

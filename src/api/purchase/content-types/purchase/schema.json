@@ -43,6 +43,10 @@
       "enum": ["pending", "completed", "failed"],
       "default": "pending",
       "required": true
+    },
+    "downloadCount": {
+      "type": "integer",
+      "default": 0
     }
   }
 }

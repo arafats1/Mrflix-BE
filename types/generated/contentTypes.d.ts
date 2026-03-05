@@ -546,6 +546,7 @@ export interface ApiPurchasePurchase extends Struct.CollectionTypeSchema {
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    downloadCount: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
       'oneToMany',
@@ -579,6 +580,7 @@ export interface ApiSiteSettingSiteSetting extends Struct.SingleTypeSchema {
     draftAndPublish: false;
   };
   attributes: {
+    apkDownloadCount: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
     apkSize: Schema.Attribute.String;
     apkUpdatedAt: Schema.Attribute.DateTime;
     apkUrl: Schema.Attribute.String;
@@ -627,6 +629,7 @@ export interface ApiSubscriptionSubscription
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    downloadCount: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
     endDate: Schema.Attribute.DateTime & Schema.Attribute.Required;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
