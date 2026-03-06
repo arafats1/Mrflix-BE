@@ -57,13 +57,13 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
 
     // Determine filter for existing purchase
     const filters = {
-      buyer: ctx.state.user.id,
-      movie: movie.id,
+      buyer: { id: ctx.state.user.id },
+      movie: { id: movie.id },
       status: 'completed',
     };
 
     if (movie.type === 'series' && seasonNumber) {
-      filters.seasonNumber = seasonNumber;
+      filters.seasonNumber = parseInt(seasonNumber);
     }
 
     // Check if already purchased
