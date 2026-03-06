@@ -299,6 +299,10 @@ module.exports = {
           { action: 'api::movie-request.movie-request.findOne' },
           { action: 'api::movie-request.movie-request.create' },
           { action: 'api::movie-request.movie-request.update' },
+          // Free Trial
+          { action: 'api::free-trial-watch.free-trial-watch.myStatus' },
+          { action: 'api::free-trial-watch.free-trial-watch.record' },
+          { action: 'api::free-trial-watch.free-trial-watch.canWatch' },
           // User profile
           { action: 'plugin::users-permissions.user.me' },
           { action: 'plugin::users-permissions.auth.callback' },
@@ -362,6 +366,12 @@ module.exports = {
           { action: 'api::movie-request.movie-request.create' },
           { action: 'api::movie-request.movie-request.update' },
           { action: 'api::movie-request.movie-request.delete' },
+          // Free Trial
+          { action: 'api::free-trial-watch.free-trial-watch.myStatus' },
+          { action: 'api::free-trial-watch.free-trial-watch.record' },
+          { action: 'api::free-trial-watch.free-trial-watch.canWatch' },
+          { action: 'api::free-trial-watch.free-trial-watch.find' },
+          { action: 'api::free-trial-watch.free-trial-watch.delete' },
           // User management
           { action: 'plugin::users-permissions.user.me' },
           { action: 'plugin::users-permissions.user.find' },

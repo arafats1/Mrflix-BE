@@ -46,6 +46,11 @@
     "apkDownloadCount": {
       "type": "integer",
       "default": 0
+    },
+    "freeTrialCount": {
+      "type": "integer",
+      "default": 2,
+      "required": true
     }
   }
 }

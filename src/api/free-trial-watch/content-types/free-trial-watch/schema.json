@@ -1,0 +1,38 @@
+{
+  "kind": "collectionType",
+  "collectionName": "free_trial_watches",
+  "info": {
+    "singularName": "free-trial-watch",
+    "pluralName": "free-trial-watches",
+    "displayName": "Free Trial Watch",
+    "description": "Tracks movies/episodes users have watched during their free trial"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "user": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user"
+    },
+    "movie": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::movie.movie"
+    },
+    "episodeSeason": {
+      "type": "integer"
+    },
+    "episodeNumber": {
+      "type": "integer"
+    },
+    "contentType": {
+      "type": "enumeration",
+      "enum": ["movie", "episode"],
+      "default": "movie",
+      "required": true
+    }
+  }
+}

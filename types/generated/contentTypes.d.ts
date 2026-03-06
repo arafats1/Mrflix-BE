@@ -430,6 +430,45 @@ export interface AdminUser extends Struct.CollectionTypeSchema {
   };
 }
 
+export interface ApiFreeTrialWatchFreeTrialWatch
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'free_trial_watches';
+  info: {
+    description: 'Tracks movies/episodes users have watched during their free trial';
+    displayName: 'Free Trial Watch';
+    pluralName: 'free-trial-watches';
+    singularName: 'free-trial-watch';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    contentType: Schema.Attribute.Enumeration<['movie', 'episode']> &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<'movie'>;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    episodeNumber: Schema.Attribute.Integer;
+    episodeSeason: Schema.Attribute.Integer;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::free-trial-watch.free-trial-watch'
+    > &
+      Schema.Attribute.Private;
+    movie: Schema.Attribute.Relation<'manyToOne', 'api::movie.movie'>;
+    publishedAt: Schema.Attribute.DateTime;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    user: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+  };
+}
+
 export interface ApiMovieRequestMovieRequest
   extends Struct.CollectionTypeSchema {
   collectionName: 'movie_requests';
@@ -589,6 +628,9 @@ export interface ApiSiteSettingSiteSetting extends Struct.SingleTypeSchema {
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    freeTrialCount: Schema.Attribute.Integer &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<2>;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
       'oneToMany',
@@ -1210,6 +1252,7 @@ declare module '@strapi/strapi' {
       'admin::transfer-token': AdminTransferToken;
       'admin::transfer-token-permission': AdminTransferTokenPermission;
       'admin::user': AdminUser;
+      'api::free-trial-watch.free-trial-watch': ApiFreeTrialWatchFreeTrialWatch;
       'api::movie-request.movie-request': ApiMovieRequestMovieRequest;
       'api::movie.movie': ApiMovieMovie;
       'api::purchase.purchase': ApiPurchasePurchase;
