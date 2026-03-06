@@ -34,13 +34,13 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
     return { data: purchases, meta: { pagination: { total: purchases.length } } };
   },
 
-  // Create a purchase (buy a movie)
+  // Create a purchase (buy a movie or season)
   async create(ctx) {
     if (!ctx.state.user) {
       return ctx.unauthorized('You must be logged in');
     }
 
-    const { movieId, paymentMethod, paymentPhone } = ctx.request.body.data || ctx.request.body;
+    const { movieId, paymentMethod, paymentPhone, seasonNumber } = ctx.request.body.data || ctx.request.body;
 
     if (!movieId || !paymentMethod || !paymentPhone) {
       return ctx.badRequest('Missing required fields: movieId, paymentMethod, paymentPhone');
@@ -55,17 +55,24 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
       return ctx.notFound('Movie not found');
     }
 
+    // Determine filter for existing purchase
+    const filters = {
+      buyer: ctx.state.user.id,
+      movie: movie.id,
+      status: 'completed',
+    };
+
+    if (movie.type === 'series' && seasonNumber) {
+      filters.seasonNumber = seasonNumber;
+    }
+
     // Check if already purchased
     const existing = await strapi.documents('api::purchase.purchase').findMany({
-      filters: {
-        buyer: ctx.state.user.id,
-        movie: movie.id,
-        status: 'completed',
-      },
+      filters,
     });
 
     if (existing && existing.length > 0) {
-      return ctx.badRequest('You already own this movie');
+      return ctx.badRequest('You already own this ' + (seasonNumber ? `season ${seasonNumber}` : 'movie'));
     }
 
     // Simulate payment (in production, integrate with MTN MoMo / Airtel Money API)
@@ -76,11 +83,12 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
       data: {
         movie: movie.id,
         buyer: ctx.state.user.id,
-        amount: movie.priceUGX,
+        amount: movie.priceUGX || 5000,
         paymentMethod,
         paymentPhone,
         transactionId,
         status: 'completed', // Simulated - set to 'pending' in production
+        seasonNumber: (movie.type === 'series' && seasonNumber) ? seasonNumber : null,
       },
     });
 

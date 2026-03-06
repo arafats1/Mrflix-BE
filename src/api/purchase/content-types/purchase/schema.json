@@ -47,6 +47,9 @@
     "downloadCount": {
       "type": "integer",
       "default": 0
+    },
+    "seasonNumber": {
+      "type": "integer"
     }
   }
 }

@@ -558,6 +558,7 @@ export interface ApiPurchasePurchase extends Struct.CollectionTypeSchema {
       Schema.Attribute.Required;
     paymentPhone: Schema.Attribute.String & Schema.Attribute.Required;
     publishedAt: Schema.Attribute.DateTime;
+    seasonNumber: Schema.Attribute.Integer;
     status: Schema.Attribute.Enumeration<['pending', 'completed', 'failed']> &
       Schema.Attribute.Required &
       Schema.Attribute.DefaultTo<'pending'>;
