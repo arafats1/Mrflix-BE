@@ -380,6 +380,7 @@ module.exports = {
           { action: 'api::active-stream.active-stream.heartbeat' },
           { action: 'api::active-stream.active-stream.stop' },
           { action: 'api::active-stream.active-stream.adminList' },
+          { action: 'api::active-stream.active-stream.adminHistory' },
           // User management
           { action: 'plugin::users-permissions.user.me' },
           { action: 'plugin::users-permissions.user.find' },

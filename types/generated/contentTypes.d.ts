@@ -434,7 +434,7 @@ export interface ApiActiveStreamActiveStream
   extends Struct.CollectionTypeSchema {
   collectionName: 'active_streams';
   info: {
-    description: 'Tracks which users are currently streaming content';
+    description: 'Tracks which users are currently streaming content and watch history';
     displayName: 'Active Stream';
     pluralName: 'active-streams';
     singularName: 'active-stream';
@@ -448,6 +448,7 @@ export interface ApiActiveStreamActiveStream
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    endedAt: Schema.Attribute.DateTime;
     episodeNumber: Schema.Attribute.Integer;
     episodeSeason: Schema.Attribute.Integer;
     lastHeartbeat: Schema.Attribute.DateTime & Schema.Attribute.Required;
@@ -460,8 +461,22 @@ export interface ApiActiveStreamActiveStream
     movie: Schema.Attribute.Relation<'manyToOne', 'api::movie.movie'>;
     platform: Schema.Attribute.Enumeration<['web', 'tv', 'mobile']> &
       Schema.Attribute.DefaultTo<'web'>;
+    progress: Schema.Attribute.Integer &
+      Schema.Attribute.SetMinMax<
+        {
+          max: 100;
+          min: 0;
+        },
+        number
+      > &
+      Schema.Attribute.DefaultTo<0>;
     publishedAt: Schema.Attribute.DateTime;
     startedAt: Schema.Attribute.DateTime;
+    status: Schema.Attribute.Enumeration<
+      ['watching', 'completed', 'stopped', 'abandoned']
+    > &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<'watching'>;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;

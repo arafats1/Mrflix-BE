@@ -5,7 +5,7 @@
     "singularName": "active-stream",
     "pluralName": "active-streams",
     "displayName": "Active Stream",
-    "description": "Tracks which users are currently streaming content"
+    "description": "Tracks which users are currently streaming content and watch history"
   },
   "options": {
     "draftAndPublish": false
@@ -44,6 +44,21 @@
     },
     "startedAt": {
       "type": "datetime"
+    },
+    "endedAt": {
+      "type": "datetime"
+    },
+    "status": {
+      "type": "enumeration",
+      "enum": ["watching", "completed", "stopped", "abandoned"],
+      "default": "watching",
+      "required": true
+    },
+    "progress": {
+      "type": "integer",
+      "default": 0,
+      "min": 0,
+      "max": 100
     }
   }
 }

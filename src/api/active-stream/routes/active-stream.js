@@ -29,5 +29,14 @@ module.exports = {
         middlewares: [],
       },
     },
+    {
+      method: 'GET',
+      path: '/active-streams/admin-history',
+      handler: 'active-stream.adminHistory',
+      config: {
+        policies: [],
+        middlewares: [],
+      },
+    },
   ],
 };
