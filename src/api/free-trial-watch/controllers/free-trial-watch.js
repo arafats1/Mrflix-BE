@@ -208,4 +208,81 @@ module.exports = createCoreController('api::free-trial-watch.free-trial-watch', 
       },
     };
   },
+
+  /**
+   * GET /free-trial-watches/admin-list
+   * Admin: Returns all trial watch records grouped by user
+   */
+  async adminList(ctx) {
+    if (!ctx.state.user) {
+      return ctx.unauthorized('You must be logged in');
+    }
+
+    // Get freeTrialCount from site settings
+    let freeTrialCount = 2;
+    try {
+      const settings = await strapi.entityService.findMany('api::site-setting.site-setting');
+      if (settings?.freeTrialCount != null) {
+        freeTrialCount = settings.freeTrialCount;
+      }
+    } catch (e) { /* use default */ }
+
+    // Fetch ALL trial watch records
+    const watches = await strapi.documents('api::free-trial-watch.free-trial-watch').findMany({
+      populate: {
+        user: { fields: ['username', 'email'] },
+        movie: { fields: ['title', 'type', 'posterUrl', 'documentId'] },
+      },
+      sort: 'createdAt:desc',
+      limit: 1000,
+    });
+
+    // Group by user
+    const userMap = {};
+    for (const w of watches) {
+      const uid = w.user?.id;
+      if (!uid) continue;
+      if (!userMap[uid]) {
+        userMap[uid] = {
+          user: {
+            id: uid,
+            username: w.user.username,
+            email: w.user.email,
+          },
+          watches: [],
+          used: 0,
+        };
+      }
+      userMap[uid].watches.push({
+        id: w.documentId || w.id,
+        movie: {
+          id: w.movie?.documentId || w.movie?.id,
+          title: w.movie?.title,
+          type: w.movie?.type,
+          posterUrl: w.movie?.posterUrl,
+        },
+        contentType: w.contentType,
+        episodeSeason: w.episodeSeason,
+        episodeNumber: w.episodeNumber,
+        watchedAt: w.createdAt,
+      });
+      userMap[uid].used++;
+    }
+
+    // Convert to array and add remaining count
+    const users = Object.values(userMap).map(u => ({
+      ...u,
+      remaining: Math.max(0, freeTrialCount - u.used),
+      freeTrialCount,
+    }));
+
+    return {
+      data: {
+        freeTrialCount,
+        totalTrialUsers: users.length,
+        totalWatches: watches.length,
+        users,
+      },
+    };
+  },
 }));

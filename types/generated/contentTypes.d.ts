@@ -430,6 +430,48 @@ export interface AdminUser extends Struct.CollectionTypeSchema {
   };
 }
 
+export interface ApiActiveStreamActiveStream
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'active_streams';
+  info: {
+    description: 'Tracks which users are currently streaming content';
+    displayName: 'Active Stream';
+    pluralName: 'active-streams';
+    singularName: 'active-stream';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    contentType: Schema.Attribute.Enumeration<['movie', 'episode']> &
+      Schema.Attribute.DefaultTo<'movie'>;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    episodeNumber: Schema.Attribute.Integer;
+    episodeSeason: Schema.Attribute.Integer;
+    lastHeartbeat: Schema.Attribute.DateTime & Schema.Attribute.Required;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::active-stream.active-stream'
+    > &
+      Schema.Attribute.Private;
+    movie: Schema.Attribute.Relation<'manyToOne', 'api::movie.movie'>;
+    platform: Schema.Attribute.Enumeration<['web', 'tv', 'mobile']> &
+      Schema.Attribute.DefaultTo<'web'>;
+    publishedAt: Schema.Attribute.DateTime;
+    startedAt: Schema.Attribute.DateTime;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    user: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+  };
+}
+
 export interface ApiFreeTrialWatchFreeTrialWatch
   extends Struct.CollectionTypeSchema {
   collectionName: 'free_trial_watches';
@@ -1252,6 +1294,7 @@ declare module '@strapi/strapi' {
       'admin::transfer-token': AdminTransferToken;
       'admin::transfer-token-permission': AdminTransferTokenPermission;
       'admin::user': AdminUser;
+      'api::active-stream.active-stream': ApiActiveStreamActiveStream;
       'api::free-trial-watch.free-trial-watch': ApiFreeTrialWatchFreeTrialWatch;
       'api::movie-request.movie-request': ApiMovieRequestMovieRequest;
       'api::movie.movie': ApiMovieMovie;

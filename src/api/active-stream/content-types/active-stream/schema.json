@@ -1,0 +1,49 @@
+{
+  "kind": "collectionType",
+  "collectionName": "active_streams",
+  "info": {
+    "singularName": "active-stream",
+    "pluralName": "active-streams",
+    "displayName": "Active Stream",
+    "description": "Tracks which users are currently streaming content"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "user": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user"
+    },
+    "movie": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::movie.movie"
+    },
+    "episodeSeason": {
+      "type": "integer"
+    },
+    "episodeNumber": {
+      "type": "integer"
+    },
+    "contentType": {
+      "type": "enumeration",
+      "enum": ["movie", "episode"],
+      "default": "movie"
+    },
+    "lastHeartbeat": {
+      "type": "datetime",
+      "required": true
+    },
+    "platform": {
+      "type": "enumeration",
+      "enum": ["web", "tv", "mobile"],
+      "default": "web"
+    },
+    "startedAt": {
+      "type": "datetime"
+    }
+  }
+}

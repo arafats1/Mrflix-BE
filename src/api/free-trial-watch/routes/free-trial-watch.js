@@ -29,5 +29,14 @@ module.exports = {
         middlewares: [],
       },
     },
+    {
+      method: 'GET',
+      path: '/free-trial-watches/admin-list',
+      handler: 'free-trial-watch.adminList',
+      config: {
+        policies: [],
+        middlewares: [],
+      },
+    },
   ],
 };

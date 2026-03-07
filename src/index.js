@@ -303,6 +303,9 @@ module.exports = {
           { action: 'api::free-trial-watch.free-trial-watch.myStatus' },
           { action: 'api::free-trial-watch.free-trial-watch.record' },
           { action: 'api::free-trial-watch.free-trial-watch.canWatch' },
+          // Active Streaming
+          { action: 'api::active-stream.active-stream.heartbeat' },
+          { action: 'api::active-stream.active-stream.stop' },
           // User profile
           { action: 'plugin::users-permissions.user.me' },
           { action: 'plugin::users-permissions.auth.callback' },
@@ -370,8 +373,13 @@ module.exports = {
           { action: 'api::free-trial-watch.free-trial-watch.myStatus' },
           { action: 'api::free-trial-watch.free-trial-watch.record' },
           { action: 'api::free-trial-watch.free-trial-watch.canWatch' },
+          { action: 'api::free-trial-watch.free-trial-watch.adminList' },
           { action: 'api::free-trial-watch.free-trial-watch.find' },
           { action: 'api::free-trial-watch.free-trial-watch.delete' },
+          // Active Streaming
+          { action: 'api::active-stream.active-stream.heartbeat' },
+          { action: 'api::active-stream.active-stream.stop' },
+          { action: 'api::active-stream.active-stream.adminList' },
           // User management
           { action: 'plugin::users-permissions.user.me' },
           { action: 'plugin::users-permissions.user.find' },
