@@ -28,7 +28,7 @@
     },
     "paymentMethod": {
       "type": "enumeration",
-      "enum": ["mtn_momo", "airtel_money"],
+      "enum": ["mtn_momo", "airtel_money", "pesapal"],
       "required": true
     },
     "paymentPhone": {
@@ -50,6 +50,9 @@
     },
     "seasonNumber": {
       "type": "integer"
+    },
+    "pesapalTrackingId": {
+      "type": "string"
     }
   }
 }

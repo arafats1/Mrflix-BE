@@ -487,6 +487,56 @@ export interface ApiActiveStreamActiveStream
   };
 }
 
+export interface ApiContactMessageContactMessage
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'contact_messages';
+  info: {
+    description: 'User inquiries and suggestions from the contact form';
+    displayName: 'Contact Message';
+    pluralName: 'contact-messages';
+    singularName: 'contact-message';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    category: Schema.Attribute.Enumeration<
+      [
+        'general',
+        'suggestion',
+        'bug_report',
+        'payment_issue',
+        'content_request',
+        'other',
+      ]
+    > &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<'general'>;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    email: Schema.Attribute.Email & Schema.Attribute.Required;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::contact-message.contact-message'
+    > &
+      Schema.Attribute.Private;
+    message: Schema.Attribute.Text & Schema.Attribute.Required;
+    name: Schema.Attribute.String & Schema.Attribute.Required;
+    publishedAt: Schema.Attribute.DateTime;
+    status: Schema.Attribute.Enumeration<
+      ['new', 'read', 'replied', 'archived']
+    > &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<'new'>;
+    subject: Schema.Attribute.String & Schema.Attribute.Required;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface ApiFreeTrialWatchFreeTrialWatch
   extends Struct.CollectionTypeSchema {
   collectionName: 'free_trial_watches';
@@ -650,9 +700,12 @@ export interface ApiPurchasePurchase extends Struct.CollectionTypeSchema {
     > &
       Schema.Attribute.Private;
     movie: Schema.Attribute.Relation<'manyToOne', 'api::movie.movie'>;
-    paymentMethod: Schema.Attribute.Enumeration<['mtn_momo', 'airtel_money']> &
+    paymentMethod: Schema.Attribute.Enumeration<
+      ['mtn_momo', 'airtel_money', 'pesapal']
+    > &
       Schema.Attribute.Required;
     paymentPhone: Schema.Attribute.String & Schema.Attribute.Required;
+    pesapalTrackingId: Schema.Attribute.String;
     publishedAt: Schema.Attribute.DateTime;
     seasonNumber: Schema.Attribute.Integer;
     status: Schema.Attribute.Enumeration<['pending', 'completed', 'failed']> &
@@ -697,6 +750,7 @@ export interface ApiSiteSettingSiteSetting extends Struct.SingleTypeSchema {
     moviePrice: Schema.Attribute.Integer &
       Schema.Attribute.Required &
       Schema.Attribute.DefaultTo<2000>;
+    pesapalIpnId: Schema.Attribute.String;
     publishedAt: Schema.Attribute.DateTime;
     seriesPrice: Schema.Attribute.Integer &
       Schema.Attribute.Required &
@@ -737,9 +791,12 @@ export interface ApiSubscriptionSubscription
       'api::subscription.subscription'
     > &
       Schema.Attribute.Private;
-    paymentMethod: Schema.Attribute.Enumeration<['mtn_momo', 'airtel_money']> &
+    paymentMethod: Schema.Attribute.Enumeration<
+      ['mtn_momo', 'airtel_money', 'pesapal']
+    > &
       Schema.Attribute.Required;
     paymentPhone: Schema.Attribute.String & Schema.Attribute.Required;
+    pesapalTrackingId: Schema.Attribute.String;
     publishedAt: Schema.Attribute.DateTime;
     startDate: Schema.Attribute.DateTime & Schema.Attribute.Required;
     status: Schema.Attribute.Enumeration<
@@ -1310,6 +1367,7 @@ declare module '@strapi/strapi' {
       'admin::transfer-token-permission': AdminTransferTokenPermission;
       'admin::user': AdminUser;
       'api::active-stream.active-stream': ApiActiveStreamActiveStream;
+      'api::contact-message.contact-message': ApiContactMessageContactMessage;
       'api::free-trial-watch.free-trial-watch': ApiFreeTrialWatchFreeTrialWatch;
       'api::movie-request.movie-request': ApiMovieRequestMovieRequest;
       'api::movie.movie': ApiMovieMovie;

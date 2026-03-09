@@ -1,6 +1,7 @@
 'use strict';
 
 const { createCoreController } = require('@strapi/strapi').factories;
+const pesapal = require('../../../utils/pesapal');
 
 module.exports = createCoreController('api::subscription.subscription', ({ strapi }) => ({
   // Get current user's active subscription
@@ -53,7 +54,7 @@ module.exports = createCoreController('api::subscription.subscription', ({ strap
     };
   },
 
-  // Subscribe (create subscription)
+  // Subscribe (create subscription) — initiates Pesapal payment
   async create(ctx) {
     if (!ctx.state.user) {
       return ctx.unauthorized('You must be logged in');
@@ -61,19 +62,17 @@ module.exports = createCoreController('api::subscription.subscription', ({ strap
 
     const { paymentMethod, paymentPhone } = ctx.request.body.data || ctx.request.body;
 
-    if (!paymentMethod || !paymentPhone) {
-      return ctx.badRequest('Missing required fields: paymentMethod, paymentPhone');
-    }
-
     // Get subscription price from site settings
     let subscriptionPrice = 20000;
-    try {
-      const settings = await strapi.entityService.findMany('api::site-setting.site-setting');
-      if (settings?.subscriptionPrice) {
-        subscriptionPrice = settings.subscriptionPrice;
-      }
-    } catch (e) {
-      // Use default
+    const settings = await strapi.entityService.findMany('api::site-setting.site-setting');
+    if (settings?.subscriptionPrice) {
+      subscriptionPrice = settings.subscriptionPrice;
+    }
+
+    const ipnId = settings?.pesapalIpnId;
+    if (!ipnId) {
+      strapi.log.error('Pesapal IPN ID not configured.');
+      return ctx.badRequest('Payment system not configured. Please contact support.');
     }
 
     // Check if user already has an active subscription
@@ -96,23 +95,62 @@ module.exports = createCoreController('api::subscription.subscription', ({ strap
     const endDate = new Date(now);
     endDate.setMonth(endDate.getMonth() + 1);
 
-    const transactionId = `SUB_${Date.now()}_${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+    const merchantReference = `SUB_${ctx.state.user.id}_${Date.now()}_${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
 
-    // Create subscription (simulated payment — set to 'pending' + MoMo API in production)
+    // Create pending subscription
     const entry = await strapi.entityService.create('api::subscription.subscription', {
       data: {
         subscriber: ctx.state.user.id,
         amount: subscriptionPrice,
-        paymentMethod,
-        paymentPhone,
-        transactionId,
-        status: 'active', // Simulated — use 'pending' in production until payment confirmed
+        paymentMethod: paymentMethod || 'pesapal',
+        paymentPhone: paymentPhone || '',
+        transactionId: merchantReference,
+        status: 'pending',
         startDate: startDate.toISOString(),
         endDate: endDate.toISOString(),
       },
     });
 
-    return { data: entry, transactionId };
+    // Submit to Pesapal
+    try {
+      const user = ctx.state.user;
+      const nameParts = (user.fullName || user.username || '').split(' ');
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+
+      const pesapalOrder = await pesapal.submitOrder({
+        merchantReference,
+        amount: subscriptionPrice,
+        description: `Mr.Flix Premium Monthly Subscription`,
+        callbackUrl: `${frontendUrl}/payment/callback`,
+        ipnId,
+        billingAddress: {
+          email: user.email || '',
+          phone: paymentPhone || '',
+          firstName: nameParts[0] || '',
+          lastName: nameParts.slice(1).join(' ') || '',
+        },
+      });
+
+      // Store tracking ID
+      await strapi.entityService.update('api::subscription.subscription', entry.id, {
+        data: { pesapalTrackingId: pesapalOrder.order_tracking_id },
+      });
+
+      return {
+        data: {
+          subscriptionId: entry.id,
+          transactionId: merchantReference,
+          redirect_url: pesapalOrder.redirect_url,
+          order_tracking_id: pesapalOrder.order_tracking_id,
+        },
+      };
+    } catch (err) {
+      strapi.log.error('Pesapal subscription order failed:', err);
+      await strapi.entityService.update('api::subscription.subscription', entry.id, {
+        data: { status: 'cancelled' },
+      });
+      return ctx.badRequest('Payment initiation failed. Please try again.');
+    }
   },
 
   // Admin: Grant premium subscription to a user without payment

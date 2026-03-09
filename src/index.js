@@ -198,6 +198,30 @@ module.exports = {
   register(/*{ strapi }*/) {},
 
   async bootstrap({ strapi }) {
+    // ── Register Pesapal IPN URL ──
+    try {
+      const pesapal = require('./utils/pesapal');
+      const backendUrl = process.env.PUBLIC_URL || `http://localhost:${process.env.PORT || 1337}`;
+      const ipnUrl = `${backendUrl}/api/pesapal/ipn`;
+      const ipnId = await pesapal.registerIPN(ipnUrl);
+
+      // Save IPN ID in site settings so controllers can use it
+      const existing = await strapi.entityService.findMany('api::site-setting.site-setting');
+      if (existing?.id) {
+        await strapi.entityService.update('api::site-setting.site-setting', existing.id, {
+          data: { pesapalIpnId: ipnId },
+        });
+      } else {
+        await strapi.entityService.create('api::site-setting.site-setting', {
+          data: { pesapalIpnId: ipnId },
+        });
+      }
+      console.log(`💳 Pesapal IPN registered: ${ipnUrl} (ID: ${ipnId})`);
+    } catch (err) {
+      console.error('⚠️ Pesapal IPN registration failed:', err.message);
+      console.error('   Payments will NOT work until Pesapal keys are configured.');
+    }
+
     // Disable email confirmation requirement so users can login immediately
     const pluginStore = strapi.store({ type: 'plugin', name: 'users-permissions' });
     const advancedSettings = await pluginStore.get({ key: 'advanced' });
@@ -259,6 +283,11 @@ module.exports = {
           { action: 'plugin::users-permissions.auth.callback' },
           { action: 'plugin::users-permissions.auth.connect' },
           { action: 'plugin::users-permissions.auth.register' },
+          // Pesapal IPN - called by Pesapal servers
+          { action: 'api::pesapal-webhook.pesapal-webhook.ipn' },
+          { action: 'api::pesapal-webhook.pesapal-webhook.verify' },
+          // Contact messages - anyone can submit
+          { action: 'api::contact-message.contact-message.create' },
         ];
 
         for (const perm of publicPermissions) {
@@ -288,6 +317,8 @@ module.exports = {
           { action: 'api::purchase.purchase.find' },
           { action: 'api::purchase.purchase.findOne' },
           { action: 'api::purchase.purchase.create' },
+          { action: 'api::purchase.purchase.createBulk' },
+          { action: 'api::purchase.purchase.checkStatus' },
           // Subscriptions
           { action: 'api::subscription.subscription.find' },
           { action: 'api::subscription.subscription.findOne' },
@@ -306,6 +337,8 @@ module.exports = {
           // Active Streaming
           { action: 'api::active-stream.active-stream.heartbeat' },
           { action: 'api::active-stream.active-stream.stop' },
+          // Contact messages
+          { action: 'api::contact-message.contact-message.create' },
           // User profile
           { action: 'plugin::users-permissions.user.me' },
           { action: 'plugin::users-permissions.auth.callback' },
@@ -381,6 +414,12 @@ module.exports = {
           { action: 'api::active-stream.active-stream.stop' },
           { action: 'api::active-stream.active-stream.adminList' },
           { action: 'api::active-stream.active-stream.adminHistory' },
+          // Contact messages (admin)
+          { action: 'api::contact-message.contact-message.find' },
+          { action: 'api::contact-message.contact-message.findOne' },
+          { action: 'api::contact-message.contact-message.create' },
+          { action: 'api::contact-message.contact-message.update' },
+          { action: 'api::contact-message.contact-message.delete' },
           // User management
           { action: 'plugin::users-permissions.user.me' },
           { action: 'plugin::users-permissions.user.find' },
