@@ -135,12 +135,15 @@ module.exports = {
     try {
       const status = await pesapal.getTransactionStatus(orderTrackingId);
       const paymentStatus = (status.payment_status_description || '').toLowerCase();
-
-      // Also update records if not yet updated (in case IPN was delayed)
       const ref = status.merchant_reference || '';
+
+      // Determine the purchase type and gather context for the frontend
+      let purchaseType = 'unknown';
+      let movieInfo = null;
 
       if (paymentStatus === 'completed') {
         if (ref.startsWith('SUB_')) {
+          purchaseType = 'subscription';
           const subs = await strapi.entityService.findMany('api::subscription.subscription', {
             filters: { transactionId: ref },
             limit: 1,
@@ -151,8 +154,10 @@ module.exports = {
             });
           }
         } else {
+          purchaseType = 'purchase';
           const purchases = await strapi.db.query('api::purchase.purchase').findMany({
             where: { transactionId: ref },
+            populate: ['movie'],
           });
           for (const p of purchases) {
             if (p.status !== 'completed') {
@@ -162,7 +167,19 @@ module.exports = {
               });
             }
           }
+          // Return movie info so frontend can link directly to the content
+          if (purchases.length === 1 && purchases[0].movie) {
+            const m = purchases[0].movie;
+            movieInfo = { id: m.documentId || m.id, title: m.title, type: m.type };
+          } else if (purchases.length > 1) {
+            purchaseType = 'bulk_purchase';
+          }
         }
+      } else {
+        // Still determine type from reference even if not completed
+        if (ref.startsWith('SUB_')) purchaseType = 'subscription';
+        else if (ref.startsWith('PUR_')) purchaseType = 'purchase';
+        else if (ref.startsWith('BULK_')) purchaseType = 'bulk_purchase';
       }
 
       return {
@@ -172,6 +189,8 @@ module.exports = {
           confirmationCode: status.confirmation_code || '',
           amount: status.amount,
           paymentMethod: status.payment_method || '',
+          purchaseType,
+          movieInfo,
         },
       };
     } catch (err) {

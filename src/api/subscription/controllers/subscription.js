@@ -285,4 +285,60 @@ module.exports = createCoreController('api::subscription.subscription', ({ strap
 
     return { data: updated };
   },
+
+  /**
+   * Check the status of a pending subscription by transactionId.
+   * If still pending, actively queries Pesapal.
+   */
+  async checkStatus(ctx) {
+    if (!ctx.state.user) {
+      return ctx.unauthorized('You must be logged in');
+    }
+
+    const { transactionId } = ctx.params;
+    if (!transactionId) {
+      return ctx.badRequest('Missing transactionId');
+    }
+
+    let subs = await strapi.entityService.findMany('api::subscription.subscription', {
+      filters: {
+        transactionId,
+        subscriber: { id: ctx.state.user.id },
+      },
+      limit: 1,
+    });
+
+    if (!subs || subs.length === 0) {
+      strapi.log.info(`[sub.checkStatus] No subscription found for txn=${transactionId} user=${ctx.state.user.id}`);
+      return ctx.notFound('Subscription not found');
+    }
+
+    const sub = subs[0];
+    strapi.log.info(`[sub.checkStatus] txn=${transactionId} status=${sub.status} pesapalId=${sub.pesapalTrackingId || 'none'}`);
+
+    // If still pending, check Pesapal directly
+    if (sub.status === 'pending' && sub.pesapalTrackingId) {
+      try {
+        const status = await pesapal.getTransactionStatus(sub.pesapalTrackingId);
+        const paymentStatus = (status.payment_status_description || '').toLowerCase();
+        strapi.log.info(`[sub.checkStatus] Pesapal says: ${paymentStatus}`);
+
+        if (paymentStatus === 'completed') {
+          await strapi.entityService.update('api::subscription.subscription', sub.id, {
+            data: { status: 'active', pesapalTrackingId: sub.pesapalTrackingId },
+          });
+          return { data: { id: sub.id, status: 'active' } };
+        } else if (paymentStatus === 'failed' || paymentStatus === 'invalid') {
+          await strapi.entityService.update('api::subscription.subscription', sub.id, {
+            data: { status: 'cancelled' },
+          });
+          return { data: { id: sub.id, status: 'cancelled' } };
+        }
+      } catch (err) {
+        strapi.log.warn('[checkStatus] Pesapal query failed:', err.message);
+      }
+    }
+
+    return { data: { id: sub.id, status: sub.status } };
+  },
 }));

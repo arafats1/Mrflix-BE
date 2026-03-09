@@ -265,6 +265,8 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
 
   /**
    * Check the status of a pending purchase by transactionId.
+   * If still pending, actively queries Pesapal to see if payment completed
+   * (handles case where IPN hasn't arrived, e.g. localhost or network issues).
    */
   async checkStatus(ctx) {
     if (!ctx.state.user) {
@@ -276,7 +278,7 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
       return ctx.badRequest('Missing transactionId');
     }
 
-    const purchases = await strapi.documents('api::purchase.purchase').findMany({
+    let purchases = await strapi.documents('api::purchase.purchase').findMany({
       filters: {
         transactionId,
         buyer: { id: ctx.state.user.id },
@@ -285,10 +287,62 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
     });
 
     if (!purchases || purchases.length === 0) {
+      strapi.log.info(`[checkStatus] No purchases found for txn=${transactionId} user=${ctx.state.user.id}`);
       return ctx.notFound('Purchase not found');
     }
 
-    return { data: purchases.map(p => ({ id: p.documentId, status: p.status, movie: p.movie?.title })) };
+    // If any purchase is still pending, check Pesapal directly
+    const hasPending = purchases.some(p => p.status === 'pending');
+    strapi.log.info(`[checkStatus] txn=${transactionId} found=${purchases.length} hasPending=${hasPending} pesapalId=${purchases[0].pesapalTrackingId || 'none'}`);
+    if (hasPending) {
+      const trackingId = purchases[0].pesapalTrackingId;
+      if (trackingId) {
+        try {
+          const status = await pesapal.getTransactionStatus(trackingId);
+          const paymentStatus = (status.payment_status_description || '').toLowerCase();
+          strapi.log.info(`[checkStatus] Pesapal says: ${paymentStatus} (raw: ${JSON.stringify(status)})`);
+
+          if (paymentStatus === 'completed') {
+            for (const p of purchases) {
+              if (p.status === 'pending') {
+                await strapi.documents('api::purchase.purchase').update({
+                  documentId: p.documentId,
+                  data: { status: 'completed', pesapalTrackingId: trackingId },
+                });
+              }
+            }
+            // Re-fetch with updated status
+            purchases = await strapi.documents('api::purchase.purchase').findMany({
+              filters: { transactionId, buyer: { id: ctx.state.user.id } },
+              populate: { movie: true },
+            });
+          } else if (paymentStatus === 'failed' || paymentStatus === 'invalid') {
+            for (const p of purchases) {
+              if (p.status === 'pending') {
+                await strapi.documents('api::purchase.purchase').update({
+                  documentId: p.documentId,
+                  data: { status: 'failed' },
+                });
+              }
+            }
+            purchases = await strapi.documents('api::purchase.purchase').findMany({
+              filters: { transactionId, buyer: { id: ctx.state.user.id } },
+              populate: { movie: true },
+            });
+          }
+        } catch (err) {
+          strapi.log.warn('[checkStatus] Pesapal query failed:', err.message);
+        }
+      }
+    }
+
+    return {
+      data: purchases.map(p => ({
+        id: p.documentId,
+        status: p.status,
+        movieInfo: p.movie ? { id: p.movie.documentId || p.movie.id, title: p.movie.title, type: p.movie.type } : null,
+      })),
+    };
   },
 
   async incrementDownload(ctx) {

@@ -319,10 +319,14 @@ module.exports = {
           { action: 'api::purchase.purchase.create' },
           { action: 'api::purchase.purchase.createBulk' },
           { action: 'api::purchase.purchase.checkStatus' },
+          { action: 'api::purchase.purchase.incrementDownload' },
           // Subscriptions
           { action: 'api::subscription.subscription.find' },
           { action: 'api::subscription.subscription.findOne' },
           { action: 'api::subscription.subscription.create' },
+          { action: 'api::subscription.subscription.me' },
+          { action: 'api::subscription.subscription.checkStatus' },
+          { action: 'api::subscription.subscription.incrementDownload' },
           // Site settings (read-only)
           { action: 'api::site-setting.site-setting.find' },
           // Movie Requests

@@ -50,5 +50,13 @@ module.exports = {
         policies: [],
       },
     },
+    {
+      method: 'GET',
+      path: '/subscriptions/status/:transactionId',
+      handler: 'subscription.checkStatus',
+      config: {
+        policies: [],
+      },
+    },
   ],
 };
