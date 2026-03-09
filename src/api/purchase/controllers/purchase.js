@@ -78,12 +78,18 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
     // Simulate payment (in production, integrate with MTN MoMo / Airtel Money API)
     const transactionId = `TXN_${Date.now()}_${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
 
+    // Determine the correct price from site settings
+    const settings = await strapi.entityService.findMany('api::site-setting.site-setting');
+    const defaultPrice = movie.type === 'series'
+      ? (settings?.seriesPrice ?? 5000)
+      : (settings?.moviePrice ?? 2000);
+
     // Create purchase
     const purchase = await strapi.documents('api::purchase.purchase').create({
       data: {
         movie: movie.id,
         buyer: ctx.state.user.id,
-        amount: movie.priceUGX || 5000,
+        amount: defaultPrice,
         paymentMethod,
         paymentPhone,
         transactionId,
