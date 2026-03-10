@@ -47,6 +47,22 @@
       "type": "integer",
       "default": 0
     },
+    "mobileApkUrl": {
+      "type": "string"
+    },
+    "mobileApkVersion": {
+      "type": "string"
+    },
+    "mobileApkSize": {
+      "type": "string"
+    },
+    "mobileApkUpdatedAt": {
+      "type": "datetime"
+    },
+    "mobileApkDownloadCount": {
+      "type": "integer",
+      "default": 0
+    },
     "freeTrialCount": {
       "type": "integer",
       "default": 2,

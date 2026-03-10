@@ -26,5 +26,13 @@ module.exports = {
         auth: false,
       },
     },
+    {
+      method: 'POST',
+      path: '/site-setting/increment-mobile-download',
+      handler: 'site-setting.incrementMobileDownload',
+      config: {
+        auth: false,
+      },
+    },
   ],
 };

@@ -747,6 +747,12 @@ export interface ApiSiteSettingSiteSetting extends Struct.SingleTypeSchema {
       'api::site-setting.site-setting'
     > &
       Schema.Attribute.Private;
+    mobileApkDownloadCount: Schema.Attribute.Integer &
+      Schema.Attribute.DefaultTo<0>;
+    mobileApkSize: Schema.Attribute.String;
+    mobileApkUpdatedAt: Schema.Attribute.DateTime;
+    mobileApkUrl: Schema.Attribute.String;
+    mobileApkVersion: Schema.Attribute.String;
     moviePrice: Schema.Attribute.Integer &
       Schema.Attribute.Required &
       Schema.Attribute.DefaultTo<2000>;
