@@ -243,4 +243,50 @@ module.exports = createCoreController('api::active-stream.active-stream', ({ str
       },
     };
   },
+
+  /**
+   * POST /active-streams/clear-history
+   * Admin: Deletes all watch sessions except currently ACTIVE ones
+   */
+  async clearHistory(ctx) {
+    if (!ctx.state.user || (ctx.state.user.role?.type !== 'admin' && ctx.state.user.role?.name !== 'Admin')) {
+      return ctx.unauthorized('Admin only');
+    }
+
+    const { status } = ctx.request.body?.data || ctx.request.body || {};
+
+    const filters = {
+      status: { $ne: 'watching' },
+    };
+
+    if (status && ['completed', 'stopped', 'abandoned'].includes(status)) {
+      filters.status = status;
+    }
+
+    try {
+      const records = await strapi.documents('api::active-stream.active-stream').findMany({
+        filters,
+        fields: ['id'],
+        limit: 10000,
+      });
+
+      let deletedCount = 0;
+      for (const record of records) {
+        await strapi.documents('api::active-stream.active-stream').delete({
+          documentId: record.documentId,
+        });
+        deletedCount++;
+      }
+
+      return {
+        data: {
+          ok: true,
+          deletedCount,
+          message: `Successfully cleared ${deletedCount} history records`,
+        },
+      };
+    } catch (err) {
+      return ctx.internalServerError('Failed to clear history');
+    }
+  },
 }));

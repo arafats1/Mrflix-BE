@@ -38,5 +38,14 @@ module.exports = {
         middlewares: [],
       },
     },
+    {
+      method: 'POST',
+      path: '/active-streams/clear-history',
+      handler: 'active-stream.clearHistory',
+      config: {
+        policies: [],
+        middlewares: [],
+      },
+    },
   ],
 };
