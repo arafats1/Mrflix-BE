@@ -633,6 +633,7 @@ export interface ApiMovieMovie extends Struct.CollectionTypeSchema {
   attributes: {
     backdrop: Schema.Attribute.Media<'images'>;
     backdropUrl: Schema.Attribute.String;
+    countryOfOrigin: Schema.Attribute.String;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;

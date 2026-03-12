@@ -84,6 +84,9 @@
       "type": "boolean",
       "default": false
     },
+    "countryOfOrigin": {
+      "type": "string"
+    },
     "poster": {
       "type": "media",
       "multiple": false,
