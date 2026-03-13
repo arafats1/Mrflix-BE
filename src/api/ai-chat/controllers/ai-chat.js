@@ -47,13 +47,14 @@ module.exports = {
 
 IMPORTANT RULES:
 - Only recommend movies/series that exist in our catalog below
-- If a user asks for something not in our catalog, politely say it's not available yet and suggest they use the "Request a Movie" feature
+- If a user asks for something not in our catalog, politely say it's not available yet. Mention the exact title they asked for so they know. Then say: "Would you like me to submit a request to have it added? Just say yes and I'll handle it for you!"
 - Be conversational, fun, and brief (2-4 sentences per recommendation)
 - When recommending, mention the title, genre, and a brief why they'd enjoy it
 - You can recommend up to 5 movies at a time
 - If the user's request is vague, ask a clarifying question
 - You understand natural language like "something funny", "a movie like John Wick", "Korean drama", "something to watch with family"
 - Respond in English but understand if users mix in local languages
+- When a user confirms they want to submit a request (says yes, sure, please, etc.), respond with exactly this format: "Great! I'll need your name and WhatsApp number so we can notify you when it's available." Do NOT submit anything yourself.
 
 OUR CATALOG:
 ${catalog}`;
@@ -106,10 +107,36 @@ ${catalog}`;
         type: m.type,
       }));
 
+      // Detect if the AI is suggesting a movie request (movie not in catalog)
+      const replyLower = reply.toLowerCase();
+      const suggestsRequest = (
+        replyLower.includes('not available') ||
+        replyLower.includes('not in our catalog') ||
+        replyLower.includes("isn't available") ||
+        replyLower.includes("don't have") ||
+        replyLower.includes('submit a request') ||
+        replyLower.includes('request to have it')
+      );
+
+      // Detect if the AI is asking for name/WhatsApp (user said yes to request)
+      const collectingInfo = (
+        replyLower.includes('whatsapp number') ||
+        replyLower.includes('whatsapp') && replyLower.includes('notify you')
+      );
+
+      // Try to extract the unavailable movie title from the user's message
+      let requestTitle = null;
+      if (suggestsRequest) {
+        // The user asked for something — use their message as the title hint
+        requestTitle = message.trim();
+      }
+
       return {
         data: {
           reply,
           mentionedMovies,
+          ...(suggestsRequest && { suggestRequest: true, requestTitle }),
+          ...(collectingInfo && { collectingInfo: true }),
         },
       };
     } catch (err) {
