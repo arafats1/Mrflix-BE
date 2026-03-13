@@ -101,6 +101,10 @@
       "type": "media",
       "multiple": false,
       "allowedTypes": ["videos"]
+    },
+    "watchCount": {
+      "type": "integer",
+      "default": 0
     }
   }
 }

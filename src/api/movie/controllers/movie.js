@@ -78,4 +78,38 @@ module.exports = createCoreController('api::movie.movie', ({ strapi }) => ({
 
     return response;
   },
+
+  // Most Watched: Return movies sorted by watchCount descending
+  async mostWatched(ctx) {
+    const limit = Math.min(parseInt(ctx.query.limit) || 12, 50);
+
+    const entries = await strapi.entityService.findMany('api::movie.movie', {
+      filters: { isAvailable: true },
+      sort: [{ watchCount: 'desc' }, { createdAt: 'desc' }],
+      populate: ['poster', 'backdrop'],
+      limit,
+    });
+
+    const defaults = await getSiteDefaultPrices(strapi);
+    return { data: applyDefaultPrices(entries, defaults) };
+  },
+
+  // Increment watch count for a movie (called when user starts watching)
+  async incrementWatch(ctx) {
+    const { id } = ctx.params;
+
+    try {
+      const movie = await strapi.entityService.findOne('api::movie.movie', id);
+      if (!movie) return ctx.notFound('Movie not found');
+
+      await strapi.entityService.update('api::movie.movie', id, {
+        data: { watchCount: (movie.watchCount || 0) + 1 },
+      });
+
+      return { data: { success: true } };
+    } catch (err) {
+      strapi.log.error('Increment watch error:', err);
+      return ctx.badRequest('Failed to update watch count');
+    }
+  },
 }));

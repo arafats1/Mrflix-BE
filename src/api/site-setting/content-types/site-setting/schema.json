@@ -70,6 +70,24 @@
     },
     "pesapalIpnId": {
       "type": "string"
+    },
+    "freeMovieOfWeekEnabled": {
+      "type": "boolean",
+      "default": false
+    },
+    "freeMovieOfWeekId": {
+      "type": "string"
+    },
+    "freeMovieOfWeekExpiresAt": {
+      "type": "datetime"
+    },
+    "referralEnabled": {
+      "type": "boolean",
+      "default": true
+    },
+    "referralRewardMovies": {
+      "type": "integer",
+      "default": 3
     }
   }
 }

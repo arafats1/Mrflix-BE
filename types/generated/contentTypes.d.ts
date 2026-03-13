@@ -670,6 +670,7 @@ export interface ApiMovieMovie extends Struct.CollectionTypeSchema {
     videoUrl: Schema.Attribute.String;
     videoUrl480: Schema.Attribute.String;
     videoUrl720: Schema.Attribute.String;
+    watchCount: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
   };
 }
 
@@ -719,6 +720,52 @@ export interface ApiPurchasePurchase extends Struct.CollectionTypeSchema {
   };
 }
 
+export interface ApiReferralReferral extends Struct.CollectionTypeSchema {
+  collectionName: 'referrals';
+  info: {
+    description: 'Tracks referral codes, activations, and rewards';
+    displayName: 'Referral';
+    pluralName: 'referrals';
+    singularName: 'referral';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    code: Schema.Attribute.String &
+      Schema.Attribute.Required &
+      Schema.Attribute.Unique;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::referral.referral'
+    > &
+      Schema.Attribute.Private;
+    publishedAt: Schema.Attribute.DateTime;
+    referred: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+    referredRewarded: Schema.Attribute.Boolean &
+      Schema.Attribute.DefaultTo<false>;
+    referrer: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+    referrerRewarded: Schema.Attribute.Boolean &
+      Schema.Attribute.DefaultTo<false>;
+    rewardMovieCount: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<3>;
+    status: Schema.Attribute.Enumeration<['pending', 'activated', 'rewarded']> &
+      Schema.Attribute.DefaultTo<'pending'>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface ApiSiteSettingSiteSetting extends Struct.SingleTypeSchema {
   collectionName: 'site_settings';
   info: {
@@ -739,6 +786,10 @@ export interface ApiSiteSettingSiteSetting extends Struct.SingleTypeSchema {
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    freeMovieOfWeekEnabled: Schema.Attribute.Boolean &
+      Schema.Attribute.DefaultTo<false>;
+    freeMovieOfWeekExpiresAt: Schema.Attribute.DateTime;
+    freeMovieOfWeekId: Schema.Attribute.String;
     freeTrialCount: Schema.Attribute.Integer &
       Schema.Attribute.Required &
       Schema.Attribute.DefaultTo<2>;
@@ -759,6 +810,10 @@ export interface ApiSiteSettingSiteSetting extends Struct.SingleTypeSchema {
       Schema.Attribute.DefaultTo<2000>;
     pesapalIpnId: Schema.Attribute.String;
     publishedAt: Schema.Attribute.DateTime;
+    referralEnabled: Schema.Attribute.Boolean &
+      Schema.Attribute.DefaultTo<true>;
+    referralRewardMovies: Schema.Attribute.Integer &
+      Schema.Attribute.DefaultTo<3>;
     seriesPrice: Schema.Attribute.Integer &
       Schema.Attribute.Required &
       Schema.Attribute.DefaultTo<5000>;
@@ -1379,6 +1434,7 @@ declare module '@strapi/strapi' {
       'api::movie-request.movie-request': ApiMovieRequestMovieRequest;
       'api::movie.movie': ApiMovieMovie;
       'api::purchase.purchase': ApiPurchasePurchase;
+      'api::referral.referral': ApiReferralReferral;
       'api::site-setting.site-setting': ApiSiteSettingSiteSetting;
       'api::subscription.subscription': ApiSubscriptionSubscription;
       'api::tv-code.tv-code': ApiTvCodeTvCode;

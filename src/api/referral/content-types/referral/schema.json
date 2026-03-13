@@ -1,0 +1,48 @@
+{
+  "kind": "collectionType",
+  "collectionName": "referrals",
+  "info": {
+    "singularName": "referral",
+    "pluralName": "referrals",
+    "displayName": "Referral",
+    "description": "Tracks referral codes, activations, and rewards"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "referrer": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user"
+    },
+    "referred": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user"
+    },
+    "code": {
+      "type": "string",
+      "required": true,
+      "unique": true
+    },
+    "status": {
+      "type": "enumeration",
+      "enum": ["pending", "activated", "rewarded"],
+      "default": "pending"
+    },
+    "referrerRewarded": {
+      "type": "boolean",
+      "default": false
+    },
+    "referredRewarded": {
+      "type": "boolean",
+      "default": false
+    },
+    "rewardMovieCount": {
+      "type": "integer",
+      "default": 3
+    }
+  }
+}
