@@ -26,7 +26,7 @@ module.exports = {
       // Fetch all available movies for context
       const movies = await strapi.entityService.findMany('api::movie.movie', {
         filters: { isAvailable: true },
-        fields: ['title', 'overview', 'genres', 'type', 'rating', 'releaseDate', 'countryOfOrigin', 'priceUGX', 'seasons'],
+        fields: ['title', 'overview', 'genres', 'type', 'rating', 'releaseDate', 'countryOfOrigin', 'priceUGX', 'seasons', 'trailerUrl'],
         sort: 'createdAt:desc',
         limit: 200,
       });
@@ -105,6 +105,7 @@ ${catalog}`;
         id: m.documentId || m.id,
         title: m.title,
         type: m.type,
+        trailerUrl: m.trailerUrl || null,
       }));
 
       // Detect if the AI is suggesting a movie request (movie not in catalog)

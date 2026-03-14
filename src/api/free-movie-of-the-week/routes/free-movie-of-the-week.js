@@ -7,6 +7,7 @@ module.exports = {
       path: '/free-movie-of-the-week',
       handler: 'free-movie-of-the-week.find',
       config: {
+        auth: false,
         policies: [],
       },
     },
