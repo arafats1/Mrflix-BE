@@ -739,9 +739,7 @@ export interface ApiReferralReferral extends Struct.CollectionTypeSchema {
     draftAndPublish: false;
   };
   attributes: {
-    code: Schema.Attribute.String &
-      Schema.Attribute.Required &
-      Schema.Attribute.Unique;
+    code: Schema.Attribute.String & Schema.Attribute.Required;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -756,14 +754,14 @@ export interface ApiReferralReferral extends Struct.CollectionTypeSchema {
       'manyToOne',
       'plugin::users-permissions.user'
     >;
-    referredRewarded: Schema.Attribute.Boolean &
-      Schema.Attribute.DefaultTo<false>;
+    referredMoviesRemaining: Schema.Attribute.Integer &
+      Schema.Attribute.DefaultTo<0>;
     referrer: Schema.Attribute.Relation<
       'manyToOne',
       'plugin::users-permissions.user'
     >;
-    referrerRewarded: Schema.Attribute.Boolean &
-      Schema.Attribute.DefaultTo<false>;
+    referrerMoviesRemaining: Schema.Attribute.Integer &
+      Schema.Attribute.DefaultTo<0>;
     rewardMovieCount: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<3>;
     status: Schema.Attribute.Enumeration<['pending', 'activated', 'rewarded']> &
       Schema.Attribute.DefaultTo<'pending'>;
