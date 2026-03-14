@@ -80,6 +80,21 @@ module.exports = createCoreController('api::free-trial-watch.free-trial-watch', 
     });
 
     if (existing.length >= freeTrialCount) {
+      // Check if this is the free movie of the week — always allow
+      try {
+        const settings2 = await strapi.entityService.findMany('api::site-setting.site-setting');
+        if (settings2?.freeMovieOfWeekEnabled && settings2?.freeMovieOfWeekId === movieId) {
+          return {
+            data: {
+              alreadyRecorded: true,
+              isFreeMovieOfWeek: true,
+              freeTrialCount,
+              used: existing.length,
+              remaining: 0,
+            },
+          };
+        }
+      } catch (e) { /* ignore */ }
       return ctx.badRequest('Free trial limit reached. Please purchase or subscribe.');
     }
 
@@ -197,6 +212,24 @@ module.exports = createCoreController('api::free-trial-watch.free-trial-watch', 
     }
 
     const canWatch = used < freeTrialCount;
+
+    // Even if trial is exhausted, allow the free movie of the week
+    if (!canWatch) {
+      try {
+        const settings2 = await strapi.entityService.findMany('api::site-setting.site-setting');
+        if (settings2?.freeMovieOfWeekEnabled && settings2?.freeMovieOfWeekId === movieId) {
+          return {
+            data: {
+              canWatch: true,
+              isFreeMovieOfWeek: true,
+              freeTrialCount,
+              used,
+              remaining: 0,
+            },
+          };
+        }
+      } catch (e) { /* ignore */ }
+    }
 
     return {
       data: {

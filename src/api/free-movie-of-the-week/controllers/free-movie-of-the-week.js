@@ -51,9 +51,14 @@ module.exports = {
 
     // Fetch the full movie data
     try {
-      const movie = await strapi.entityService.findOne('api::movie.movie', movieId, {
+      // Use findMany with documentId filter (Strapi v5 entityService.findOne expects numeric id)
+      const results = await strapi.entityService.findMany('api::movie.movie', {
+        filters: { documentId: movieId },
         populate: ['poster', 'backdrop'],
+        limit: 1,
       });
+
+      const movie = results?.[0] || null;
 
       if (!movie) {
         return { data: { enabled: true, movie: null, expiresAt } };
@@ -92,9 +97,12 @@ module.exports = {
     }
 
     if (movieId) {
-      // Verify movie exists
-      const movie = await strapi.entityService.findOne('api::movie.movie', movieId);
-      if (!movie) {
+      // Verify movie exists (use findMany with documentId filter for Strapi v5 compat)
+      const results = await strapi.entityService.findMany('api::movie.movie', {
+        filters: { documentId: movieId },
+        limit: 1,
+      });
+      if (!results || results.length === 0) {
         return ctx.notFound('Movie not found');
       }
 
