@@ -164,8 +164,8 @@ module.exports = createCoreController('api::referral.referral', ({ strapi }) => 
     const settings = await strapi.entityService.findMany('api::site-setting.site-setting');
     const rewardMovies = settings?.referralRewardMovies || 3;
 
-    // Create the activated referral record
-    await strapi.entityService.create('api::referral.referral', {
+    // Create the activated referral record using documents API
+    await strapi.documents('api::referral.referral').create({
       data: {
         referrer: referrerId,
         referred: userId,
@@ -261,8 +261,8 @@ module.exports = createCoreController('api::referral.referral', ({ strapi }) => 
  */
 async function grantReferralReward(strapi, userId, movieCount, source) {
   try {
-    // Get user's existing purchases
-    const existingPurchases = await strapi.entityService.findMany('api::purchase.purchase', {
+    // Get user's existing purchases using documents API (consistent with purchase controller)
+    const existingPurchases = await strapi.documents('api::purchase.purchase').findMany({
       filters: {
         buyer: { id: userId },
         status: 'completed',
@@ -271,22 +271,22 @@ async function grantReferralReward(strapi, userId, movieCount, source) {
     });
 
     const purchasedIds = new Set(
-      existingPurchases.map(p => String(p.movie?.id || p.movie?.documentId)).filter(Boolean)
+      existingPurchases.map(p => String(p.movie?.documentId || p.movie?.id)).filter(Boolean)
     );
 
     // Get popular available movies user hasn't purchased
-    const movies = await strapi.entityService.findMany('api::movie.movie', {
+    const movies = await strapi.documents('api::movie.movie').findMany({
       filters: { isAvailable: true },
       sort: [{ watchCount: 'desc' }, { rating: 'desc' }],
       limit: 50,
     });
 
-    const eligible = movies.filter(m => !purchasedIds.has(String(m.id)) && !purchasedIds.has(String(m.documentId)));
+    const eligible = movies.filter(m => !purchasedIds.has(String(m.documentId)) && !purchasedIds.has(String(m.id)));
     const toGrant = eligible.slice(0, movieCount);
 
-    // Create free "reward" purchases
+    // Create free "reward" purchases using documents API (matches how free-trial creates purchases)
     for (const movie of toGrant) {
-      await strapi.entityService.create('api::purchase.purchase', {
+      await strapi.documents('api::purchase.purchase').create({
         data: {
           buyer: userId,
           movie: movie.id,
