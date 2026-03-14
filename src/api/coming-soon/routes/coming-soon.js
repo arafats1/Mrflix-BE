@@ -10,5 +10,13 @@ module.exports = {
         policies: [],
       },
     },
+    {
+      method: 'GET',
+      path: '/coming-soon/:id',
+      handler: 'coming-soon.findOne',
+      config: {
+        policies: [],
+      },
+    },
   ],
 };

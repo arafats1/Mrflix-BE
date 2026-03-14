@@ -60,4 +60,47 @@ module.exports = {
       return { data: [] };
     }
   },
+
+  async findOne(ctx) {
+    const TMDB_API_KEY = process.env.TMDB_API_KEY;
+    const { id } = ctx.params;
+
+    if (!TMDB_API_KEY || !id) {
+      return { data: null };
+    }
+
+    try {
+      const url = `${TMDB_BASE}/movie/${id}?api_key=${TMDB_API_KEY}&language=en-US&append_to_response=videos`;
+      const response = await fetch(url);
+      if (!response.ok) {
+        return { data: null };
+      }
+
+      const m = await response.json();
+      const videos = Array.isArray(m?.videos?.results) ? m.videos.results : [];
+      const trailer = videos.find(v => v.site === 'YouTube' && v.type === 'Trailer' && v.official)
+        || videos.find(v => v.site === 'YouTube' && v.type === 'Trailer')
+        || videos.find(v => v.site === 'YouTube');
+
+      return {
+        data: {
+          id: m.id,
+          title: m.title,
+          overview: m.overview || '',
+          posterPath: m.poster_path ? `https://image.tmdb.org/t/p/w500${m.poster_path}` : null,
+          backdropPath: m.backdrop_path ? `https://image.tmdb.org/t/p/original${m.backdrop_path}` : null,
+          releaseDate: m.release_date,
+          rating: m.vote_average || 0,
+          genres: Array.isArray(m.genres) ? m.genres.map(g => g.name).filter(Boolean) : [],
+          runtime: m.runtime || null,
+          trailerUrl: trailer?.key ? `https://www.youtube.com/watch?v=${trailer.key}` : null,
+          trailerEmbedUrl: trailer?.key ? `https://www.youtube.com/embed/${trailer.key}` : null,
+          type: 'movie',
+        },
+      };
+    } catch (err) {
+      strapi.log.error('Coming soon detail fetch error:', err);
+      return { data: null };
+    }
+  },
 };
