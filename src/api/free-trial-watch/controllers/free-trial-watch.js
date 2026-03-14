@@ -140,6 +140,24 @@ module.exports = createCoreController('api::free-trial-watch.free-trial-watch', 
       },
     });
 
+    // Also create a free purchase so the movie stays in the user's library permanently
+    try {
+      await strapi.documents('api::purchase.purchase').create({
+        data: {
+          buyer: ctx.state.user.id,
+          movie: movie.id,
+          amount: 0,
+          paymentMethod: 'free_trial',
+          transactionId: `TRIAL_${ctx.state.user.id}_${movie.id}_${Date.now()}`,
+          status: 'completed',
+          downloadCount: 0,
+          seasonNumber: episodeSeason || null,
+        },
+      });
+    } catch (err) {
+      strapi.log.error('Failed to create trial purchase record:', err);
+    }
+
     const newUsed = existing.length + 1;
     const remaining = Math.max(0, freeTrialCount - newUsed);
 

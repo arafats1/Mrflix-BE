@@ -135,6 +135,32 @@ module.exports = createCoreController('api::referral.referral', ({ strapi }) => 
     }
 
     const referrerId = referralTemplate.referrer?.id;
+
+    // Prevent circular referrals: if the current user has already referred the code owner, block it
+    const circularCheck = await strapi.entityService.findMany('api::referral.referral', {
+      filters: {
+        referrer: { id: userId },
+        referred: { id: referrerId },
+        status: { $in: ['activated', 'rewarded'] },
+      },
+      limit: 1,
+    });
+
+    if (circularCheck.length > 0) {
+      return ctx.badRequest('You cannot use a referral code from someone you already referred');
+    }
+
+    // Only allow referral code application for new accounts (within 10 minutes of registration)
+    const userRecord = await strapi.query('plugin::users-permissions.user').findOne({
+      where: { id: userId },
+    });
+    if (userRecord) {
+      const accountAge = Date.now() - new Date(userRecord.createdAt).getTime();
+      const tenMinutes = 10 * 60 * 1000;
+      if (accountAge > tenMinutes) {
+        return ctx.badRequest('Referral codes can only be applied during sign up');
+      }
+    }
     const settings = await strapi.entityService.findMany('api::site-setting.site-setting');
     const rewardMovies = settings?.referralRewardMovies || 3;
 

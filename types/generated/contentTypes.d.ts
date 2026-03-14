@@ -703,10 +703,17 @@ export interface ApiPurchasePurchase extends Struct.CollectionTypeSchema {
       Schema.Attribute.Private;
     movie: Schema.Attribute.Relation<'manyToOne', 'api::movie.movie'>;
     paymentMethod: Schema.Attribute.Enumeration<
-      ['mtn_momo', 'airtel_money', 'pesapal']
+      [
+        'mtn_momo',
+        'airtel_money',
+        'pesapal',
+        'free_trial',
+        'referral_referred',
+        'referral_referrer',
+      ]
     > &
       Schema.Attribute.Required;
-    paymentPhone: Schema.Attribute.String & Schema.Attribute.Required;
+    paymentPhone: Schema.Attribute.String;
     pesapalTrackingId: Schema.Attribute.String;
     publishedAt: Schema.Attribute.DateTime;
     seasonNumber: Schema.Attribute.Integer;
