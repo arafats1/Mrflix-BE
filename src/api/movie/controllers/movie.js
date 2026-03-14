@@ -99,10 +99,22 @@ module.exports = createCoreController('api::movie.movie', ({ strapi }) => ({
     const { id } = ctx.params;
 
     try {
-      const movie = await strapi.entityService.findOne('api::movie.movie', id);
+      let movie = null;
+
+      // Accept both numeric Strapi ids and documentIds from clients.
+      if (/^\d+$/.test(String(id))) {
+        movie = await strapi.entityService.findOne('api::movie.movie', id);
+      } else {
+        const list = await strapi.entityService.findMany('api::movie.movie', {
+          filters: { documentId: String(id) },
+          limit: 1,
+        });
+        movie = list?.[0] || null;
+      }
+
       if (!movie) return ctx.notFound('Movie not found');
 
-      await strapi.entityService.update('api::movie.movie', id, {
+      await strapi.entityService.update('api::movie.movie', movie.id, {
         data: { watchCount: (movie.watchCount || 0) + 1 },
       });
 
