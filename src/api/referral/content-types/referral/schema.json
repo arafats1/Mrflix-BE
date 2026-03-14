@@ -31,17 +31,17 @@
       "enum": ["pending", "activated", "rewarded"],
       "default": "pending"
     },
-    "referrerRewarded": {
-      "type": "boolean",
-      "default": false
-    },
-    "referredRewarded": {
-      "type": "boolean",
-      "default": false
-    },
     "rewardMovieCount": {
       "type": "integer",
       "default": 3
+    },
+    "referrerMoviesRemaining": {
+      "type": "integer",
+      "default": 0
+    },
+    "referredMoviesRemaining": {
+      "type": "integer",
+      "default": 0
     }
   }
 }

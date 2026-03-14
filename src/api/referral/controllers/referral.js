@@ -77,6 +77,9 @@ module.exports = createCoreController('api::referral.referral', ({ strapi }) => 
     const settings = await strapi.entityService.findMany('api::site-setting.site-setting');
     const rewardMovies = settings?.referralRewardMovies || 3;
 
+    // Calculate remaining free movies for this user
+    const credits = await getRemainingCredits(strapi, userId);
+
     const frontendUrl = process.env.FRONTEND_URL || 'https://mrflix.ug';
 
     return {
@@ -86,6 +89,7 @@ module.exports = createCoreController('api::referral.referral', ({ strapi }) => 
         totalReferred: activatedReferrals.length,
         rewardMovies,
         hasAppliedCode: appliedCode.length > 0,
+        freeMoviesRemaining: credits,
       },
     };
   },
@@ -164,7 +168,7 @@ module.exports = createCoreController('api::referral.referral', ({ strapi }) => 
     const settings = await strapi.entityService.findMany('api::site-setting.site-setting');
     const rewardMovies = settings?.referralRewardMovies || 3;
 
-    // Create the activated referral record using documents API
+    // Create the activated referral record with credit balances for both users
     await strapi.documents('api::referral.referral').create({
       data: {
         referrer: referrerId,
@@ -172,23 +176,143 @@ module.exports = createCoreController('api::referral.referral', ({ strapi }) => 
         code: code.toUpperCase(),
         status: 'activated',
         rewardMovieCount: rewardMovies,
-        referrerRewarded: false,
-        referredRewarded: false,
+        referrerMoviesRemaining: rewardMovies,
+        referredMoviesRemaining: rewardMovies,
       },
     });
-
-    // Grant rewards to both users — create "free reward" purchases
-    // For the referred user (new user)
-    await grantReferralReward(strapi, userId, rewardMovies, 'referral_referred');
-
-    // For the referrer
-    await grantReferralReward(strapi, referrerId, rewardMovies, 'referral_referrer');
 
     return {
       data: {
         success: true,
-        message: `Referral code applied! You and the referrer each get ${rewardMovies} free movies or 1 full season.`,
+        message: `Referral code applied! You and the referrer each get ${rewardMovies} free movies. Go to any movie and use your free credit!`,
         rewardMovies,
+      },
+    };
+  },
+
+  // GET /referrals/my-credits — Get user's remaining free movie credits
+  async myCredits(ctx) {
+    if (!ctx.state.user) {
+      return ctx.unauthorized('You must be logged in');
+    }
+
+    const userId = ctx.state.user.id;
+    const remaining = await getRemainingCredits(strapi, userId);
+
+    return {
+      data: {
+        freeMoviesRemaining: remaining,
+      },
+    };
+  },
+
+  // POST /referrals/use-credit — Use a referral credit to unlock a movie
+  async useCredit(ctx) {
+    if (!ctx.state.user) {
+      return ctx.unauthorized('You must be logged in');
+    }
+
+    const { movieId } = ctx.request.body.data || ctx.request.body;
+    if (!movieId) {
+      return ctx.badRequest('Missing required field: movieId');
+    }
+
+    const userId = ctx.state.user.id;
+
+    // Get the movie
+    const movie = await strapi.documents('api::movie.movie').findOne({
+      documentId: movieId,
+    });
+
+    if (!movie) {
+      return ctx.notFound('Movie not found');
+    }
+
+    // Only movies, not series
+    if (movie.type === 'series') {
+      return ctx.badRequest('Referral credits can only be used for movies, not series');
+    }
+
+    // Check if already purchased
+    const existing = await strapi.documents('api::purchase.purchase').findMany({
+      filters: {
+        buyer: { id: userId },
+        movie: { id: movie.id },
+        status: 'completed',
+      },
+    });
+
+    if (existing && existing.length > 0) {
+      return ctx.badRequest('You already own this movie');
+    }
+
+    // Find a referral record with remaining credits for this user
+    // Check as referred user first
+    const asReferred = await strapi.entityService.findMany('api::referral.referral', {
+      filters: {
+        referred: { id: userId },
+        status: { $in: ['activated', 'rewarded'] },
+        referredMoviesRemaining: { $gt: 0 },
+      },
+      limit: 1,
+    });
+
+    let referralRecord = null;
+    let creditField = null;
+
+    if (asReferred.length > 0) {
+      referralRecord = asReferred[0];
+      creditField = 'referredMoviesRemaining';
+    } else {
+      // Check as referrer
+      const asReferrer = await strapi.entityService.findMany('api::referral.referral', {
+        filters: {
+          referrer: { id: userId },
+          status: { $in: ['activated', 'rewarded'] },
+          referrerMoviesRemaining: { $gt: 0 },
+        },
+        limit: 1,
+      });
+
+      if (asReferrer.length > 0) {
+        referralRecord = asReferrer[0];
+        creditField = 'referrerMoviesRemaining';
+      }
+    }
+
+    if (!referralRecord || !creditField) {
+      return ctx.badRequest('You have no remaining referral credits');
+    }
+
+    // Create the free purchase
+    await strapi.documents('api::purchase.purchase').create({
+      data: {
+        buyer: userId,
+        movie: movie.id,
+        amount: 0,
+        paymentMethod: creditField === 'referredMoviesRemaining' ? 'referral_referred' : 'referral_referrer',
+        transactionId: `REF_${userId}_${movie.id}_${Date.now()}`,
+        status: 'completed',
+        downloadCount: 0,
+      },
+    });
+
+    // Decrement the credit
+    const newRemaining = referralRecord[creditField] - 1;
+    await strapi.entityService.update('api::referral.referral', referralRecord.id, {
+      data: {
+        [creditField]: newRemaining,
+      },
+    });
+
+    // Calculate total remaining across all referral records
+    const totalRemaining = await getRemainingCredits(strapi, userId);
+
+    return {
+      data: {
+        success: true,
+        message: `Free movie unlocked! You have ${totalRemaining} free movie${totalRemaining === 1 ? '' : 's'} remaining.`,
+        freeMoviesRemaining: totalRemaining,
       },
     };
   },
@@ -256,49 +380,35 @@ module.exports = createCoreController('api::referral.referral', ({ strapi }) => 
 }));
 
 /**
- * Grant referral reward — creates free purchases for the user
- * Picks the top N most-watched movies the user hasn't purchased
+ * Get the total remaining referral movie credits for a user
+ * Sums credits from all referral records where the user is either a referrer or referred
  */
-async function grantReferralReward(strapi, userId, movieCount, source) {
-  try {
-    // Get user's existing purchases using documents API (consistent with purchase controller)
-    const existingPurchases = await strapi.documents('api::purchase.purchase').findMany({
-      filters: {
-        buyer: { id: userId },
-        status: 'completed',
-      },
-      populate: ['movie'],
-    });
+async function getRemainingCredits(strapi, userId) {
+  let total = 0;
 
-    const purchasedIds = new Set(
-      existingPurchases.map(p => String(p.movie?.documentId || p.movie?.id)).filter(Boolean)
-    );
-
-    // Get popular available movies user hasn't purchased
-    const movies = await strapi.documents('api::movie.movie').findMany({
-      filters: { isAvailable: true },
-      sort: [{ watchCount: 'desc' }, { rating: 'desc' }],
-      limit: 50,
-    });
-
-    const eligible = movies.filter(m => !purchasedIds.has(String(m.documentId)) && !purchasedIds.has(String(m.id)));
-    const toGrant = eligible.slice(0, movieCount);
-
-    // Create free "reward" purchases using documents API (matches how free-trial creates purchases)
-    for (const movie of toGrant) {
-      await strapi.documents('api::purchase.purchase').create({
-        data: {
-          buyer: userId,
-          movie: movie.id,
-          amount: 0,
-          paymentMethod: source,
-          transactionId: `REF_${userId}_${movie.id}_${Date.now()}`,
-          status: 'completed',
-          downloadCount: 0,
-        },
-      });
-    }
-  } catch (err) {
-    strapi.log.error(`Failed to grant referral reward for user ${userId}:`, err);
+  // Credits as a referred user
+  const asReferred = await strapi.entityService.findMany('api::referral.referral', {
+    filters: {
+      referred: { id: userId },
+      status: { $in: ['activated', 'rewarded'] },
+      referredMoviesRemaining: { $gt: 0 },
+    },
+  });
+  for (const r of asReferred) {
+    total += r.referredMoviesRemaining || 0;
   }
+
+  // Credits as a referrer
+  const asReferrer = await strapi.entityService.findMany('api::referral.referral', {
+    filters: {
+      referrer: { id: userId },
+      status: { $in: ['activated', 'rewarded'] },
+      referrerMoviesRemaining: { $gt: 0 },
+    },
+  });
+  for (const r of asReferrer) {
+    total += r.referrerMoviesRemaining || 0;
+  }
+
+  return total;
 }

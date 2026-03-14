@@ -11,6 +11,22 @@ module.exports = {
       },
     },
     {
+      method: 'GET',
+      path: '/referrals/my-credits',
+      handler: 'referral.myCredits',
+      config: {
+        policies: [],
+      },
+    },
+    {
+      method: 'POST',
+      path: '/referrals/use-credit',
+      handler: 'referral.useCredit',
+      config: {
+        policies: [],
+      },
+    },
+    {
       method: 'POST',
       path: '/referrals/apply',
       handler: 'referral.apply',
