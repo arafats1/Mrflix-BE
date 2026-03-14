@@ -318,28 +318,33 @@ module.exports = createCoreController('api::referral.referral', ({ strapi }) => 
   },
 
   // GET /referrals — Admin: List all referrals
-  async find(ctx) {
-    if (!ctx.state.user) {
-      return ctx.unauthorized('You must be logged in');
+  async adminList(ctx) {
+    try {
+      if (!ctx.state.user) {
+        return ctx.unauthorized('You must be logged in');
+      }
+
+      const isAdmin = ctx.state.user.role?.type === 'admin' || ctx.state.user.role?.name === 'Admin';
+      if (!isAdmin) {
+        return ctx.forbidden('Only admins can view all referrals');
+      }
+
+      const entries = await strapi.entityService.findMany('api::referral.referral', {
+        populate: {
+          referrer: { fields: ['username', 'email'] },
+          referred: { fields: ['username', 'email'] },
+        },
+        sort: { createdAt: 'desc' },
+      });
+
+      // Keep only applied referral rows (rows with a referred user).
+      const activity = (entries || []).filter((x) => !!x?.referred);
+
+      return { data: activity };
+    } catch (err) {
+      strapi.log.error('Referral find error:', err);
+      return ctx.internalServerError('Failed to fetch referrals');
     }
-
-    const isAdmin = ctx.state.user.role?.type === 'admin' || ctx.state.user.role?.name === 'Admin';
-    if (!isAdmin) {
-      return ctx.forbidden('Only admins can view all referrals');
-    }
-
-    const entries = await strapi.entityService.findMany('api::referral.referral', {
-      filters: {
-        status: { $in: ['activated', 'rewarded'] },
-      },
-      populate: {
-        referrer: { fields: ['username', 'email', 'fullName'] },
-        referred: { fields: ['username', 'email', 'fullName'] },
-      },
-      sort: 'createdAt:desc',
-    });
-
-    return { data: entries };
   },
 
   // GET /referrals/settings — Get referral settings

@@ -37,7 +37,7 @@ module.exports = {
     {
       method: 'GET',
       path: '/referrals',
-      handler: 'referral.find',
+      handler: 'referral.adminList',
       config: {
         policies: [],
       },
