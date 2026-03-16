@@ -18,7 +18,12 @@ module.exports = {
     const now = new Date();
 
     // Check if the current selection has expired or no selection exists
-    if (!movieId || !expiresAt || new Date(expiresAt) <= now) {
+    // We only update if there's no movieId, no expiresAt, OR if it's Monday AND the current movie was picked BEFORE today
+    const isMonday = now.getDay() === 1; // 0 = Sunday, 1 = Monday
+    const lastUpdate = expiresAt ? new Date(expiresAt) : null;
+    const shouldUpdate = !movieId || !expiresAt || (isMonday && lastUpdate && lastUpdate <= now);
+
+    if (shouldUpdate) {
       // Auto-select a new free movie for this week
       const movies = await strapi.entityService.findMany('api::movie.movie', {
         filters: { isAvailable: true },
@@ -34,11 +39,13 @@ module.exports = {
       const selected = movies[Math.floor(Math.random() * Math.min(movies.length, 10))];
       movieId = selected.documentId || String(selected.id);
 
-      // Set expiry to next Monday at midnight
-      const nextMonday = new Date(now);
-      nextMonday.setDate(now.getDate() + (7 - now.getDay() + 1) % 7 || 7);
-      nextMonday.setHours(0, 0, 0, 0);
-      expiresAt = nextMonday.toISOString();
+      // Set expiry to next occurrence of Tuesday 00:00 (to ensure it stays for the whole Monday)
+      // If today is Monday, this will set it to next Tuesday.
+      const nextTuesday = new Date(now);
+      const daysUntilTuesday = (2 - now.getDay() + 7) % 7 || 7;
+      nextTuesday.setDate(now.getDate() + daysUntilTuesday);
+      nextTuesday.setHours(0, 0, 0, 0);
+      expiresAt = nextTuesday.toISOString();
 
       // Persist the selection
       await strapi.entityService.update('api::site-setting.site-setting', settings.id, {
