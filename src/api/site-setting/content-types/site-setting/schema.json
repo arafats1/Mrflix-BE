@@ -88,6 +88,9 @@
     "referralRewardMovies": {
       "type": "integer",
       "default": 3
+    },
+    "movingText": {
+      "type": "text"
     }
   }
 }

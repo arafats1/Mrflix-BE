@@ -813,6 +813,7 @@ export interface ApiSiteSettingSiteSetting extends Struct.SingleTypeSchema {
     moviePrice: Schema.Attribute.Integer &
       Schema.Attribute.Required &
       Schema.Attribute.DefaultTo<2000>;
+    movingText: Schema.Attribute.Text;
     pesapalIpnId: Schema.Attribute.String;
     publishedAt: Schema.Attribute.DateTime;
     referralEnabled: Schema.Attribute.Boolean &
