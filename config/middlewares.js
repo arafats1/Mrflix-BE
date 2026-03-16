@@ -34,6 +34,7 @@ module.exports = [
         'http://127.0.0.1:3000',
         'https://mrflix-ug.vercel.app',
         'https://www.mrflix.app',
+        'https://mrflix-movies-app.up.railway.app',
         process.env.FRONTEND_URL || 'http://localhost:3000',
       ],
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'],
