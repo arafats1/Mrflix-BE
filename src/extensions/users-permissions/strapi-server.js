@@ -1,7 +1,9 @@
 'use strict';
 
 /**
- * Extend the users-permissions plugin to include role in /users/me response
+ * Extend the users-permissions plugin:
+ * - Include role in /users/me response
+ * - Override Google provider to use full name as username
  */
 module.exports = (plugin) => {
   // Override the me controller to populate role
@@ -47,6 +49,58 @@ module.exports = (plugin) => {
           }
         : null,
     };
+  };
+
+  // Override Google provider to use full name instead of email prefix as username
+  const originalProviders = plugin.services.providers;
+
+  plugin.services.providers = (context) => {
+    const providers = originalProviders(context);
+    const originalConnect = providers.connect.bind(providers);
+
+    providers.connect = async (provider, query) => {
+      if (provider === 'google') {
+        const accessToken = query.access_token || query.code || query.oauth_token;
+        if (accessToken) {
+          try {
+            const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+              headers: { Authorization: `Bearer ${accessToken}` },
+            });
+            const profile = await res.json();
+            if (profile.name && profile.email) {
+              // Store the name so we can set it after user creation
+              query._googleName = profile.name;
+            }
+          } catch (err) {
+            // Continue with default flow
+          }
+        }
+      }
+
+      const user = await originalConnect(provider, query);
+
+      // Update username and fullName for new Google users
+      if (provider === 'google' && query._googleName && user) {
+        const currentUser = await strapi.db.query('plugin::users-permissions.user').findOne({
+          where: { id: user.id },
+        });
+        if (currentUser && (!currentUser.fullName || currentUser.username === currentUser.email?.split('@')[0])) {
+          await strapi.db.query('plugin::users-permissions.user').update({
+            where: { id: user.id },
+            data: {
+              username: query._googleName,
+              fullName: query._googleName,
+            },
+          });
+          user.username = query._googleName;
+          user.fullName = query._googleName;
+        }
+      }
+
+      return user;
+    };
+
+    return providers;
   };
 
   return plugin;
