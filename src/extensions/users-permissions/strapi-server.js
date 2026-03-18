@@ -70,9 +70,35 @@ module.exports = (plugin) => {
             if (profile.name && profile.email) {
               // Store the name so we can set it after user creation
               query._googleName = profile.name;
+              query._googleEmail = profile.email;
             }
           } catch (err) {
             // Continue with default flow
+          }
+        }
+
+        // If a user already exists with the same email but registered via
+        // email/password (provider = "local"), link the Google login to
+        // that existing account so they can sign in with either method.
+        if (query._googleEmail) {
+          const existingLocal = await strapi.db
+            .query('plugin::users-permissions.user')
+            .findOne({ where: { email: query._googleEmail.toLowerCase() } });
+
+          if (existingLocal && existingLocal.provider === 'local') {
+            // Update their fullName from Google if they don't have one yet
+            const updateData = {};
+            if (!existingLocal.fullName && query._googleName) {
+              updateData.fullName = query._googleName;
+            }
+            if (Object.keys(updateData).length > 0) {
+              await strapi.db.query('plugin::users-permissions.user').update({
+                where: { id: existingLocal.id },
+                data: updateData,
+              });
+              Object.assign(existingLocal, updateData);
+            }
+            return existingLocal;
           }
         }
       }
