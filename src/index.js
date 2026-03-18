@@ -241,8 +241,7 @@ module.exports = {
             icon: 'google',
             key: process.env.GOOGLE_CLIENT_ID,
             secret: process.env.GOOGLE_CLIENT_SECRET,
-            callback: `${process.env.PUBLIC_URL || 'http://localhost:1337'}/api/auth/google/callback`,
-            redirectUri: process.env.GOOGLE_REDIRECT_URL || 'https://www.mrflix.app/auth/google/callback',
+            callback: process.env.GOOGLE_REDIRECT_URL || 'https://www.mrflix.app/auth/google/callback',
             scope: ['email', 'profile'],
           };
           await pluginStore.set({ key: 'grant', value: grantConfig });
