@@ -195,7 +195,12 @@ const movies = [
 ];
 
 module.exports = {
-  register(/*{ strapi }*/) {},
+  register({ strapi }) {
+    // Trust Railway/Render reverse proxy so secure cookies work behind HTTPS termination
+    if (process.env.TRUST_PROXY === 'true') {
+      strapi.server.app.proxy = true;
+    }
+  },
 
   async bootstrap({ strapi }) {
     // ── Register Pesapal IPN URL ──
