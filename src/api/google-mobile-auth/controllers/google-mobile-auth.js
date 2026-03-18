@@ -25,13 +25,32 @@ module.exports = {
       return ctx.badRequest('Google OAuth is not configured');
     }
 
+    // The mobile app sends its deep link URI (differs between Expo Go and standalone)
+    const mobileRedirectUri = ctx.query.redirect_uri;
+    if (!mobileRedirectUri) {
+      return ctx.badRequest('redirect_uri is required');
+    }
+
+    // Validate that the redirect URI uses an allowed scheme
+    const allowedPrefixes = ['mrflix://', 'exp://', 'exps://'];
+    if (!allowedPrefixes.some((p) => mobileRedirectUri.startsWith(p))) {
+      return ctx.badRequest('Invalid redirect_uri scheme');
+    }
+
     // CSRF protection: generate a random state and store it in a cookie
+    // Also store the mobile redirect URI so the callback can use it
     const state = crypto.randomBytes(20).toString('hex');
     ctx.cookies.set('gm_oauth_state', state, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       maxAge: 5 * 60 * 1000, // 5 minutes
+    });
+    ctx.cookies.set('gm_redirect_uri', mobileRedirectUri, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 5 * 60 * 1000,
     });
 
     const backendUrl = strapi.config.get('server.url') || `${ctx.protocol}://${ctx.host}`;
@@ -58,7 +77,10 @@ module.exports = {
    */
   async callback(ctx) {
     const { code, state, error: oauthError } = ctx.query;
-    const DEEP_LINK = 'mrflix://auth/callback';
+    const DEEP_LINK = ctx.cookies.get('gm_redirect_uri') || 'mrflix://auth/callback';
+
+    // Clear the redirect URI cookie
+    ctx.cookies.set('gm_redirect_uri', '', { maxAge: 0 });
 
     if (oauthError) {
       return ctx.redirect(`${DEEP_LINK}?error=${encodeURIComponent(oauthError)}`);
