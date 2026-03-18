@@ -55,7 +55,16 @@ module.exports = [
       },
     },
   },
-  'strapi::session',
+  {
+    name: 'strapi::session',
+    config: {
+      proxy: true,
+      cookie: {
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+      },
+    },
+  },
   'strapi::favicon',
   'strapi::public',
 ];
