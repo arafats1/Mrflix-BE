@@ -231,6 +231,28 @@ module.exports = {
       console.log('📧 Disabled email confirmation requirement');
     }
 
+    // Configure Google OAuth provider if credentials are set
+    if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+      try {
+        const grantConfig = await pluginStore.get({ key: 'grant' });
+        if (grantConfig) {
+          grantConfig.google = {
+            enabled: true,
+            icon: 'google',
+            key: process.env.GOOGLE_CLIENT_ID,
+            secret: process.env.GOOGLE_CLIENT_SECRET,
+            callback: `${process.env.PUBLIC_URL || 'http://localhost:1337'}/api/auth/google/callback`,
+            redirectUri: process.env.GOOGLE_REDIRECT_URL || 'https://www.mrflix.app/auth/google/callback',
+            scope: ['email', 'profile'],
+          };
+          await pluginStore.set({ key: 'grant', value: grantConfig });
+          console.log('🔑 Google OAuth provider configured');
+        }
+      } catch (err) {
+        console.error('⚠️ Google OAuth config failed:', err.message);
+      }
+    }
+
     // Confirm any existing unconfirmed users
     const unconfirmedUsers = await strapi.db.query('plugin::users-permissions.user').findMany({
       where: { confirmed: false },
