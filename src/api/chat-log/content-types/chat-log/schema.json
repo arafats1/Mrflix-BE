@@ -1,0 +1,51 @@
+{
+  "kind": "collectionType",
+  "collectionName": "chat_logs",
+  "info": {
+    "singularName": "chat-log",
+    "pluralName": "chat-logs",
+    "displayName": "Chat Log",
+    "description": "AI chat conversation logs from users and visitors"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "sessionId": {
+      "type": "string",
+      "required": true
+    },
+    "userEmail": {
+      "type": "string"
+    },
+    "userName": {
+      "type": "string"
+    },
+    "userId": {
+      "type": "integer"
+    },
+    "isGuest": {
+      "type": "boolean",
+      "default": true,
+      "required": true
+    },
+    "messages": {
+      "type": "json",
+      "required": true
+    },
+    "messageCount": {
+      "type": "integer",
+      "default": 0
+    },
+    "lastMessage": {
+      "type": "text"
+    },
+    "ipAddress": {
+      "type": "string"
+    },
+    "userAgent": {
+      "type": "string"
+    }
+  }
+}

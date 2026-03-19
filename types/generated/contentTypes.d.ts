@@ -487,6 +487,46 @@ export interface ApiActiveStreamActiveStream
   };
 }
 
+export interface ApiChatLogChatLog extends Struct.CollectionTypeSchema {
+  collectionName: 'chat_logs';
+  info: {
+    description: 'AI chat conversation logs from users and visitors';
+    displayName: 'Chat Log';
+    pluralName: 'chat-logs';
+    singularName: 'chat-log';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    ipAddress: Schema.Attribute.String;
+    isGuest: Schema.Attribute.Boolean &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<true>;
+    lastMessage: Schema.Attribute.Text;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::chat-log.chat-log'
+    > &
+      Schema.Attribute.Private;
+    messageCount: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    messages: Schema.Attribute.JSON & Schema.Attribute.Required;
+    publishedAt: Schema.Attribute.DateTime;
+    sessionId: Schema.Attribute.String & Schema.Attribute.Required;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    userAgent: Schema.Attribute.String;
+    userEmail: Schema.Attribute.String;
+    userId: Schema.Attribute.Integer;
+    userName: Schema.Attribute.String;
+  };
+}
+
 export interface ApiContactMessageContactMessage
   extends Struct.CollectionTypeSchema {
   collectionName: 'contact_messages';
@@ -1435,6 +1475,7 @@ declare module '@strapi/strapi' {
       'admin::transfer-token-permission': AdminTransferTokenPermission;
       'admin::user': AdminUser;
       'api::active-stream.active-stream': ApiActiveStreamActiveStream;
+      'api::chat-log.chat-log': ApiChatLogChatLog;
       'api::contact-message.contact-message': ApiContactMessageContactMessage;
       'api::free-trial-watch.free-trial-watch': ApiFreeTrialWatchFreeTrialWatch;
       'api::movie-request.movie-request': ApiMovieRequestMovieRequest;
