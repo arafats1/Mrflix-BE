@@ -39,6 +39,13 @@
       "enum": ["new", "read", "replied", "archived"],
       "default": "new",
       "required": true
+    },
+    "replies": {
+      "type": "json",
+      "default": []
+    },
+    "userId": {
+      "type": "integer"
     }
   }
 }

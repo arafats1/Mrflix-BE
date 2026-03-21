@@ -4,6 +4,24 @@ module.exports = {
   routes: [
     {
       method: 'GET',
+      path: '/contact-messages/my-messages',
+      handler: 'contact-message.myMessages',
+      config: { policies: [] },
+    },
+    {
+      method: 'POST',
+      path: '/contact-messages/:id/reply',
+      handler: 'contact-message.reply',
+      config: { policies: [] },
+    },
+    {
+      method: 'POST',
+      path: '/contact-messages/:id/user-reply',
+      handler: 'contact-message.userReply',
+      config: { policies: [] },
+    },
+    {
+      method: 'GET',
       path: '/contact-messages',
       handler: 'contact-message.find',
       config: { policies: [] },

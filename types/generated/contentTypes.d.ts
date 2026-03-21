@@ -565,6 +565,7 @@ export interface ApiContactMessageContactMessage
     message: Schema.Attribute.Text & Schema.Attribute.Required;
     name: Schema.Attribute.String & Schema.Attribute.Required;
     publishedAt: Schema.Attribute.DateTime;
+    replies: Schema.Attribute.JSON & Schema.Attribute.DefaultTo<[]>;
     status: Schema.Attribute.Enumeration<
       ['new', 'read', 'replied', 'archived']
     > &
@@ -574,6 +575,7 @@ export interface ApiContactMessageContactMessage
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    userId: Schema.Attribute.Integer;
   };
 }
 
