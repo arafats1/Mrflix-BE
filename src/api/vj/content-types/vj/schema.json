@@ -1,0 +1,25 @@
+{
+  "kind": "collectionType",
+  "collectionName": "vjs",
+  "info": {
+    "singularName": "vj",
+    "pluralName": "vjs",
+    "displayName": "VJ",
+    "description": "Video Jockeys who translate movies to Luganda"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "name": {
+      "type": "string",
+      "required": true,
+      "unique": true
+    },
+    "isActive": {
+      "type": "boolean",
+      "default": true
+    }
+  }
+}

@@ -684,10 +684,15 @@ export interface ApiMovieMovie extends Struct.CollectionTypeSchema {
     genres: Schema.Attribute.JSON;
     isAvailable: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<true>;
     isFeatured: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
+    isLuganda: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
     isTrending: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<'oneToMany', 'api::movie.movie'> &
       Schema.Attribute.Private;
+    lugandaEpisodes: Schema.Attribute.JSON;
+    lugandaVideoUrl: Schema.Attribute.String;
+    lugandaVideoUrl480: Schema.Attribute.String;
+    lugandaVideoUrl720: Schema.Attribute.String;
     overview: Schema.Attribute.Text;
     poster: Schema.Attribute.Media<'images'>;
     posterUrl: Schema.Attribute.String;
@@ -712,6 +717,7 @@ export interface ApiMovieMovie extends Struct.CollectionTypeSchema {
     videoUrl: Schema.Attribute.String;
     videoUrl480: Schema.Attribute.String;
     videoUrl720: Schema.Attribute.String;
+    vjName: Schema.Attribute.String;
     watchCount: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
   };
 }
@@ -962,6 +968,35 @@ export interface ApiTvCodeTvCode extends Struct.CollectionTypeSchema {
       'manyToOne',
       'plugin::users-permissions.user'
     >;
+  };
+}
+
+export interface ApiVjVj extends Struct.CollectionTypeSchema {
+  collectionName: 'vjs';
+  info: {
+    description: 'Video Jockeys who translate movies to Luganda';
+    displayName: 'VJ';
+    pluralName: 'vjs';
+    singularName: 'vj';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    isActive: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<true>;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<'oneToMany', 'api::vj.vj'> &
+      Schema.Attribute.Private;
+    name: Schema.Attribute.String &
+      Schema.Attribute.Required &
+      Schema.Attribute.Unique;
+    publishedAt: Schema.Attribute.DateTime;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
   };
 }
 
@@ -1487,6 +1522,7 @@ declare module '@strapi/strapi' {
       'api::site-setting.site-setting': ApiSiteSettingSiteSetting;
       'api::subscription.subscription': ApiSubscriptionSubscription;
       'api::tv-code.tv-code': ApiTvCodeTvCode;
+      'api::vj.vj': ApiVjVj;
       'plugin::content-releases.release': PluginContentReleasesRelease;
       'plugin::content-releases.release-action': PluginContentReleasesReleaseAction;
       'plugin::i18n.locale': PluginI18NLocale;

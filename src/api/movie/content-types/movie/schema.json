@@ -105,6 +105,25 @@
     "watchCount": {
       "type": "integer",
       "default": 0
+    },
+    "isLuganda": {
+      "type": "boolean",
+      "default": false
+    },
+    "vjName": {
+      "type": "string"
+    },
+    "lugandaVideoUrl": {
+      "type": "string"
+    },
+    "lugandaVideoUrl720": {
+      "type": "string"
+    },
+    "lugandaVideoUrl480": {
+      "type": "string"
+    },
+    "lugandaEpisodes": {
+      "type": "json"
     }
   }
 }
