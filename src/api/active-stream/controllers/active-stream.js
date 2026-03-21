@@ -144,7 +144,7 @@ module.exports = createCoreController('api::active-stream.active-stream', ({ str
       filters: { status: 'watching' },
       populate: {
         user: { fields: ['username', 'email'] },
-        movie: { fields: ['title', 'type', 'posterUrl', 'documentId'] },
+        movie: { fields: ['title', 'type', 'posterUrl', 'documentId', 'isLuganda', 'vjName'] },
       },
       sort: 'lastHeartbeat:desc',
     });
@@ -162,6 +162,8 @@ module.exports = createCoreController('api::active-stream.active-stream', ({ str
           title: s.movie?.title,
           type: s.movie?.type,
           posterUrl: s.movie?.posterUrl,
+          isLuganda: s.movie?.isLuganda || false,
+          vjName: s.movie?.vjName || '',
         },
         contentType: s.contentType,
         episodeSeason: s.episodeSeason,
@@ -199,7 +201,7 @@ module.exports = createCoreController('api::active-stream.active-stream', ({ str
       filters,
       populate: {
         user: { fields: ['username', 'email'] },
-        movie: { fields: ['title', 'type', 'posterUrl', 'documentId'] },
+        movie: { fields: ['title', 'type', 'posterUrl', 'documentId', 'isLuganda', 'vjName'] },
       },
       sort: 'endedAt:desc',
       start: (page - 1) * pageSize,
@@ -226,6 +228,8 @@ module.exports = createCoreController('api::active-stream.active-stream', ({ str
           title: s.movie?.title,
           type: s.movie?.type,
           posterUrl: s.movie?.posterUrl,
+          isLuganda: s.movie?.isLuganda || false,
+          vjName: s.movie?.vjName || '',
         },
         contentType: s.contentType,
         episodeSeason: s.episodeSeason,
