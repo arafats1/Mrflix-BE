@@ -26,7 +26,7 @@ module.exports = {
       // Fetch all available movies for context
       const movies = await strapi.entityService.findMany('api::movie.movie', {
         filters: { isAvailable: true },
-        fields: ['title', 'overview', 'genres', 'type', 'rating', 'releaseDate', 'countryOfOrigin', 'priceUGX', 'seasons', 'trailerUrl'],
+        fields: ['title', 'overview', 'genres', 'type', 'rating', 'releaseDate', 'countryOfOrigin', 'priceUGX', 'seasons', 'trailerUrl', 'isLuganda', 'vjName'],
         sort: 'createdAt:desc',
         limit: 200,
       });
@@ -39,6 +39,7 @@ module.exports = {
         if (m.releaseDate) parts.push(`Released: ${m.releaseDate}`);
         if (m.countryOfOrigin) parts.push(`Country: ${m.countryOfOrigin}`);
         if (m.type === 'series' && m.seasons) parts.push(`${m.seasons} seasons`);
+        if (m.isLuganda) parts.push(`Luganda Translated${m.vjName ? ` by VJ ${m.vjName}` : ''}`);
         if (m.overview) parts.push(`Plot: ${m.overview.substring(0, 150)}`);
         return parts.join(' | ');
       }).join('\n');
@@ -53,6 +54,7 @@ IMPORTANT RULES:
 - You can recommend up to 5 movies at a time
 - If the user's request is vague, ask a clarifying question
 - You understand natural language like "something funny", "a movie like John Wick", "Korean drama", "something to watch with family"
+- Some movies/series have Luganda translations (marked as "Luganda Translated" in the catalog). When a user asks for Luganda movies, movies in Luganda, translated movies or content in their local language, recommend from these. Mention that they are available in Luganda.
 - Respond in English but understand if users mix in local languages
 - When a user confirms they want to submit a request (says yes, sure, please, etc.), respond with exactly this format: "Great! I'll need your name and WhatsApp number so we can notify you when it's available." Do NOT submit anything yourself.
 
