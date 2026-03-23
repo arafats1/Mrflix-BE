@@ -59,6 +59,11 @@
       "default": 0,
       "min": 0,
       "max": 100
+    },
+    "accessType": {
+      "type": "enumeration",
+      "enum": ["purchased", "subscription", "free_trial", "free_movie_of_week"],
+      "default": "purchased"
     }
   }
 }

@@ -14,7 +14,7 @@ module.exports = createCoreController('api::active-stream.active-stream', ({ str
       return ctx.unauthorized('You must be logged in');
     }
 
-    const { movieId, contentType, episodeSeason, episodeNumber, platform, progress } = ctx.request.body.data || ctx.request.body;
+    const { movieId, contentType, episodeSeason, episodeNumber, platform, progress, accessType } = ctx.request.body.data || ctx.request.body;
 
     if (!movieId) {
       return ctx.badRequest('Missing required field: movieId');
@@ -22,6 +22,8 @@ module.exports = createCoreController('api::active-stream.active-stream', ({ str
 
     const now = new Date().toISOString();
     const progressVal = typeof progress === 'number' ? Math.min(100, Math.max(0, Math.round(progress))) : null;
+    const validAccessTypes = ['purchased', 'subscription', 'free_trial', 'free_movie_of_week'];
+    const accessTypeVal = validAccessTypes.includes(accessType) ? accessType : 'purchased';
 
     // Look for an existing ACTIVE stream for this user + movie + episode
     const filters = {
@@ -77,6 +79,7 @@ module.exports = createCoreController('api::active-stream.active-stream', ({ str
           platform: platform || 'web',
           status: 'watching',
           progress: progressVal || 0,
+          accessType: accessTypeVal,
         },
       });
     }
@@ -173,6 +176,7 @@ module.exports = createCoreController('api::active-stream.active-stream', ({ str
         lastHeartbeat: s.lastHeartbeat,
         progress: s.progress || 0,
         status: s.status,
+        accessType: s.accessType || 'purchased',
       })),
     };
   },
@@ -239,6 +243,7 @@ module.exports = createCoreController('api::active-stream.active-stream', ({ str
         endedAt: s.endedAt,
         progress: s.progress || 0,
         status: s.status,
+        accessType: s.accessType || 'purchased',
       })),
       meta: {
         total: allHistory.length,
