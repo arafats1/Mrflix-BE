@@ -443,6 +443,10 @@ export interface ApiActiveStreamActiveStream
     draftAndPublish: false;
   };
   attributes: {
+    accessType: Schema.Attribute.Enumeration<
+      ['purchased', 'subscription', 'free_trial', 'free_movie_of_week']
+    > &
+      Schema.Attribute.DefaultTo<'purchased'>;
     contentType: Schema.Attribute.Enumeration<['movie', 'episode']> &
       Schema.Attribute.DefaultTo<'movie'>;
     createdAt: Schema.Attribute.DateTime;
@@ -1000,6 +1004,39 @@ export interface ApiVjVj extends Struct.CollectionTypeSchema {
   };
 }
 
+export interface ApiWatchlistWatchlist extends Struct.CollectionTypeSchema {
+  collectionName: 'watchlists';
+  info: {
+    description: 'User watchlist - movies to watch later';
+    displayName: 'Watchlist';
+    pluralName: 'watchlists';
+    singularName: 'watchlist';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::watchlist.watchlist'
+    > &
+      Schema.Attribute.Private;
+    movie: Schema.Attribute.Relation<'manyToOne', 'api::movie.movie'>;
+    publishedAt: Schema.Attribute.DateTime;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    user: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+  };
+}
+
 export interface PluginContentReleasesRelease
   extends Struct.CollectionTypeSchema {
   collectionName: 'strapi_releases';
@@ -1523,6 +1560,7 @@ declare module '@strapi/strapi' {
       'api::subscription.subscription': ApiSubscriptionSubscription;
       'api::tv-code.tv-code': ApiTvCodeTvCode;
       'api::vj.vj': ApiVjVj;
+      'api::watchlist.watchlist': ApiWatchlistWatchlist;
       'plugin::content-releases.release': PluginContentReleasesRelease;
       'plugin::content-releases.release-action': PluginContentReleasesReleaseAction;
       'plugin::i18n.locale': PluginI18NLocale;
