@@ -28,7 +28,18 @@ module.exports = (plugin) => {
       return ctx.unauthorized();
     }
 
-    // Return user data with role
+    // Check for active subscription
+    const now = new Date().toISOString();
+    const activeSub = await strapi.entityService.findMany('api::subscription.subscription', {
+      filters: {
+        subscriber: { id: user.id },
+        status: 'active',
+        endDate: { $gte: now },
+      },
+      limit: 1,
+    });
+
+    // Return user data with role and premium status
     ctx.body = {
       id: userWithRole.id,
       documentId: userWithRole.documentId,
@@ -40,6 +51,7 @@ module.exports = (plugin) => {
       fullName: userWithRole.fullName,
       createdAt: userWithRole.createdAt,
       updatedAt: userWithRole.updatedAt,
+      isPremium: activeSub && activeSub.length > 0,
       role: userWithRole.role
         ? {
             id: userWithRole.role.id,
