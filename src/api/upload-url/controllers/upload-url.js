@@ -75,21 +75,22 @@ module.exports = {
    * Simple presigned URL for small files (< 100MB)
    */
   async getPresignedUrl(ctx) {
-    // Check if user is admin
     if (!ctx.state.user) {
       return ctx.unauthorized('You must be logged in');
     }
 
-    const userWithRole = await strapi.query('plugin::users-permissions.user').findOne({
-      where: { id: ctx.state.user.id },
-      populate: ['role'],
-    });
-
-    if (userWithRole?.role?.type !== 'admin' && userWithRole?.role?.name !== 'Admin') {
-      return ctx.forbidden('Admin access required');
-    }
-
     const { fileName, contentType, folder } = ctx.request.body;
+
+    // Non-admin users can only upload to 'stories' folder
+    if (folder !== 'stories') {
+      const userWithRole = await strapi.query('plugin::users-permissions.user').findOne({
+        where: { id: ctx.state.user.id },
+        populate: ['role'],
+      });
+      if (userWithRole?.role?.type !== 'admin' && userWithRole?.role?.name !== 'Admin') {
+        return ctx.forbidden('Admin access required');
+      }
+    }
     if (!fileName || !contentType) {
       return ctx.badRequest('fileName and contentType are required');
     }
@@ -123,16 +124,18 @@ module.exports = {
       return ctx.unauthorized('You must be logged in');
     }
 
-    const userWithRole = await strapi.query('plugin::users-permissions.user').findOne({
-      where: { id: ctx.state.user.id },
-      populate: ['role'],
-    });
-
-    if (userWithRole?.role?.type !== 'admin' && userWithRole?.role?.name !== 'Admin') {
-      return ctx.forbidden('Admin access required');
-    }
-
     const { fileName, contentType, folder } = ctx.request.body;
+
+    // Non-admin users can only upload to 'stories' folder
+    if (folder !== 'stories') {
+      const userWithRole = await strapi.query('plugin::users-permissions.user').findOne({
+        where: { id: ctx.state.user.id },
+        populate: ['role'],
+      });
+      if (userWithRole?.role?.type !== 'admin' && userWithRole?.role?.name !== 'Admin') {
+        return ctx.forbidden('Admin access required');
+      }
+    }
     if (!fileName || !contentType) {
       return ctx.badRequest('fileName and contentType are required');
     }

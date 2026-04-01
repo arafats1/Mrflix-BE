@@ -6,6 +6,9 @@ module.exports = {
       handler: 'upload-url.getPresignedUrl',
       config: {
         policies: [],
+        auth: {
+          scope: [],
+        },
       },
     },
     {
@@ -14,6 +17,9 @@ module.exports = {
       handler: 'upload-url.completeMultipartUpload',
       config: {
         policies: [],
+        auth: {
+          scope: [],
+        },
       },
     },
     {
@@ -22,6 +28,9 @@ module.exports = {
       handler: 'upload-url.initiateMultipartUpload',
       config: {
         policies: [],
+        auth: {
+          scope: [],
+        },
       },
     },
     {
@@ -30,6 +39,9 @@ module.exports = {
       handler: 'upload-url.getPartPresignedUrl',
       config: {
         policies: [],
+        auth: {
+          scope: [],
+        },
       },
     },
     {
@@ -38,6 +50,9 @@ module.exports = {
       handler: 'upload-url.abortMultipartUpload',
       config: {
         policies: [],
+        auth: {
+          scope: [],
+        },
       },
     },
   ],
