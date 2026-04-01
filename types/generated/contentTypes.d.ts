@@ -840,6 +840,8 @@ export interface ApiSiteSettingSiteSetting extends Struct.SingleTypeSchema {
     apkUpdatedAt: Schema.Attribute.DateTime;
     apkUrl: Schema.Attribute.String;
     apkVersion: Schema.Attribute.String;
+    contentMode: Schema.Attribute.Enumeration<['english', 'luganda', 'both']> &
+      Schema.Attribute.DefaultTo<'both'>;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
