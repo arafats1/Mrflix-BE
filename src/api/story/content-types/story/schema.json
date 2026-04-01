@@ -1,0 +1,51 @@
+{
+  "kind": "collectionType",
+  "collectionName": "stories",
+  "info": {
+    "singularName": "story",
+    "pluralName": "stories",
+    "displayName": "Story",
+    "description": "Lit Stories - user-uploaded short videos"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "videoUrl": {
+      "type": "string",
+      "required": true
+    },
+    "caption": {
+      "type": "text",
+      "default": ""
+    },
+    "authorName": {
+      "type": "string",
+      "required": true
+    },
+    "isAnonymous": {
+      "type": "boolean",
+      "default": false
+    },
+    "isPublished": {
+      "type": "boolean",
+      "default": true
+    },
+    "likes": {
+      "type": "json",
+      "default": []
+    },
+    "comments": {
+      "type": "json",
+      "default": []
+    },
+    "views": {
+      "type": "json",
+      "default": []
+    },
+    "userId": {
+      "type": "string"
+    }
+  }
+}

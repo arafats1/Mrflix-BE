@@ -888,6 +888,40 @@ export interface ApiSiteSettingSiteSetting extends Struct.SingleTypeSchema {
   };
 }
 
+export interface ApiStoryStory extends Struct.CollectionTypeSchema {
+  collectionName: 'stories';
+  info: {
+    description: 'Lit Stories - user-uploaded short videos';
+    displayName: 'Story';
+    pluralName: 'stories';
+    singularName: 'story';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    authorName: Schema.Attribute.String & Schema.Attribute.Required;
+    caption: Schema.Attribute.Text & Schema.Attribute.DefaultTo<''>;
+    comments: Schema.Attribute.JSON & Schema.Attribute.DefaultTo<[]>;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    isAnonymous: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
+    isPublished: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<true>;
+    likes: Schema.Attribute.JSON & Schema.Attribute.DefaultTo<[]>;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<'oneToMany', 'api::story.story'> &
+      Schema.Attribute.Private;
+    publishedAt: Schema.Attribute.DateTime;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    userId: Schema.Attribute.String;
+    videoUrl: Schema.Attribute.String & Schema.Attribute.Required;
+    views: Schema.Attribute.JSON & Schema.Attribute.DefaultTo<[]>;
+  };
+}
+
 export interface ApiSubscriptionSubscription
   extends Struct.CollectionTypeSchema {
   collectionName: 'subscriptions';
@@ -1559,6 +1593,7 @@ declare module '@strapi/strapi' {
       'api::purchase.purchase': ApiPurchasePurchase;
       'api::referral.referral': ApiReferralReferral;
       'api::site-setting.site-setting': ApiSiteSettingSiteSetting;
+      'api::story.story': ApiStoryStory;
       'api::subscription.subscription': ApiSubscriptionSubscription;
       'api::tv-code.tv-code': ApiTvCodeTvCode;
       'api::vj.vj': ApiVjVj;
