@@ -91,6 +91,11 @@
     },
     "movingText": {
       "type": "text"
+    },
+    "contentMode": {
+      "type": "enumeration",
+      "enum": ["english", "luganda", "both"],
+      "default": "both"
     }
   }
 }
