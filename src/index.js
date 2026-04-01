@@ -460,6 +460,9 @@ module.exports = {
           // Upload
           { action: 'plugin::upload.content-api.upload' },
           { action: 'plugin::upload.content-api.find' },
+          // Email notifications (admin only)
+          { action: 'api::email-notification.email-notification.sendContentUpdate' },
+          { action: 'api::email-notification.email-notification.testExpiry' },
         ];
 
         for (const perm of adminPermissions) {
