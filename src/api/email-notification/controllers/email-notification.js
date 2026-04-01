@@ -31,7 +31,6 @@ module.exports = {
     // Get all confirmed, non-blocked users with emails
     const users = await strapi.db.query('plugin::users-permissions.user').findMany({
       where: { confirmed: true, blocked: { $ne: true } },
-      select: ['id', 'email', 'username', 'fullName'],
     });
 
     const emailUsers = users.filter(u => u.email);
@@ -79,7 +78,6 @@ module.exports = {
 
     const user = await strapi.db.query('plugin::users-permissions.user').findOne({
       where: { email: email.toLowerCase().trim() },
-      select: ['id', 'email', 'username', 'fullName'],
     });
 
     if (!user) return ctx.notFound('User not found with that email');
