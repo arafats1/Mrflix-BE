@@ -3,21 +3,47 @@
 
 const { createCoreController } = require('@strapi/strapi').factories;
 
+async function resolveUserWithRole(strapi, ctx) {
+  if (ctx.state.user?.id) {
+    return strapi.query('plugin::users-permissions.user').findOne({
+      where: { id: ctx.state.user.id },
+      populate: ['role'],
+    });
+  }
+
+  // For auth:false routes, manually resolve user from Bearer token
+  const authHeader = ctx.request.header?.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    try {
+      const token = authHeader.substring(7);
+      const { id } = await strapi.plugins['users-permissions'].services.jwt.verify(token);
+      if (id) {
+        return strapi.query('plugin::users-permissions.user').findOne({
+          where: { id },
+          populate: ['role'],
+        });
+      }
+    } catch (_) {
+      return null;
+    }
+  }
+
+  return null;
+}
+
 module.exports = createCoreController('api::story.story', ({ strapi }) => ({
   // GET /stories - list published stories (or all for admin)
   async find(ctx) {
-    const user = ctx.state.user;
+    const user = await resolveUserWithRole(strapi, ctx);
     const showAll = ctx.query.all === 'true';
+    let isAdmin = false;
 
     let filters = { isPublished: true };
 
     if (showAll && user) {
-      const userWithRole = await strapi.query('plugin::users-permissions.user').findOne({
-        where: { id: user.id },
-        populate: ['role'],
-      });
-      if (userWithRole?.role?.type === 'admin' || userWithRole?.role?.name === 'Admin') {
+      if (user?.role?.type === 'admin' || user?.role?.name === 'Admin') {
         filters = {};
+        isAdmin = true;
       }
     }
 
@@ -25,6 +51,54 @@ module.exports = createCoreController('api::story.story', ({ strapi }) => ({
       filters,
       sort: { createdAt: 'desc' },
     });
+
+    // Admin dashboard enrichment: include viewer names/emails for each story
+    if (isAdmin && showAll) {
+      const viewerIds = new Set();
+      for (const story of stories) {
+        const views = Array.isArray(story.views) ? story.views : [];
+        for (const id of views) viewerIds.add(id);
+      }
+
+      const idList = Array.from(viewerIds);
+      let users = [];
+      if (idList.length > 0) {
+        const numericIds = idList
+          .map((v) => Number(v))
+          .filter((v) => Number.isFinite(v));
+
+        users = await strapi.query('plugin::users-permissions.user').findMany({
+          where: {
+            $or: [
+              { documentId: { $in: idList } },
+              { id: { $in: numericIds } },
+            ],
+          },
+        });
+      }
+
+      const userMap = new Map();
+      for (const u of users) {
+        const payload = {
+          id: u.documentId || String(u.id),
+          name: u.fullName || u.username || u.email || 'User',
+          email: u.email || '',
+        };
+        if (u.documentId) userMap.set(u.documentId, payload);
+        if (u.id !== undefined && u.id !== null) userMap.set(String(u.id), payload);
+      }
+
+      const enrichedStories = stories.map((story) => {
+        const views = Array.isArray(story.views) ? story.views : [];
+        const viewers = views.map((id) => userMap.get(id) || { id, name: 'Unknown user', email: '' });
+        return {
+          ...story,
+          viewers,
+        };
+      });
+
+      return { stories: enrichedStories };
+    }
 
     return { stories };
   },
