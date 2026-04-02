@@ -9,23 +9,26 @@ module.exports = {
    * Body: { message?: string }
    */
   async sendContentUpdate(ctx) {
-    const { message } = ctx.request.body || {};
+    const { message, movieIds, seriesIds } = ctx.request.body || {};
 
-    // Fetch latest 2 movies and 2 series (published, available)
-    const latestMovies = await strapi.db.query('api::movie.movie').findMany({
-      where: { type: 'movie', isAvailable: true, publishedAt: { $notNull: true } },
-      orderBy: { createdAt: 'desc' },
-      limit: 2,
-    });
+    // Fetch admin-selected movies by documentId (Strapi v5 external UID)
+    let selectedMovies = [];
+    if (Array.isArray(movieIds) && movieIds.length > 0) {
+      selectedMovies = await strapi.db.query('api::movie.movie').findMany({
+        where: { documentId: { $in: movieIds }, isAvailable: true, publishedAt: { $notNull: true } },
+      });
+    }
 
-    const latestSeries = await strapi.db.query('api::movie.movie').findMany({
-      where: { type: 'series', isAvailable: true, publishedAt: { $notNull: true } },
-      orderBy: { createdAt: 'desc' },
-      limit: 2,
-    });
+    // Fetch admin-selected series by documentId (Strapi v5 external UID)
+    let selectedSeries = [];
+    if (Array.isArray(seriesIds) && seriesIds.length > 0) {
+      selectedSeries = await strapi.db.query('api::movie.movie').findMany({
+        where: { documentId: { $in: seriesIds }, isAvailable: true, publishedAt: { $notNull: true } },
+      });
+    }
 
-    if (latestMovies.length === 0 && latestSeries.length === 0 && !message) {
-      return ctx.badRequest('No content to send — add movies/series first or include a message.');
+    if (selectedMovies.length === 0 && selectedSeries.length === 0 && !message) {
+      return ctx.badRequest('Please select at least one movie or series, or include a custom message.');
     }
 
     // Get all confirmed, non-blocked users with emails
@@ -43,8 +46,8 @@ module.exports = {
       try {
         await sendContentUpdateEmail({
           user,
-          movies: latestMovies,
-          series: latestSeries,
+          movies: selectedMovies,
+          series: selectedSeries,
           message: message || '',
         });
         sent++;
@@ -61,8 +64,8 @@ module.exports = {
         totalUsers: emailUsers.length,
         sent,
         failed,
-        moviesIncluded: latestMovies.map(m => m.title),
-        seriesIncluded: latestSeries.map(s => s.title),
+        moviesIncluded: selectedMovies.map(m => m.title),
+        seriesIncluded: selectedSeries.map(s => s.title),
       },
     };
   },

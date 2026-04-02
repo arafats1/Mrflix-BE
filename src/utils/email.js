@@ -34,11 +34,10 @@ function baseLayout(bodyHtml) {
         <tr>
           <td style="background:#0a0a0a;padding:20px 32px;border-top:1px solid #222;text-align:center;">
             <p style="margin:0 0 8px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:12px;color:#666;">
-              © ${new Date().getFullYear()} Mr.Flix — Abram Group Uganda
+              © ${new Date().getFullYear()} Mr.Flix — Your Premier Movie Store!
             </p>
             <p style="margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:11px;color:#444;">
               <a href="https://mrflix.ug" style="color:#eab308;text-decoration:none;">mrflix.ug</a> &nbsp;·&nbsp;
-              <a href="mailto:support@abramaccess.com" style="color:#888;text-decoration:none;">support@abramaccess.com</a>
             </p>
           </td>
         </tr>
@@ -47,6 +46,22 @@ function baseLayout(bodyHtml) {
   </table>
 </body>
 </html>`;
+}
+
+function safeText(value = '') {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function shortText(value = '', max = 120) {
+  const clean = String(value || '').replace(/\s+/g, ' ').trim();
+  if (!clean) return '';
+  if (clean.length <= max) return clean;
+  return `${clean.slice(0, max - 1)}…`;
 }
 
 /**
@@ -58,6 +73,7 @@ function movieCard(movie) {
   const year = movie.releaseDate ? new Date(movie.releaseDate).getFullYear() : '';
   const type = movie.type === 'series' ? 'SERIES' : 'MOVIE';
   const genres = Array.isArray(movie.genres) ? movie.genres.slice(0, 2).join(' · ') : '';
+  const summary = shortText(movie.overview || movie.description || movie.summary, 110);
 
   return `
     <td width="50%" style="padding:6px;vertical-align:top;">
@@ -67,6 +83,7 @@ function movieCard(movie) {
           <span style="display:inline-block;background:#eab308;color:#000;font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;margin-bottom:6px;">${type}</span>
           <p style="margin:4px 0 0;color:#fff;font-size:14px;font-weight:600;line-height:1.3;">${title}</p>
           <p style="margin:4px 0 0;color:#888;font-size:11px;">${[year, genres].filter(Boolean).join(' · ')}</p>
+          ${summary ? `<p style="margin:8px 0 0;color:#b8b8b8;font-size:12px;line-height:1.45;">${safeText(summary)}</p>` : ''}
         </div>
       </div>
     </td>`;
