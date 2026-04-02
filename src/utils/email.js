@@ -37,7 +37,7 @@ function baseLayout(bodyHtml) {
               © ${new Date().getFullYear()} Mr.Flix — Your Premier Movie Store!
             </p>
             <p style="margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:11px;color:#444;">
-              <a href="https://mrflix.ug" style="color:#eab308;text-decoration:none;">mrflix.ug</a> &nbsp;·&nbsp;
+              <a href="https://mrflix.app" style="color:#eab308;text-decoration:none;">mrflix.app</a> &nbsp;·&nbsp;
             </p>
           </td>
         </tr>
@@ -113,7 +113,7 @@ function subscriptionExpiredHtml(user) {
     </div>
 
     <div style="text-align:center;margin:28px 0;">
-      <a href="https://mrflix.ug/subscribe" style="display:inline-block;background:#eab308;color:#000;font-size:16px;font-weight:700;padding:14px 40px;border-radius:8px;text-decoration:none;">
+      <a href="https://mrflix.app/subscribe" style="display:inline-block;background:#eab308;color:#000;font-size:16px;font-weight:700;padding:14px 40px;border-radius:8px;text-decoration:none;">
         🔄 Renew Subscription
       </a>
     </div>
@@ -179,7 +179,7 @@ function contentUpdateHtml({ user, movies, series, message }) {
     ${customMsg}
 
     <div style="text-align:center;margin:28px 0;">
-      <a href="https://mrflix.ug" style="display:inline-block;background:#eab308;color:#000;font-size:16px;font-weight:700;padding:14px 40px;border-radius:8px;text-decoration:none;">
+      <a href="https://mrflix.app" style="display:inline-block;background:#eab308;color:#000;font-size:16px;font-weight:700;padding:14px 40px;border-radius:8px;text-decoration:none;">
         🎬 Watch Now
       </a>
     </div>

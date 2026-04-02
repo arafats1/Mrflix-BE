@@ -80,7 +80,7 @@ module.exports = createCoreController('api::referral.referral', ({ strapi }) => 
     // Calculate remaining free movies for this user
     const credits = await getRemainingCredits(strapi, userId);
 
-    const frontendUrl = process.env.FRONTEND_URL || 'https://mrflix.ug';
+    const frontendUrl = process.env.FRONTEND_URL || 'https://mrflix.app';
 
     return {
       data: {
