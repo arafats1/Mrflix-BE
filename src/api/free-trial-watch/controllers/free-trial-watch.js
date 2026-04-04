@@ -140,25 +140,24 @@ module.exports = createCoreController('api::free-trial-watch.free-trial-watch', 
       },
     });
 
-    // For movies, create a free purchase so it stays in the user's library permanently.
-    // For series episodes, do NOT create a purchase — the trial watch record is enough
-    // and a season-level purchase would grant access to ALL episodes in the season.
-    if (contentType !== 'episode') {
-      try {
-        await strapi.documents('api::purchase.purchase').create({
-          data: {
-            buyer: ctx.state.user.id,
-            movie: movie.id,
-            amount: 0,
-            paymentMethod: 'free_trial',
-            transactionId: `TRIAL_${ctx.state.user.id}_${movie.id}_${Date.now()}`,
-            status: 'completed',
-            downloadCount: 0,
-          },
-        });
-      } catch (err) {
-        strapi.log.error('Failed to create trial purchase record:', err);
-      }
+    // Create a free purchase so the content stays in the user's library.
+    // For episodes, paymentMethod='free_trial' + seasonNumber is used — the frontend
+    // access checks exclude free_trial purchases from granting full-season access.
+    try {
+      await strapi.documents('api::purchase.purchase').create({
+        data: {
+          buyer: ctx.state.user.id,
+          movie: movie.id,
+          amount: 0,
+          paymentMethod: 'free_trial',
+          transactionId: `TRIAL_${ctx.state.user.id}_${movie.id}_${contentType === 'episode' ? `S${episodeSeason}E${episodeNumber}_` : ''}${Date.now()}`,
+          status: 'completed',
+          downloadCount: 0,
+          seasonNumber: episodeSeason || null,
+        },
+      });
+    } catch (err) {
+      strapi.log.error('Failed to create trial purchase record:', err);
     }
 
     const newUsed = existing.length + 1;
