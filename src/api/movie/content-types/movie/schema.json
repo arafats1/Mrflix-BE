@@ -128,6 +128,10 @@
     "isAdult": {
       "type": "boolean",
       "default": false
+    },
+    "isXXX": {
+      "type": "boolean",
+      "default": false
     }
   }
 }

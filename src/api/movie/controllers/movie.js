@@ -33,7 +33,7 @@ module.exports = createCoreController('api::movie.movie', ({ strapi }) => ({
   // Override find to add custom filtering and apply site-setting prices
   async find(ctx) {
     // Allow filtering by type, featured, available
-    const { type, featured, available, q, luganda } = ctx.query;
+    const { type, featured, available, q, luganda, includeXXX } = ctx.query;
 
     const filters = {};
     if (type) filters.type = type;
@@ -46,6 +46,14 @@ module.exports = createCoreController('api::movie.movie', ({ strapi }) => ({
     // Search by title
     if (q) {
       filters.title = { $containsi: q };
+    }
+
+    // Exclude XXX content unless explicitly requested (admin use)
+    if (includeXXX !== 'true') {
+      filters.$and = [
+        ...(filters.$and || []),
+        { $or: [{ isXXX: false }, { isXXX: { $null: true } }] },
+      ];
     }
 
     ctx.query = {
@@ -90,6 +98,9 @@ module.exports = createCoreController('api::movie.movie', ({ strapi }) => ({
     const filters = { isAvailable: true };
     if (luganda === 'true') filters.isLuganda = true;
     else filters.$or = [{ isLuganda: false }, { isLuganda: { $null: true } }];
+
+    // Exclude XXX content from most watched
+    filters.$and = [{ $or: [{ isXXX: false }, { isXXX: { $null: true } }] }];
 
     const entries = await strapi.entityService.findMany('api::movie.movie', {
       filters,

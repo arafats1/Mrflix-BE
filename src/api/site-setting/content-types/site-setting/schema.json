@@ -96,6 +96,14 @@
       "type": "enumeration",
       "enum": ["english", "luganda", "both"],
       "default": "both"
+    },
+    "exclusivePrice": {
+      "type": "integer",
+      "default": 50000
+    },
+    "exclusiveEnabled": {
+      "type": "boolean",
+      "default": true
     }
   }
 }

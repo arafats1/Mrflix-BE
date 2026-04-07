@@ -30,14 +30,24 @@ module.exports = (plugin) => {
 
     // Check for active subscription
     const now = new Date().toISOString();
-    const activeSub = await strapi.entityService.findMany('api::subscription.subscription', {
-      filters: {
-        subscriber: { id: user.id },
-        status: 'active',
-        endDate: { $gte: now },
-      },
-      limit: 1,
-    });
+    const [activeSub, activeExclSub] = await Promise.all([
+      strapi.entityService.findMany('api::subscription.subscription', {
+        filters: {
+          subscriber: { id: user.id },
+          status: 'active',
+          endDate: { $gte: now },
+        },
+        limit: 1,
+      }),
+      strapi.entityService.findMany('api::exclusive-subscription.exclusive-subscription', {
+        filters: {
+          subscriber: { id: user.id },
+          status: 'active',
+          endDate: { $gte: now },
+        },
+        limit: 1,
+      }),
+    ]);
 
     // Return user data with role and premium status
     ctx.body = {
@@ -52,6 +62,7 @@ module.exports = (plugin) => {
       createdAt: userWithRole.createdAt,
       updatedAt: userWithRole.updatedAt,
       isPremium: activeSub && activeSub.length > 0,
+      isExclusiveSubscribed: activeExclSub && activeExclSub.length > 0,
       role: userWithRole.role
         ? {
             id: userWithRole.role.id,

@@ -584,6 +584,54 @@ export interface ApiContactMessageContactMessage
   };
 }
 
+export interface ApiExclusiveSubscriptionExclusiveSubscription
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'exclusive_subscriptions';
+  info: {
+    description: 'Monthly exclusive XXX content subscriptions';
+    displayName: 'Exclusive Subscription';
+    pluralName: 'exclusive-subscriptions';
+    singularName: 'exclusive-subscription';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    amount: Schema.Attribute.Integer & Schema.Attribute.Required;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    endDate: Schema.Attribute.DateTime & Schema.Attribute.Required;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::exclusive-subscription.exclusive-subscription'
+    > &
+      Schema.Attribute.Private;
+    paymentMethod: Schema.Attribute.Enumeration<
+      ['mtn_momo', 'airtel_money', 'pesapal']
+    > &
+      Schema.Attribute.Required;
+    paymentPhone: Schema.Attribute.String & Schema.Attribute.Required;
+    pesapalTrackingId: Schema.Attribute.String;
+    publishedAt: Schema.Attribute.DateTime;
+    startDate: Schema.Attribute.DateTime & Schema.Attribute.Required;
+    status: Schema.Attribute.Enumeration<
+      ['active', 'expired', 'cancelled', 'pending']
+    > &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<'pending'>;
+    subscriber: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+    transactionId: Schema.Attribute.String;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface ApiFreeTrialWatchFreeTrialWatch
   extends Struct.CollectionTypeSchema {
   collectionName: 'free_trial_watches';
@@ -687,10 +735,12 @@ export interface ApiMovieMovie extends Struct.CollectionTypeSchema {
     embedUrl: Schema.Attribute.String;
     episodes: Schema.Attribute.JSON;
     genres: Schema.Attribute.JSON;
+    isAdult: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
     isAvailable: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<true>;
     isFeatured: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
     isLuganda: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
     isTrending: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
+    isXXX: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<'oneToMany', 'api::movie.movie'> &
       Schema.Attribute.Private;
@@ -846,6 +896,10 @@ export interface ApiSiteSettingSiteSetting extends Struct.SingleTypeSchema {
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    exclusiveEnabled: Schema.Attribute.Boolean &
+      Schema.Attribute.DefaultTo<true>;
+    exclusivePrice: Schema.Attribute.Integer &
+      Schema.Attribute.DefaultTo<50000>;
     freeMovieOfWeekEnabled: Schema.Attribute.Boolean &
       Schema.Attribute.DefaultTo<false>;
     freeMovieOfWeekExpiresAt: Schema.Attribute.DateTime;
@@ -1588,6 +1642,7 @@ declare module '@strapi/strapi' {
       'api::active-stream.active-stream': ApiActiveStreamActiveStream;
       'api::chat-log.chat-log': ApiChatLogChatLog;
       'api::contact-message.contact-message': ApiContactMessageContactMessage;
+      'api::exclusive-subscription.exclusive-subscription': ApiExclusiveSubscriptionExclusiveSubscription;
       'api::free-trial-watch.free-trial-watch': ApiFreeTrialWatchFreeTrialWatch;
       'api::movie-request.movie-request': ApiMovieRequestMovieRequest;
       'api::movie.movie': ApiMovieMovie;
