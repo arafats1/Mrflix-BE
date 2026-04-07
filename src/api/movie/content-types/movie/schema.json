@@ -124,6 +124,10 @@
     },
     "lugandaEpisodes": {
       "type": "json"
+    },
+    "isAdult": {
+      "type": "boolean",
+      "default": false
     }
   }
 }
