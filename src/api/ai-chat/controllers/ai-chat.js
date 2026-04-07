@@ -26,7 +26,7 @@ module.exports = {
       // Fetch all available movies for context
       const movies = await strapi.entityService.findMany('api::movie.movie', {
         filters: { isAvailable: true },
-        fields: ['title', 'overview', 'genres', 'type', 'rating', 'releaseDate', 'countryOfOrigin', 'priceUGX', 'seasons', 'trailerUrl', 'isLuganda', 'vjName'],
+        fields: ['title', 'overview', 'genres', 'type', 'rating', 'releaseDate', 'countryOfOrigin', 'priceUGX', 'seasons', 'trailerUrl', 'isLuganda', 'vjName', 'isAdult'],
         sort: 'createdAt:desc',
         limit: 200,
       });
@@ -40,6 +40,7 @@ module.exports = {
         if (m.countryOfOrigin) parts.push(`Country: ${m.countryOfOrigin}`);
         if (m.type === 'series' && m.seasons) parts.push(`${m.seasons} seasons`);
         if (m.isLuganda) parts.push(`Luganda Translated${m.vjName ? ` by VJ ${m.vjName}` : ''}`);
+        if (m.isAdult) parts.push('Adult 18+');
         if (m.overview) parts.push(`Plot: ${m.overview.substring(0, 150)}`);
         return parts.join(' | ');
       }).join('\n');
@@ -55,6 +56,7 @@ IMPORTANT RULES:
 - If the user's request is vague, ask a clarifying question
 - You understand natural language like "something funny", "a movie like John Wick", "Korean drama", "something to watch with family"
 - Some movies/series have Luganda translations (marked as "Luganda Translated" in the catalog). When a user asks for Luganda movies, movies in Luganda, translated movies or content in their local language, recommend from these. Mention that they are available in Luganda.
+- Some movies are marked as "Adult 18+" in the catalog. Only recommend these when the user explicitly asks for adult content, 18+ movies, mature content, or similar. When recommending adult titles, include a brief note that the content is rated 18+.
 - Respond in English but understand if users mix in local languages
 - When a user confirms they want to submit a request (says yes, sure, please, etc.), respond with exactly this format: "Great! I'll need your name and WhatsApp number so we can notify you when it's available." Do NOT submit anything yourself.
 
