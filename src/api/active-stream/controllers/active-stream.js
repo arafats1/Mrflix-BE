@@ -7,14 +7,14 @@ module.exports = createCoreController('api::active-stream.active-stream', ({ str
   /**
    * POST /active-streams/heartbeat
    * Called every 30s by the player to signal "I'm still watching"
-   * Body: { movieId, contentType, episodeSeason?, episodeNumber?, platform?, progress? }
+   * Body: { movieId, contentType, episodeSeason?, episodeNumber?, platform?, progress?, deviceId? }
    */
   async heartbeat(ctx) {
     if (!ctx.state.user) {
       return ctx.unauthorized('You must be logged in');
     }
 
-    const { movieId, contentType, episodeSeason, episodeNumber, platform, progress, accessType } = ctx.request.body.data || ctx.request.body;
+    const { movieId, contentType, episodeSeason, episodeNumber, platform, progress, accessType, deviceId } = ctx.request.body.data || ctx.request.body;
 
     if (!movieId) {
       return ctx.badRequest('Missing required field: movieId');
@@ -25,7 +25,7 @@ module.exports = createCoreController('api::active-stream.active-stream', ({ str
     const validAccessTypes = ['purchased', 'subscription', 'free_trial', 'free_movie_of_week'];
     const accessTypeVal = validAccessTypes.includes(accessType) ? accessType : 'purchased';
 
-    // Look for an existing ACTIVE stream for this user + movie + episode
+    // Look for an existing ACTIVE stream for this user + movie + episode + device
     const filters = {
       user: { id: ctx.state.user.id },
       movie: { documentId: movieId },
@@ -34,6 +34,9 @@ module.exports = createCoreController('api::active-stream.active-stream', ({ str
     if (contentType === 'episode' && episodeSeason && episodeNumber) {
       filters.episodeSeason = episodeSeason;
       filters.episodeNumber = episodeNumber;
+    }
+    if (deviceId) {
+      filters.deviceId = deviceId;
     }
 
     const existing = await strapi.documents('api::active-stream.active-stream').findMany({
@@ -47,7 +50,6 @@ module.exports = createCoreController('api::active-stream.active-stream', ({ str
       if (progressVal !== null) updateData.progress = progressVal;
       
       // Auto-mark as completed ONLY IF progress is 100% or very close (e.g., 98%)
-      // If progress is at 90%, it stays in 'watching' (Live tab) until user explicitly stops/leaves
       if (progressVal >= 98) {
         updateData.status = 'completed';
         updateData.endedAt = now;
@@ -58,14 +60,38 @@ module.exports = createCoreController('api::active-stream.active-stream', ({ str
         data: updateData,
       });
     } else {
-      // Mark any other ACTIVE streams from this user as "stopped" (they switched content)
-      const oldStreams = await strapi.documents('api::active-stream.active-stream').findMany({
+      // This is a new stream — check device limit before creating
+      // First, stop any other ACTIVE streams from this SAME device (user switched content on same device)
+      if (deviceId) {
+        const sameDeviceStreams = await strapi.documents('api::active-stream.active-stream').findMany({
+          filters: { user: { id: ctx.state.user.id }, status: 'watching', deviceId },
+        });
+        for (const old of sameDeviceStreams) {
+          await strapi.documents('api::active-stream.active-stream').update({
+            documentId: old.documentId,
+            data: { status: 'stopped', endedAt: now },
+          });
+        }
+      }
+
+      // Count active streams from OTHER devices for this user
+      const allActiveStreams = await strapi.documents('api::active-stream.active-stream').findMany({
         filters: { user: { id: ctx.state.user.id }, status: 'watching' },
       });
-      for (const old of oldStreams) {
-        await strapi.documents('api::active-stream.active-stream').update({
-          documentId: old.documentId,
-          data: { status: 'stopped', endedAt: now },
+      // Get unique device IDs currently streaming (excluding the current device)
+      const otherDeviceStreams = deviceId
+        ? allActiveStreams.filter(s => s.deviceId && s.deviceId !== deviceId)
+        : allActiveStreams;
+      const uniqueOtherDevices = new Set(otherDeviceStreams.map(s => s.deviceId).filter(Boolean));
+
+      // Limit: max 2 devices per user
+      if (uniqueOtherDevices.size >= 2) {
+        return ctx.forbidden('Device limit exceeded. You can only stream on 2 devices at the same time. Please stop playback on another device first.', {
+          data: {
+            error: 'DEVICE_LIMIT_EXCEEDED',
+            maxDevices: 2,
+            activeDevices: uniqueOtherDevices.size + (deviceId ? 0 : 0),
+          },
         });
       }
 
@@ -83,6 +109,7 @@ module.exports = createCoreController('api::active-stream.active-stream', ({ str
           status: 'watching',
           progress: progressVal || 0,
           accessType: accessTypeVal,
+          deviceId: deviceId || null,
         },
       });
     }
@@ -93,20 +120,25 @@ module.exports = createCoreController('api::active-stream.active-stream', ({ str
   /**
    * POST /active-streams/stop
    * Called when user leaves the watch page
-   * Body: { progress? }
+   * Body: { progress?, deviceId? }
    */
   async stop(ctx) {
     if (!ctx.state.user) {
       return ctx.unauthorized('You must be logged in');
     }
 
-    const { progress } = ctx.request.body?.data || ctx.request.body || {};
+    const { progress, deviceId } = ctx.request.body?.data || ctx.request.body || {};
     const now = new Date().toISOString();
     const progressVal = typeof progress === 'number' ? Math.min(100, Math.max(0, Math.round(progress))) : null;
 
-    // Mark all active streams for this user as stopped/completed
+    // If deviceId is provided, only stop streams for that device; otherwise stop all
+    const filters = { user: { id: ctx.state.user.id }, status: 'watching' };
+    if (deviceId) {
+      filters.deviceId = deviceId;
+    }
+
     const streams = await strapi.documents('api::active-stream.active-stream').findMany({
-      filters: { user: { id: ctx.state.user.id }, status: 'watching' },
+      filters,
     });
 
     for (const stream of streams) {
@@ -181,6 +213,7 @@ module.exports = createCoreController('api::active-stream.active-stream', ({ str
         progress: s.progress || 0,
         status: s.status,
         accessType: s.accessType || 'purchased',
+        deviceId: s.deviceId || null,
       })),
     };
   },

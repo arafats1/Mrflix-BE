@@ -452,6 +452,7 @@ export interface ApiActiveStreamActiveStream
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    deviceId: Schema.Attribute.String;
     endedAt: Schema.Attribute.DateTime;
     episodeNumber: Schema.Attribute.Integer;
     episodeSeason: Schema.Attribute.Integer;

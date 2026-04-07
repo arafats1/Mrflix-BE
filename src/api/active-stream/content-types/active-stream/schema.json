@@ -64,6 +64,9 @@
       "type": "enumeration",
       "enum": ["purchased", "subscription", "free_trial", "free_movie_of_week"],
       "default": "purchased"
+    },
+    "deviceId": {
+      "type": "string"
     }
   }
 }
