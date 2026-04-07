@@ -54,6 +54,25 @@ module.exports = {
               strapi.log.info(`[Pesapal IPN] Subscription ${sub.id} activated for ref ${ref}`);
             }
           }
+        } else if (ref.startsWith('EXCL_')) {
+          // Activate exclusive subscription
+          const exclSubs = await strapi.entityService.findMany('api::exclusive-subscription.exclusive-subscription', {
+            filters: { transactionId: ref },
+            limit: 1,
+          });
+
+          if (exclSubs && exclSubs.length > 0) {
+            const exclSub = exclSubs[0];
+            if (exclSub.status !== 'active') {
+              await strapi.entityService.update('api::exclusive-subscription.exclusive-subscription', exclSub.id, {
+                data: {
+                  status: 'active',
+                  pesapalTrackingId: OrderTrackingId,
+                },
+              });
+              strapi.log.info(`[Pesapal IPN] Exclusive subscription ${exclSub.id} activated for ref ${ref}`);
+            }
+          }
         } else {
           // Purchase(s) — could be single (PUR_) or cart (CART_)
           const purchases = await strapi.db.query('api::purchase.purchase').findMany({
@@ -84,6 +103,18 @@ module.exports = {
           for (const sub of subs) {
             if (sub.status === 'pending') {
               await strapi.entityService.update('api::subscription.subscription', sub.id, {
+                data: { status: 'cancelled' },
+              });
+            }
+          }
+        } else if (ref.startsWith('EXCL_')) {
+          const exclSubs = await strapi.entityService.findMany('api::exclusive-subscription.exclusive-subscription', {
+            filters: { transactionId: ref },
+            limit: 1,
+          });
+          for (const exclSub of exclSubs) {
+            if (exclSub.status === 'pending') {
+              await strapi.entityService.update('api::exclusive-subscription.exclusive-subscription', exclSub.id, {
                 data: { status: 'cancelled' },
               });
             }
@@ -153,6 +184,17 @@ module.exports = {
               data: { status: 'active', pesapalTrackingId: orderTrackingId },
             });
           }
+        } else if (ref.startsWith('EXCL_')) {
+          purchaseType = 'exclusive';
+          const exclSubs = await strapi.entityService.findMany('api::exclusive-subscription.exclusive-subscription', {
+            filters: { transactionId: ref },
+            limit: 1,
+          });
+          if (exclSubs && exclSubs.length > 0 && exclSubs[0].status !== 'active') {
+            await strapi.entityService.update('api::exclusive-subscription.exclusive-subscription', exclSubs[0].id, {
+              data: { status: 'active', pesapalTrackingId: orderTrackingId },
+            });
+          }
         } else {
           purchaseType = 'purchase';
           const purchases = await strapi.db.query('api::purchase.purchase').findMany({
@@ -178,6 +220,7 @@ module.exports = {
       } else {
         // Still determine type from reference even if not completed
         if (ref.startsWith('SUB_')) purchaseType = 'subscription';
+        else if (ref.startsWith('EXCL_')) purchaseType = 'exclusive';
         else if (ref.startsWith('PUR_')) purchaseType = 'purchase';
         else if (ref.startsWith('BULK_')) purchaseType = 'bulk_purchase';
       }
