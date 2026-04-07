@@ -49,9 +49,10 @@ module.exports = {
                 data: {
                   status: 'active',
                   pesapalTrackingId: OrderTrackingId,
+                  ...(paymentMethod ? { paymentMethod } : {}),
                 },
               });
-              strapi.log.info(`[Pesapal IPN] Subscription ${sub.id} activated for ref ${ref}`);
+              strapi.log.info(`[Pesapal IPN] Subscription ${sub.id} activated for ref ${ref}, method: ${paymentMethod}`);
             }
           }
         } else if (ref.startsWith('EXCL_')) {
@@ -68,9 +69,10 @@ module.exports = {
                 data: {
                   status: 'active',
                   pesapalTrackingId: OrderTrackingId,
+                  ...(paymentMethod ? { paymentMethod } : {}),
                 },
               });
-              strapi.log.info(`[Pesapal IPN] Exclusive subscription ${exclSub.id} activated for ref ${ref}`);
+              strapi.log.info(`[Pesapal IPN] Exclusive subscription ${exclSub.id} activated for ref ${ref}, method: ${paymentMethod}`);
             }
           }
         } else {
@@ -86,9 +88,10 @@ module.exports = {
                 data: {
                   status: 'completed',
                   pesapalTrackingId: OrderTrackingId,
+                  ...(paymentMethod ? { paymentMethod } : {}),
                 },
               });
-              strapi.log.info(`[Pesapal IPN] Purchase ${purchase.id} completed for ref ${ref}`);
+              strapi.log.info(`[Pesapal IPN] Purchase ${purchase.id} completed for ref ${ref}, method: ${paymentMethod}`);
             }
           }
         }
@@ -173,6 +176,8 @@ module.exports = {
       let movieInfo = null;
 
       if (paymentStatus === 'completed') {
+        const actualPaymentMethod = status.payment_method || '';
+
         if (ref.startsWith('SUB_')) {
           purchaseType = 'subscription';
           const subs = await strapi.entityService.findMany('api::subscription.subscription', {
@@ -181,7 +186,7 @@ module.exports = {
           });
           if (subs && subs.length > 0 && subs[0].status !== 'active') {
             await strapi.entityService.update('api::subscription.subscription', subs[0].id, {
-              data: { status: 'active', pesapalTrackingId: orderTrackingId },
+              data: { status: 'active', pesapalTrackingId: orderTrackingId, ...(actualPaymentMethod ? { paymentMethod: actualPaymentMethod } : {}) },
             });
           }
         } else if (ref.startsWith('EXCL_')) {
@@ -192,7 +197,7 @@ module.exports = {
           });
           if (exclSubs && exclSubs.length > 0 && exclSubs[0].status !== 'active') {
             await strapi.entityService.update('api::exclusive-subscription.exclusive-subscription', exclSubs[0].id, {
-              data: { status: 'active', pesapalTrackingId: orderTrackingId },
+              data: { status: 'active', pesapalTrackingId: orderTrackingId, ...(actualPaymentMethod ? { paymentMethod: actualPaymentMethod } : {}) },
             });
           }
         } else {
@@ -205,7 +210,7 @@ module.exports = {
             if (p.status !== 'completed') {
               await strapi.db.query('api::purchase.purchase').update({
                 where: { id: p.id },
-                data: { status: 'completed', pesapalTrackingId: orderTrackingId },
+                data: { status: 'completed', pesapalTrackingId: orderTrackingId, ...(actualPaymentMethod ? { paymentMethod: actualPaymentMethod } : {}) },
               });
             }
           }
