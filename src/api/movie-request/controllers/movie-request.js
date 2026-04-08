@@ -55,11 +55,10 @@ module.exports = createCoreController('api::movie-request.movie-request', ({ str
         type: inputData.type || 'movie',
         requesterName: ctx.state.user.fullName || ctx.state.user.username || 'Unknown',
         whatsappNumber: inputData.whatsappNumber,
-      }).catch(err => console.error('[WhatsApp] Admin notify failed:', err.message));
+      }).catch(() => {});
 
       return { data: entry };
     } catch (err) {
-      console.error('Request Create Error:', err.message);
       ctx.throw(400, err.message);
     }
   },
@@ -102,7 +101,7 @@ module.exports = createCoreController('api::movie-request.movie-request', ({ str
           to: userWhatsApp,
           title: existing.title,
           userName: existing.requester?.fullName || existing.requester?.username || 'there',
-        }).catch(err => console.error('[WhatsApp] User notify failed:', err.message));
+        }).catch(() => {});
       }
     }
 

@@ -10,14 +10,12 @@ const NEW_HOST = 'mr-flix.b-cdn.net';
 
 async function updateMovies() {
   try {
-    console.log('--- FETCHING MOVIES ---');
     // Fetch all movies (using pagination to get up to 100)
     const response = await axios.get(`${STRAPI_URL}/api/movies?pagination[pageSize]=100`, {
       headers: { Authorization: `Bearer ${API_TOKEN}` }
     });
 
     const movies = response.data.data;
-    console.log(`Found ${movies.length} movies.`);
 
     for (const movie of movies) {
       const id = movie.documentId || movie.id;
@@ -35,7 +33,6 @@ async function updateMovies() {
         if (typeof val === 'string' && val.includes(OLD_HOST)) {
           updatedFields[field] = val.replace(OLD_HOST, NEW_HOST);
           hasChanges = true;
-          console.log(`[${attributes.title}] Fixing ${field}: ${val} -> ${updatedFields[field]}`);
         }
       });
 
@@ -48,7 +45,6 @@ async function updateMovies() {
             if (typeof ep[field] === 'string' && ep[field].includes(OLD_HOST)) {
               updatedEp[field] = ep[field].replace(OLD_HOST, NEW_HOST);
               epChanged = true;
-              console.log(`[${attributes.title}] Fixing episode ${ep.episode} field ${field}`);
             }
           });
           return updatedEp;
@@ -61,17 +57,14 @@ async function updateMovies() {
       }
 
       if (hasChanges) {
-        console.log(`Updating movie: ${attributes.title} (ID: ${id})...`);
         await axios.put(`${STRAPI_URL}/api/movies/${id}`, {
           data: updatedFields
         }, {
           headers: { Authorization: `Bearer ${API_TOKEN}` }
         });
-        console.log(`Success!`);
       }
     }
 
-    console.log('--- UPDATING EPISODES ---');
     // For series, we need to check episodes too
     // In Strapi V5, episodes are usually a component or relation
     // We might need a separate loop if episodes are their own content type
@@ -95,17 +88,14 @@ async function updateMovies() {
             });
 
             if (epChanged) {
-                console.log(`Updating Episode: ${ep.title} (ID: ${eid})...`);
                 await axios.put(`${STRAPI_URL}/api/episodes/${eid}`, { data: epUpdates }, {
                     headers: { Authorization: `Bearer ${API_TOKEN}` }
                 });
             }
         }
     }
-
-    console.log('--- ALL DONE ---');
   } catch (error) {
-    console.error('Error:', error.response ? error.response.data : error.message);
+    // Error occurred during update
   }
 }
 

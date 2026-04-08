@@ -55,13 +55,11 @@ async function sendTemplateMessage(to, templateName, languageCode, bodyParams = 
   const { phoneNumberId, accessToken } = getConfig();
 
   if (!phoneNumberId || !accessToken) {
-    console.warn('[WhatsApp] Missing credentials – skipping message');
     return null;
   }
 
   const recipient = formatUgandanNumber(to);
   if (!recipient) {
-    console.warn('[WhatsApp] No valid phone number provided');
     return null;
   }
 
@@ -91,7 +89,6 @@ async function sendTemplateMessage(to, templateName, languageCode, bodyParams = 
   };
 
   try {
-    console.log(`[WhatsApp] Sending template "${templateName}" to ${recipient}`);
     const res = await fetch(url, {
       method: 'POST',
       headers: {
@@ -104,14 +101,11 @@ async function sendTemplateMessage(to, templateName, languageCode, bodyParams = 
     const data = await res.json();
 
     if (!res.ok) {
-      console.error('[WhatsApp] API Error:', JSON.stringify(data));
       return null;
     }
 
-    console.log('[WhatsApp] Template message sent to', recipient, '- ID:', data.messages?.[0]?.id);
     return data;
   } catch (err) {
-    console.error('[WhatsApp] Send failed:', err.message);
     return null;
   }
 }
@@ -124,7 +118,6 @@ async function sendTemplateMessage(to, templateName, languageCode, bodyParams = 
 async function notifyAdminNewRequest({ title, type, requesterName, whatsappNumber }) {
   const { adminNumber } = getConfig();
   if (!adminNumber) {
-    console.warn('[WhatsApp] No admin number configured – skipping alert');
     return;
   }
 

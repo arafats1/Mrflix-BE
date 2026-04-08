@@ -221,10 +221,9 @@ module.exports = {
           data: { pesapalIpnId: ipnId },
         });
       }
-      console.log(`💳 Pesapal IPN registered: ${ipnUrl} (ID: ${ipnId})`);
     } catch (err) {
-      console.error('⚠️ Pesapal IPN registration failed:', err.message);
-      console.error('   Payments will NOT work until Pesapal keys are configured.');
+      // Pesapal IPN registration failed
+      // Payments will NOT work until Pesapal keys are configured.
     }
 
     // Disable email confirmation requirement so users can login immediately
@@ -233,7 +232,6 @@ module.exports = {
     if (advancedSettings && advancedSettings.email_confirmation) {
       advancedSettings.email_confirmation = false;
       await pluginStore.set({ key: 'advanced', value: advancedSettings });
-      console.log('📧 Disabled email confirmation requirement');
     }
 
     // Configure Google OAuth provider if credentials are set
@@ -250,10 +248,9 @@ module.exports = {
             scope: ['email', 'profile'],
           };
           await pluginStore.set({ key: 'grant', value: grantConfig });
-          console.log('🔑 Google OAuth provider configured');
         }
       } catch (err) {
-        console.error('⚠️ Google OAuth config failed:', err.message);
+        // Google OAuth config failed
       }
     }
 
@@ -266,7 +263,6 @@ module.exports = {
         where: { id: u.id },
         data: { confirmed: true },
       });
-      console.log(`  ✅ Confirmed user: ${u.email}`);
     }
 
     // Seed movies if none exist
@@ -275,21 +271,16 @@ module.exports = {
     });
 
     if (!existingMovies || existingMovies.length === 0) {
-      console.log('🎬 Seeding Mr.Flix movie catalog...');
       for (const movie of movies) {
         try {
           await strapi.documents('api::movie.movie').create({
             data: movie,
             status: 'published',
           });
-          console.log(`  ✅ Added: ${movie.title}`);
         } catch (err) {
-          console.error(`  ❌ Failed: ${movie.title}`, err.message);
+          // Movie creation failed
         }
       }
-      console.log(`✅ Seeded ${movies.length} movies/series`);
-    } else {
-      console.log('🎬 Movie catalog already seeded, skipping...');
     }
 
     // Configure public API permissions automatically
@@ -326,7 +317,6 @@ module.exports = {
             });
           }
         }
-        console.log('🔓 Public API permissions configured');
       }
 
       // Configure authenticated user permissions
@@ -385,7 +375,6 @@ module.exports = {
             });
           }
         }
-        console.log('🔐 Authenticated API permissions configured');
       }
 
       // Create Admin role for frontend admins (users-permissions)
@@ -401,7 +390,6 @@ module.exports = {
             type: 'admin',
           },
         });
-        console.log('👑 Created Admin role for users-permissions');
       }
 
       if (adminRole) {
@@ -475,10 +463,9 @@ module.exports = {
             });
           }
         }
-        console.log('👑 Admin API permissions configured');
       }
     } catch (err) {
-      console.error('⚠️ Failed to set permissions:', err.message);
+      // Failed to set permissions
     }
   },
 };

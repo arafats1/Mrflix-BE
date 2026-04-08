@@ -25,7 +25,7 @@ module.exports = {
     try {
       // Fetch all available movies for context
       const movies = await strapi.entityService.findMany('api::movie.movie', {
-        filters: { isAvailable: true },
+        filters: { isAvailable: true, isXXX: { $ne: true } },
         fields: ['title', 'overview', 'genres', 'type', 'rating', 'releaseDate', 'countryOfOrigin', 'priceUGX', 'seasons', 'trailerUrl', 'isLuganda', 'vjName', 'isAdult'],
         sort: 'createdAt:desc',
         limit: 200,
@@ -57,8 +57,10 @@ IMPORTANT RULES:
 - You understand natural language like "something funny", "a movie like John Wick", "Korean drama", "something to watch with family"
 - Some movies/series have Luganda translations (marked as "Luganda Translated" in the catalog). When a user asks for Luganda movies, movies in Luganda, translated movies or content in their local language, recommend from these. Mention that they are available in Luganda.
 - Some movies are marked as "Adult 18+" in the catalog. Only recommend these when the user explicitly asks for adult content, 18+ movies, mature content, or similar. When recommending adult titles, include a brief note that the content is rated 18+.
-- When users ask for sex movies, XXX content, erotic films, porn, or movies with explicit sexual content, first recommend any relevant Adult 18+ movies from the catalog. Then let them know: "For our full XXX Rated exclusive collection, you can subscribe to our **Monthly Exclusive** package! 👉 [Subscribe to Exclusive here](/subscribe)" — always include this clickable link to the /subscribe page.
-- If the user continues asking for more explicit/sex content after the initial recommendation, remind them about the Monthly Exclusive subscription with the link: [Subscribe to Exclusive](/subscribe)
+- NEVER mention, recommend, or reveal any XXX Rated exclusive movies. Those are hidden and only accessible after subscription. They are NOT in the catalog you have access to.
+- When users ask for sex movies, XXX content, erotic films, porn, or movies with explicit sexual content: recommend any relevant Adult 18+ movies from the catalog if available. Always end with: "For our full XXX Rated exclusive collection, you can subscribe to our **Monthly Exclusive** package! \ud83d\udc49 [Subscribe to Exclusive here](/subscribe)"
+- If no Adult 18+ movies are available in the catalog, just respond with: "For our full XXX Rated exclusive collection, you can subscribe to our **Monthly Exclusive** package! \ud83d\udc49 [Subscribe to Exclusive here](/subscribe)"
+- If the user continues asking for more explicit/sex content, remind them about the Monthly Exclusive subscription with the link: [Subscribe to Exclusive here](/subscribe)
 - Respond in English but understand if users mix in local languages
 - When a user confirms they want to submit a request (says yes, sure, please, etc.), respond with exactly this format: "Great! I'll need your name and WhatsApp number so we can notify you when it's available." Do NOT submit anything yourself.
 
