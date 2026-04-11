@@ -2,6 +2,7 @@
 
 const { createCoreController } = require('@strapi/strapi').factories;
 const pesapal = require('../../../utils/pesapal');
+const { submitPayment, checkPaymentStatus, getActiveGateway } = require('../../../utils/payment-gateway');
 
 module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => ({
   // Users see their own purchases, admins see all with buyer info
@@ -43,7 +44,7 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
       return ctx.unauthorized('You must be logged in');
     }
 
-    const { movieId, paymentMethod, paymentPhone, seasonNumber } = ctx.request.body.data || ctx.request.body;
+    const { movieId, paymentMethod, paymentPhone, seasonNumber, gateway } = ctx.request.body.data || ctx.request.body;
 
     if (!movieId) {
       return ctx.badRequest('Missing required field: movieId');
@@ -87,11 +88,19 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
     // Generate unique merchant reference
     const merchantReference = `PUR_${ctx.state.user.id}_${Date.now()}_${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
 
-    // Get the registered IPN ID from site settings
+    // Determine active payment gateway
+    const activeGateway = await getActiveGateway(strapi);
+
+    // For Pesapal, ensure IPN is configured
     const ipnId = settings?.pesapalIpnId;
-    if (!ipnId) {
+    if (activeGateway === 'pesapal' && !ipnId) {
       strapi.log.error('Pesapal IPN ID not configured.');
       return ctx.badRequest('Payment system not configured. Please contact support.');
+    }
+
+    // For DGateway, phone number is required
+    if (activeGateway === 'dgateway' && !paymentPhone) {
+      return ctx.badRequest('Phone number is required for mobile money payment.');
     }
 
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
@@ -106,7 +115,7 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
         movie: movie.id,
         buyer: ctx.state.user.id,
         amount,
-        paymentMethod: paymentMethod || 'pesapal',
+        paymentMethod: paymentMethod || activeGateway,
         paymentPhone: paymentPhone || '',
         transactionId: merchantReference,
         status: 'pending',
@@ -114,16 +123,17 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
       },
     });
 
-    // Submit order to Pesapal
+    // Submit order through active gateway
     try {
       const user = ctx.state.user;
       const nameParts = (user.fullName || user.username || '').split(' ');
-      const pesapalOrder = await pesapal.submitOrder({
+      const paymentResult = await submitPayment(strapi, {
         merchantReference,
         amount,
         description: `Mr.Flix - ${description}`,
         callbackUrl,
         ipnId,
+        paymentPhone: paymentPhone || '',
         billingAddress: {
           email: user.email || '',
           phone: paymentPhone || '',
@@ -132,22 +142,34 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
         },
       });
 
-      // Store the Pesapal order tracking ID on the purchase
+      // Store tracking IDs based on gateway
+      const updateData = {};
+      if (paymentResult.gateway === 'pesapal') {
+        updateData.pesapalTrackingId = paymentResult.order_tracking_id;
+      } else if (paymentResult.gateway === 'dgateway') {
+        updateData.dgatewayReference = paymentResult.reference;
+      }
+
       await strapi.documents('api::purchase.purchase').update({
         documentId: purchase.documentId,
-        data: { pesapalTrackingId: pesapalOrder.order_tracking_id },
+        data: updateData,
       });
 
       return {
         data: {
           purchaseId: purchase.documentId,
           transactionId: merchantReference,
-          redirect_url: pesapalOrder.redirect_url,
-          order_tracking_id: pesapalOrder.order_tracking_id,
+          gateway: paymentResult.gateway,
+          // Pesapal fields
+          redirect_url: paymentResult.redirect_url || null,
+          order_tracking_id: paymentResult.order_tracking_id || null,
+          // DGateway fields
+          reference: paymentResult.reference || null,
+          paymentStatus: paymentResult.status || null,
         },
       };
     } catch (err) {
-      strapi.log.error('Pesapal order submission failed:', err);
+      strapi.log.error('Payment order submission failed:', err);
       await strapi.documents('api::purchase.purchase').update({
         documentId: purchase.documentId,
         data: { status: 'failed' },
@@ -172,9 +194,14 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
     }
 
     const settings = await strapi.entityService.findMany('api::site-setting.site-setting');
+    const activeGateway = settings?.paymentGateway || 'pesapal';
     const ipnId = settings?.pesapalIpnId;
-    if (!ipnId) {
+
+    if (activeGateway === 'pesapal' && !ipnId) {
       return ctx.badRequest('Payment system not configured. Please contact support.');
+    }
+    if (activeGateway === 'dgateway' && !paymentPhone) {
+      return ctx.badRequest('Phone number is required for mobile money payment.');
     }
 
     let totalAmount = 0;
@@ -203,7 +230,7 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
           movie: movie.id,
           buyer: ctx.state.user.id,
           amount,
-          paymentMethod: paymentMethod || 'pesapal',
+          paymentMethod: paymentMethod || activeGateway,
           paymentPhone: paymentPhone || '',
           transactionId: merchantReference,
           status: 'pending',
@@ -221,12 +248,13 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
     try {
       const user = ctx.state.user;
       const nameParts = (user.fullName || user.username || '').split(' ');
-      const pesapalOrder = await pesapal.submitOrder({
+      const paymentResult = await submitPayment(strapi, {
         merchantReference,
         amount: totalAmount,
         description: `Mr.Flix - ${titles.length} title(s): ${titles.slice(0, 3).join(', ')}${titles.length > 3 ? '...' : ''}`,
         callbackUrl: `${frontendUrl}/payment/callback`,
         ipnId,
+        paymentPhone: paymentPhone || '',
         billingAddress: {
           email: user.email || '',
           phone: paymentPhone || '',
@@ -235,10 +263,17 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
         },
       });
 
+      const updateData = {};
+      if (paymentResult.gateway === 'pesapal') {
+        updateData.pesapalTrackingId = paymentResult.order_tracking_id;
+      } else if (paymentResult.gateway === 'dgateway') {
+        updateData.dgatewayReference = paymentResult.reference;
+      }
+
       for (const pid of purchaseIds) {
         await strapi.documents('api::purchase.purchase').update({
           documentId: pid,
-          data: { pesapalTrackingId: pesapalOrder.order_tracking_id },
+          data: updateData,
         });
       }
 
@@ -246,13 +281,16 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
         data: {
           purchaseIds,
           transactionId: merchantReference,
-          redirect_url: pesapalOrder.redirect_url,
-          order_tracking_id: pesapalOrder.order_tracking_id,
+          gateway: paymentResult.gateway,
+          redirect_url: paymentResult.redirect_url || null,
+          order_tracking_id: paymentResult.order_tracking_id || null,
+          reference: paymentResult.reference || null,
+          paymentStatus: paymentResult.status || null,
           totalAmount,
         },
       };
     } catch (err) {
-      strapi.log.error('Pesapal bulk order failed:', err);
+      strapi.log.error('Bulk payment order failed:', err);
       for (const pid of purchaseIds) {
         await strapi.documents('api::purchase.purchase').update({
           documentId: pid,
@@ -291,48 +329,52 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
       return ctx.notFound('Purchase not found');
     }
 
-    // If any purchase is still pending, check Pesapal directly
+    // If any purchase is still pending, check payment gateway directly
     const hasPending = purchases.some(p => p.status === 'pending');
-    strapi.log.info(`[checkStatus] txn=${transactionId} found=${purchases.length} hasPending=${hasPending} pesapalId=${purchases[0].pesapalTrackingId || 'none'}`);
-    if (hasPending) {
-      const trackingId = purchases[0].pesapalTrackingId;
-      if (trackingId) {
-        try {
-          const status = await pesapal.getTransactionStatus(trackingId);
-          const paymentStatus = (status.payment_status_description || '').toLowerCase();
-          strapi.log.info(`[checkStatus] Pesapal says: ${paymentStatus} (raw: ${JSON.stringify(status)})`);
+    const trackingId = purchases[0].pesapalTrackingId;
+    const dgRef = purchases[0].dgatewayReference;
+    strapi.log.info(`[checkStatus] txn=${transactionId} found=${purchases.length} hasPending=${hasPending} pesapalId=${trackingId || 'none'} dgRef=${dgRef || 'none'}`);
+    if (hasPending && (trackingId || dgRef)) {
+      try {
+        const result = await checkPaymentStatus(strapi, {
+          pesapalTrackingId: trackingId,
+          dgatewayReference: dgRef,
+          gateway: dgRef ? 'dgateway' : 'pesapal',
+        });
+        strapi.log.info(`[checkStatus] Gateway says: ${result.status}`);
 
-          if (paymentStatus === 'completed') {
-            for (const p of purchases) {
-              if (p.status === 'pending') {
-                await strapi.documents('api::purchase.purchase').update({
-                  documentId: p.documentId,
-                  data: { status: 'completed', pesapalTrackingId: trackingId },
-                });
-              }
+        if (result.status === 'completed') {
+          for (const p of purchases) {
+            if (p.status === 'pending') {
+              const data = { status: 'completed' };
+              if (trackingId) data.pesapalTrackingId = trackingId;
+              if (result.paymentMethod) data.paymentMethod = result.paymentMethod;
+              await strapi.documents('api::purchase.purchase').update({
+                documentId: p.documentId,
+                data,
+              });
             }
-            // Re-fetch with updated status
-            purchases = await strapi.documents('api::purchase.purchase').findMany({
-              filters: { transactionId, buyer: { id: ctx.state.user.id } },
-              populate: { movie: true },
-            });
-          } else if (paymentStatus === 'failed' || paymentStatus === 'invalid') {
-            for (const p of purchases) {
-              if (p.status === 'pending') {
-                await strapi.documents('api::purchase.purchase').update({
-                  documentId: p.documentId,
-                  data: { status: 'failed' },
-                });
-              }
-            }
-            purchases = await strapi.documents('api::purchase.purchase').findMany({
-              filters: { transactionId, buyer: { id: ctx.state.user.id } },
-              populate: { movie: true },
-            });
           }
-        } catch (err) {
-          strapi.log.warn('[checkStatus] Pesapal query failed:', err.message);
+          purchases = await strapi.documents('api::purchase.purchase').findMany({
+            filters: { transactionId, buyer: { id: ctx.state.user.id } },
+            populate: { movie: true },
+          });
+        } else if (result.status === 'failed') {
+          for (const p of purchases) {
+            if (p.status === 'pending') {
+              await strapi.documents('api::purchase.purchase').update({
+                documentId: p.documentId,
+                data: { status: 'failed' },
+              });
+            }
+          }
+          purchases = await strapi.documents('api::purchase.purchase').findMany({
+            filters: { transactionId, buyer: { id: ctx.state.user.id } },
+            populate: { movie: true },
+          });
         }
+      } catch (err) {
+        strapi.log.warn('[checkStatus] Payment gateway query failed:', err.message);
       }
     }
 

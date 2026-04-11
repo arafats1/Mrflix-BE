@@ -2,6 +2,7 @@
 
 const { createCoreController } = require('@strapi/strapi').factories;
 const pesapal = require('../../../utils/pesapal');
+const { submitPayment, getActiveGateway } = require('../../../utils/payment-gateway');
 
 module.exports = createCoreController('api::subscription.subscription', ({ strapi }) => ({
   // Get current user's active subscription
@@ -70,9 +71,14 @@ module.exports = createCoreController('api::subscription.subscription', ({ strap
     }
 
     const ipnId = settings?.pesapalIpnId;
-    if (!ipnId) {
+    const activeGateway = settings?.paymentGateway || 'pesapal';
+
+    if (activeGateway === 'pesapal' && !ipnId) {
       strapi.log.error('Pesapal IPN ID not configured.');
       return ctx.badRequest('Payment system not configured. Please contact support.');
+    }
+    if (activeGateway === 'dgateway' && !paymentPhone) {
+      return ctx.badRequest('Phone number is required for mobile money payment.');
     }
 
     // Check if user already has an active subscription
@@ -102,7 +108,7 @@ module.exports = createCoreController('api::subscription.subscription', ({ strap
       data: {
         subscriber: ctx.state.user.id,
         amount: subscriptionPrice,
-        paymentMethod: paymentMethod || 'pesapal',
+        paymentMethod: paymentMethod || activeGateway,
         paymentPhone: paymentPhone || '',
         transactionId: merchantReference,
         status: 'pending',
@@ -111,18 +117,19 @@ module.exports = createCoreController('api::subscription.subscription', ({ strap
       },
     });
 
-    // Submit to Pesapal
+    // Submit to active gateway
     try {
       const user = ctx.state.user;
       const nameParts = (user.fullName || user.username || '').split(' ');
       const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
 
-      const pesapalOrder = await pesapal.submitOrder({
+      const paymentResult = await submitPayment(strapi, {
         merchantReference,
         amount: subscriptionPrice,
         description: `Mr.Flix Premium Monthly Subscription`,
         callbackUrl: `${frontendUrl}/payment/callback`,
         ipnId,
+        paymentPhone: paymentPhone || '',
         billingAddress: {
           email: user.email || '',
           phone: paymentPhone || '',
@@ -131,21 +138,31 @@ module.exports = createCoreController('api::subscription.subscription', ({ strap
         },
       });
 
-      // Store tracking ID
+      // Store tracking ID based on gateway
+      const updateData = {};
+      if (paymentResult.gateway === 'pesapal') {
+        updateData.pesapalTrackingId = paymentResult.order_tracking_id;
+      } else if (paymentResult.gateway === 'dgateway') {
+        updateData.dgatewayReference = paymentResult.reference;
+      }
+
       await strapi.entityService.update('api::subscription.subscription', entry.id, {
-        data: { pesapalTrackingId: pesapalOrder.order_tracking_id },
+        data: updateData,
       });
 
       return {
         data: {
           subscriptionId: entry.id,
           transactionId: merchantReference,
-          redirect_url: pesapalOrder.redirect_url,
-          order_tracking_id: pesapalOrder.order_tracking_id,
+          gateway: paymentResult.gateway,
+          redirect_url: paymentResult.redirect_url || null,
+          order_tracking_id: paymentResult.order_tracking_id || null,
+          reference: paymentResult.reference || null,
+          paymentStatus: paymentResult.status || null,
         },
       };
     } catch (err) {
-      strapi.log.error('Pesapal subscription order failed:', err);
+      strapi.log.error('Subscription payment order failed:', err);
       await strapi.entityService.update('api::subscription.subscription', entry.id, {
         data: { status: 'cancelled' },
       });
@@ -314,28 +331,32 @@ module.exports = createCoreController('api::subscription.subscription', ({ strap
     }
 
     const sub = subs[0];
-    strapi.log.info(`[sub.checkStatus] txn=${transactionId} status=${sub.status} pesapalId=${sub.pesapalTrackingId || 'none'}`);
+    strapi.log.info(`[sub.checkStatus] txn=${transactionId} status=${sub.status} pesapalId=${sub.pesapalTrackingId || 'none'} dgRef=${sub.dgatewayReference || 'none'}`);
 
-    // If still pending, check Pesapal directly
-    if (sub.status === 'pending' && sub.pesapalTrackingId) {
+    // If still pending, check payment gateway directly
+    if (sub.status === 'pending' && (sub.pesapalTrackingId || sub.dgatewayReference)) {
       try {
-        const status = await pesapal.getTransactionStatus(sub.pesapalTrackingId);
-        const paymentStatus = (status.payment_status_description || '').toLowerCase();
-        strapi.log.info(`[sub.checkStatus] Pesapal says: ${paymentStatus}`);
+        const { checkPaymentStatus } = require('../../../utils/payment-gateway');
+        const result = await checkPaymentStatus(strapi, {
+          pesapalTrackingId: sub.pesapalTrackingId,
+          dgatewayReference: sub.dgatewayReference,
+          gateway: sub.dgatewayReference ? 'dgateway' : 'pesapal',
+        });
+        strapi.log.info(`[sub.checkStatus] Gateway says: ${result.status}`);
 
-        if (paymentStatus === 'completed') {
+        if (result.status === 'completed') {
           await strapi.entityService.update('api::subscription.subscription', sub.id, {
-            data: { status: 'active', pesapalTrackingId: sub.pesapalTrackingId },
+            data: { status: 'active', ...(result.paymentMethod ? { paymentMethod: result.paymentMethod } : {}) },
           });
           return { data: { id: sub.id, status: 'active' } };
-        } else if (paymentStatus === 'failed' || paymentStatus === 'invalid') {
+        } else if (result.status === 'failed') {
           await strapi.entityService.update('api::subscription.subscription', sub.id, {
             data: { status: 'cancelled' },
           });
           return { data: { id: sub.id, status: 'cancelled' } };
         }
       } catch (err) {
-        strapi.log.warn('[checkStatus] Pesapal query failed:', err.message);
+        strapi.log.warn('[checkStatus] Payment gateway query failed:', err.message);
       }
     }
 

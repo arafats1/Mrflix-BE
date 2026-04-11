@@ -104,6 +104,11 @@
     "exclusiveEnabled": {
       "type": "boolean",
       "default": true
+    },
+    "paymentGateway": {
+      "type": "enumeration",
+      "enum": ["pesapal", "dgateway"],
+      "default": "pesapal"
     }
   }
 }

@@ -601,6 +601,7 @@ export interface ApiExclusiveSubscriptionExclusiveSubscription
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    dgatewayReference: Schema.Attribute.String;
     endDate: Schema.Attribute.DateTime & Schema.Attribute.Required;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
@@ -609,7 +610,7 @@ export interface ApiExclusiveSubscriptionExclusiveSubscription
     > &
       Schema.Attribute.Private;
     paymentMethod: Schema.Attribute.Enumeration<
-      ['mtn_momo', 'airtel_money', 'pesapal']
+      ['mtn_momo', 'airtel_money', 'pesapal', 'dgateway']
     > &
       Schema.Attribute.Required;
     paymentPhone: Schema.Attribute.String & Schema.Attribute.Required;
@@ -797,6 +798,7 @@ export interface ApiPurchasePurchase extends Struct.CollectionTypeSchema {
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    dgatewayReference: Schema.Attribute.String;
     downloadCount: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
@@ -810,6 +812,7 @@ export interface ApiPurchasePurchase extends Struct.CollectionTypeSchema {
         'mtn_momo',
         'airtel_money',
         'pesapal',
+        'dgateway',
         'free_trial',
         'referral_referred',
         'referral_referrer',
@@ -923,6 +926,8 @@ export interface ApiSiteSettingSiteSetting extends Struct.SingleTypeSchema {
       Schema.Attribute.Required &
       Schema.Attribute.DefaultTo<2000>;
     movingText: Schema.Attribute.Text;
+    paymentGateway: Schema.Attribute.Enumeration<['pesapal', 'dgateway']> &
+      Schema.Attribute.DefaultTo<'pesapal'>;
     pesapalIpnId: Schema.Attribute.String;
     publishedAt: Schema.Attribute.DateTime;
     referralEnabled: Schema.Attribute.Boolean &
@@ -994,6 +999,7 @@ export interface ApiSubscriptionSubscription
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    dgatewayReference: Schema.Attribute.String;
     downloadCount: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
     endDate: Schema.Attribute.DateTime & Schema.Attribute.Required;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
@@ -1003,7 +1009,7 @@ export interface ApiSubscriptionSubscription
     > &
       Schema.Attribute.Private;
     paymentMethod: Schema.Attribute.Enumeration<
-      ['mtn_momo', 'airtel_money', 'pesapal']
+      ['mtn_momo', 'airtel_money', 'pesapal', 'dgateway']
     > &
       Schema.Attribute.Required;
     paymentPhone: Schema.Attribute.String & Schema.Attribute.Required;
