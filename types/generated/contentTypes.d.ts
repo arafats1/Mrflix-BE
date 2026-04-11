@@ -934,6 +934,7 @@ export interface ApiSiteSettingSiteSetting extends Struct.SingleTypeSchema {
       Schema.Attribute.DefaultTo<true>;
     referralRewardMovies: Schema.Attribute.Integer &
       Schema.Attribute.DefaultTo<3>;
+    revenueResetDate: Schema.Attribute.DateTime;
     seriesPrice: Schema.Attribute.Integer &
       Schema.Attribute.Required &
       Schema.Attribute.DefaultTo<5000>;

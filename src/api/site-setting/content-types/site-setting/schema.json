@@ -109,6 +109,9 @@
       "type": "enumeration",
       "enum": ["pesapal", "dgateway"],
       "default": "pesapal"
+    },
+    "revenueResetDate": {
+      "type": "datetime"
     }
   }
 }
