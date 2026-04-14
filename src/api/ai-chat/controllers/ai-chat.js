@@ -24,7 +24,9 @@ module.exports = {
 
     try {
       // Fetch available movies for context (filter to Luganda-only if requested)
-      const filters = { isAvailable: true, isXXX: { $ne: true }, ...(luganda && { isLuganda: true }) };
+      const isLugandaMode = luganda === true || luganda === 'true';
+      const filters = { isAvailable: true, isXXX: { $ne: true }, ...(isLugandaMode && { isLuganda: true }) };
+      strapi.log.info(`AI Chat: luganda=${luganda}, isLugandaMode=${isLugandaMode}, filters=${JSON.stringify(filters)}`);
       const movies = await strapi.entityService.findMany('api::movie.movie', {
         filters,
         fields: ['title', 'overview', 'genres', 'type', 'rating', 'releaseDate', 'countryOfOrigin', 'priceUGX', 'seasons', 'trailerUrl', 'isLuganda', 'vjName', 'isAdult'],
@@ -46,7 +48,7 @@ module.exports = {
         return parts.join(' | ');
       }).join('\n');
 
-      const systemPrompt = luganda
+      const systemPrompt = isLugandaMode
         ? `You are Mr.Flix AI, a friendly movie assistant for the Mr.Flix Luganda streaming platform in Uganda.
 
 CRITICAL RULE — STRICTLY FOLLOW:
