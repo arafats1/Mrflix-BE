@@ -5,6 +5,7 @@
  * Uses OpenAI to help users discover movies based on natural language queries
  */
 module.exports = {
+  /** @param {any} ctx */
   async chat(ctx) {
     const { message, history, luganda } = ctx.request.body;
 
@@ -23,10 +24,14 @@ module.exports = {
     }
 
     try {
+      const normalizedMessage = message.trim();
+      const messageLower = normalizedMessage.toLowerCase();
+      const asksForLuganda = /(\bluganda\b|\btranslated\b|\blocal language\b|\bin luganda\b|\buganda\b)/i.test(normalizedMessage);
+
       // Fetch available movies for context (filter to Luganda-only if requested)
-      const isLugandaMode = luganda === true || luganda === 'true';
+      const isLugandaMode = luganda === true || luganda === 'true' || asksForLuganda;
       const filters = { isAvailable: true, isXXX: { $ne: true }, ...(isLugandaMode && { isLuganda: true }) };
-      strapi.log.info(`AI Chat: luganda=${luganda}, isLugandaMode=${isLugandaMode}, filters=${JSON.stringify(filters)}`);
+      strapi.log.info(`AI Chat: luganda=${luganda}, asksForLuganda=${asksForLuganda}, isLugandaMode=${isLugandaMode}, filters=${JSON.stringify(filters)}`);
       const movies = await strapi.entityService.findMany('api::movie.movie', {
         filters,
         fields: ['title', 'overview', 'genres', 'type', 'rating', 'releaseDate', 'countryOfOrigin', 'priceUGX', 'seasons', 'trailerUrl', 'isLuganda', 'vjName', 'isAdult'],
@@ -35,7 +40,7 @@ module.exports = {
       });
 
       // Build movie catalog summary
-      const catalog = movies.map(m => {
+      const catalog = movies.map(/** @param {any} m */ (m) => {
         const parts = [`"${m.title}" (${m.type})`];
         if (m.genres?.length) parts.push(`Genres: ${Array.isArray(m.genres) ? m.genres.join(', ') : m.genres}`);
         if (m.rating) parts.push(`Rating: ${m.rating}/10`);
@@ -132,12 +137,73 @@ ${catalog}`;
       }
 
       const data = await response.json();
-      const reply = data.choices?.[0]?.message?.content || 'Sorry, I could not generate a response. Please try again.';
+      let reply = data.choices?.[0]?.message?.content || 'Sorry, I could not generate a response. Please try again.';
+
+      // Safety net: if Luganda mode has catalog items but model says none available,
+      // return concrete alternatives from the catalog instead of false negatives.
+      const replyLower = reply.toLowerCase();
+      const indicatesUnavailable = (
+        replyLower.includes("don't have") ||
+        replyLower.includes('not available') ||
+        replyLower.includes('does not exist') ||
+        replyLower.includes("isn't available") ||
+        replyLower.includes('not in our catalog')
+      );
+
+      if (isLugandaMode && movies.length > 0 && indicatesUnavailable) {
+        const keywordMap = {
+          action: ['action', 'thriller', 'adventure', 'crime', 'war'],
+          comedy: ['comedy', 'funny', 'humor'],
+          horror: ['horror', 'scary', 'terror'],
+          romance: ['romance', 'romantic', 'love'],
+          drama: ['drama'],
+          family: ['family', 'kids', 'children'],
+          sciFi: ['sci-fi', 'science fiction', 'science-fiction', 'space'],
+          animation: ['animation', 'animated', 'cartoon', 'anime'],
+          series: ['series', 'show', 'season', 'episodes'],
+          movie: ['movie', 'film', 'cinema']
+        };
+
+        const wantedKeywords = Object.values(keywordMap)
+          .flat()
+          .filter((kw) => messageLower.includes(kw));
+
+        /** @param {any} m */
+        const scoreMovie = (m) => {
+          const genres = Array.isArray(m.genres)
+            ? m.genres.join(' ').toLowerCase()
+            : String(m.genres || '').toLowerCase();
+          const hay = `${m.title || ''} ${genres} ${m.overview || ''}`.toLowerCase();
+
+          if (wantedKeywords.length === 0) return 1;
+
+          let score = 0;
+          for (const kw of wantedKeywords) {
+            if (hay.includes(kw)) score += 2;
+          }
+          return score;
+        };
+
+        const ranked = movies
+          .map(/** @param {any} m */ (m) => ({ movie: m, score: scoreMovie(m) }))
+          .sort(/** @param {{ score: number }} a @param {{ score: number }} b */ (a, b) => b.score - a.score)
+          .map(/** @param {{ movie: any }} x */ (x) => x.movie);
+
+        const topMatches = ranked.slice(0, 5);
+        if (topMatches.length > 0) {
+          const lines = topMatches.map(/** @param {any} m */ (m) => {
+            const genreText = Array.isArray(m.genres) ? m.genres.join(', ') : (m.genres || 'General');
+            return `- ${m.title}${m.vjName ? ` (VJ ${m.vjName})` : ''} — ${genreText}`;
+          });
+
+          reply = `Here are some Luganda titles you can watch right now:\n${lines.join('\n')}\n\nIf you want, I can narrow this down to a specific vibe (pure action, comedy, family, or series).`;
+        }
+      }
 
       // Extract mentioned movie titles for linking
-      const mentionedMovies = movies.filter(m =>
+      const mentionedMovies = movies.filter(/** @param {any} m */ (m) =>
         reply.toLowerCase().includes(m.title.toLowerCase())
-      ).map(m => ({
+      ).map(/** @param {any} m */ (m) => ({
         id: m.documentId || m.id,
         title: m.title,
         type: m.type,
@@ -145,20 +211,20 @@ ${catalog}`;
       }));
 
       // Detect if the AI is suggesting a movie request (movie not in catalog)
-      const replyLower = reply.toLowerCase();
+      const finalReplyLower = reply.toLowerCase();
       const suggestsRequest = (
-        replyLower.includes('not available') ||
-        replyLower.includes('not in our catalog') ||
-        replyLower.includes("isn't available") ||
-        replyLower.includes("don't have") ||
-        replyLower.includes('submit a request') ||
-        replyLower.includes('request to have it')
+        finalReplyLower.includes('not available') ||
+        finalReplyLower.includes('not in our catalog') ||
+        finalReplyLower.includes("isn't available") ||
+        finalReplyLower.includes("don't have") ||
+        finalReplyLower.includes('submit a request') ||
+        finalReplyLower.includes('request to have it')
       );
 
       // Detect if the AI is asking for name/WhatsApp (user said yes to request)
       const collectingInfo = (
-        replyLower.includes('whatsapp number') ||
-        replyLower.includes('whatsapp') && replyLower.includes('notify you')
+        finalReplyLower.includes('whatsapp number') ||
+        finalReplyLower.includes('whatsapp') && finalReplyLower.includes('notify you')
       );
 
       // Try to extract the unavailable movie title from the user's message
