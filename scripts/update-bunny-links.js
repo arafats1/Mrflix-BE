@@ -25,7 +25,7 @@ async function updateMovies() {
       let hasChanges = false;
 
       // Fields to check
-      const fieldsToFix = ['embedUrl', 'videoUrl', 'videoUrl480', 'videoUrl720', 'videoUrlFull', 'subtitleUrl'];
+      const fieldsToFix = ['embedUrl', 'videoUrl', 'videoUrl480', 'videoUrl720', 'videoUrlFull', 'subtitleUrl', 'lugandaVideoUrl', 'lugandaVideoUrl720', 'lugandaVideoUrl480'];
 
       // 1. Check top-level fields
       fieldsToFix.forEach(field => {
@@ -52,6 +52,26 @@ async function updateMovies() {
 
         if (epChanged) {
           updatedFields.episodes = newEpisodes;
+          hasChanges = true;
+        }
+      }
+
+      // 3. Check nested lugandaEpisodes array (Luganda series)
+      if (Array.isArray(attributes.lugandaEpisodes)) {
+        let lepChanged = false;
+        const newLugandaEpisodes = attributes.lugandaEpisodes.map(ep => {
+          let updatedEp = { ...ep };
+          fieldsToFix.forEach(field => {
+            if (typeof ep[field] === 'string' && ep[field].includes(OLD_HOST)) {
+              updatedEp[field] = ep[field].replace(OLD_HOST, NEW_HOST);
+              lepChanged = true;
+            }
+          });
+          return updatedEp;
+        });
+
+        if (lepChanged) {
+          updatedFields.lugandaEpisodes = newLugandaEpisodes;
           hasChanges = true;
         }
       }
