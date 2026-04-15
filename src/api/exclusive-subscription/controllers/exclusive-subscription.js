@@ -61,7 +61,10 @@ module.exports = createCoreController('api::exclusive-subscription.exclusive-sub
       return ctx.unauthorized('You must be logged in');
     }
 
-    const { paymentMethod, paymentPhone } = ctx.request.body.data || ctx.request.body;
+    const { paymentMethod, paymentPhone, durationMonths: rawDuration } = ctx.request.body.data || ctx.request.body;
+
+    // Validate duration (1-12 months)
+    const durationMonths = Math.min(Math.max(parseInt(rawDuration) || 1, 1), 12);
 
     // Get exclusive subscription price from site settings
     let exclusivePrice = 50000;
@@ -84,6 +87,9 @@ module.exports = createCoreController('api::exclusive-subscription.exclusive-sub
     if (activePremium && activePremium.length > 0) {
       exclusivePrice = Math.max(exclusivePrice - premiumPrice, 0);
     }
+
+    // Total price for selected duration
+    const totalPrice = exclusivePrice * durationMonths;
 
     const ipnId = settings?.pesapalIpnId;
     const activeGateway = settings?.paymentGateway || 'pesapal';
@@ -111,10 +117,10 @@ module.exports = createCoreController('api::exclusive-subscription.exclusive-sub
       return ctx.badRequest('You already have an active exclusive subscription');
     }
 
-    // Calculate dates
+    // Calculate dates — 30 days per month selected
     const startDate = now;
     const endDate = new Date(now);
-    endDate.setMonth(endDate.getMonth() + 1);
+    endDate.setDate(endDate.getDate() + (30 * durationMonths));
 
     const merchantReference = `EXCL_${ctx.state.user.id}_${Date.now()}_${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
 
@@ -122,7 +128,7 @@ module.exports = createCoreController('api::exclusive-subscription.exclusive-sub
     const entry = await strapi.entityService.create('api::exclusive-subscription.exclusive-subscription', {
       data: {
         subscriber: ctx.state.user.id,
-        amount: exclusivePrice,
+        amount: totalPrice,
         paymentMethod: paymentMethod || activeGateway,
         paymentPhone: paymentPhone || '',
         transactionId: merchantReference,
@@ -140,8 +146,8 @@ module.exports = createCoreController('api::exclusive-subscription.exclusive-sub
 
       const paymentResult = await submitPayment(strapi, {
         merchantReference,
-        amount: exclusivePrice,
-        description: 'Mr.Flix Exclusive Monthly Subscription',
+        amount: totalPrice,
+        description: `Mr.Flix Exclusive ${durationMonths} Month${durationMonths > 1 ? 's' : ''} Subscription`,
         callbackUrl: `${frontendUrl}/payment/callback`,
         ipnId,
         paymentPhone: paymentPhone || '',
