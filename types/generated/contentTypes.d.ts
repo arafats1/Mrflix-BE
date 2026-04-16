@@ -877,6 +877,43 @@ export interface ApiReferralReferral extends Struct.CollectionTypeSchema {
   };
 }
 
+export interface ApiSearchHistorySearchHistory
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'search_histories';
+  info: {
+    description: 'Tracks user search queries across all platforms';
+    displayName: 'Search History';
+    pluralName: 'search-histories';
+    singularName: 'search-history';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::search-history.search-history'
+    > &
+      Schema.Attribute.Private;
+    platform: Schema.Attribute.Enumeration<
+      ['web', 'mobile', 'tv', 'mobile-luganda', 'tv-luganda']
+    > &
+      Schema.Attribute.DefaultTo<'web'>;
+    publishedAt: Schema.Attribute.DateTime;
+    query: Schema.Attribute.String & Schema.Attribute.Required;
+    resultsCount: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    userId: Schema.Attribute.Integer;
+    userName: Schema.Attribute.String;
+  };
+}
+
 export interface ApiSiteSettingSiteSetting extends Struct.SingleTypeSchema {
   collectionName: 'site_settings';
   info: {
@@ -1655,6 +1692,7 @@ declare module '@strapi/strapi' {
       'api::movie.movie': ApiMovieMovie;
       'api::purchase.purchase': ApiPurchasePurchase;
       'api::referral.referral': ApiReferralReferral;
+      'api::search-history.search-history': ApiSearchHistorySearchHistory;
       'api::site-setting.site-setting': ApiSiteSettingSiteSetting;
       'api::story.story': ApiStoryStory;
       'api::subscription.subscription': ApiSubscriptionSubscription;

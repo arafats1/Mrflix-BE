@@ -1,0 +1,35 @@
+{
+  "kind": "collectionType",
+  "collectionName": "search_histories",
+  "info": {
+    "singularName": "search-history",
+    "pluralName": "search-histories",
+    "displayName": "Search History",
+    "description": "Tracks user search queries across all platforms"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "query": {
+      "type": "string",
+      "required": true
+    },
+    "platform": {
+      "type": "enumeration",
+      "enum": ["web", "mobile", "tv", "mobile-luganda", "tv-luganda"],
+      "default": "web"
+    },
+    "resultsCount": {
+      "type": "integer",
+      "default": 0
+    },
+    "userId": {
+      "type": "integer"
+    },
+    "userName": {
+      "type": "string"
+    }
+  }
+}
