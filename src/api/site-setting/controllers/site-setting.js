@@ -14,6 +14,10 @@ module.exports = createCoreController('api::site-setting.site-setting', ({ strap
           seriesPrice: 5000,
           subscriptionPrice: 20000,
           subscriptionEnabled: true,
+          storageFreeTierGB: 1,
+          storagePricePerMonth: 7000,
+          storageEnabled: true,
+          paymentGateway: 'pesapal',
         },
       };
     }

@@ -428,9 +428,17 @@ module.exports = {
       if (!adminRole) {
         adminRole = await strapi.db.query('plugin::users-permissions.role').create({
           data: {
-            name: 'Admin',
-            description: 'Admin users who can manage movies, purchases, and requests',
+            name: 'Keyp Admin',
+            description: 'Admin users who can manage the Keyp platform and storage operations',
             type: 'admin',
+          },
+        });
+      } else if (adminRole.name !== 'Keyp Admin' || adminRole.description !== 'Admin users who can manage the Keyp platform and storage operations') {
+        adminRole = await strapi.db.query('plugin::users-permissions.role').update({
+          where: { id: adminRole.id },
+          data: {
+            name: 'Keyp Admin',
+            description: 'Admin users who can manage the Keyp platform and storage operations',
           },
         });
       }

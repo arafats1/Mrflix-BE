@@ -30,7 +30,7 @@ module.exports = {
     // Get free tier info
     const settings = await strapi.entityService.findMany('api::site-setting.site-setting');
     const freeGB = settings?.storageFreeTierGB || 1;
-    const pricePerMonth = settings?.storagePricePerMonth || 5000;
+    const pricePerMonth = settings?.storagePricePerMonth || 7000;
 
     return {
       data: {
@@ -63,7 +63,7 @@ module.exports = {
   // Get pricing tiers
   async pricing(ctx) {
     const settings = await strapi.entityService.findMany('api::site-setting.site-setting');
-    const pricePerMonth = settings?.storagePricePerMonth || 5000;
+    const pricePerMonth = settings?.storagePricePerMonth || 7000;
     const freeGB = settings?.storageFreeTierGB || 1;
 
     const plans = STORAGE_TIERS.map((gb) => ({
@@ -96,7 +96,7 @@ module.exports = {
 
     // Get pricing from settings
     const settings = await strapi.entityService.findMany('api::site-setting.site-setting');
-    const basePricePerMonth = settings?.storagePricePerMonth || 5000;
+    const basePricePerMonth = settings?.storagePricePerMonth || 7000;
     const monthlyPrice = basePricePerMonth * (gb / 100);
     const totalPrice = monthlyPrice * durationMonths;
 
@@ -296,19 +296,31 @@ module.exports = {
     const isAdmin = ctx.state.user.role?.type === 'admin' || ctx.state.user.role?.name === 'Admin';
     if (!isAdmin) return ctx.forbidden('Admin only');
 
-    const totalUsers = await strapi.db.query('api::storage-file.storage-file').count({});
-    const totalFiles = await strapi.db.query('api::storage-file.storage-file').count({});
-    const activeSubs = await strapi.db.query('api::storage-subscription.storage-subscription').count({
-      where: { status: 'active', endDate: { $gte: new Date().toISOString() } },
-    });
+    const now = new Date().toISOString();
 
-    const files = await strapi.entityService.findMany('api::storage-file.storage-file', { limit: -1 });
+    const [totalUsers, totalFiles, totalFolders, activeSubs, pendingSubs, sharedLinks, files] = await Promise.all([
+      strapi.db.query('plugin::users-permissions.user').count({}),
+      strapi.db.query('api::storage-file.storage-file').count({}),
+      strapi.db.query('api::storage-folder.storage-folder').count({}),
+      strapi.db.query('api::storage-subscription.storage-subscription').count({
+        where: { status: 'active', endDate: { $gte: now } },
+      }),
+      strapi.db.query('api::storage-subscription.storage-subscription').count({
+        where: { status: 'pending' },
+      }),
+      strapi.db.query('api::shared-link.shared-link').count({}),
+      strapi.entityService.findMany('api::storage-file.storage-file', { limit: -1 }),
+    ]);
     const totalStorageUsed = files.reduce((sum, f) => sum + (parseInt(f.size) || 0), 0);
 
     return {
       data: {
+        totalUsers,
         totalFiles,
+        totalFolders,
         activeSubs,
+        pendingSubs,
+        sharedLinks,
         totalStorageUsed,
         totalStorageUsedGB: (totalStorageUsed / (1024 * 1024 * 1024)).toFixed(2),
       },
