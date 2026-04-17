@@ -112,6 +112,18 @@
     },
     "revenueResetDate": {
       "type": "datetime"
+    },
+    "storageFreeTierGB": {
+      "type": "integer",
+      "default": 1
+    },
+    "storagePricePerMonth": {
+      "type": "integer",
+      "default": 5000
+    },
+    "storageEnabled": {
+      "type": "boolean",
+      "default": true
     }
   }
 }

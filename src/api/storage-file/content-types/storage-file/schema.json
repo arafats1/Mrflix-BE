@@ -1,0 +1,85 @@
+{
+  "kind": "collectionType",
+  "collectionName": "storage_files",
+  "info": {
+    "singularName": "storage-file",
+    "pluralName": "storage-files",
+    "displayName": "Storage File",
+    "description": "User uploaded files (photos, videos, documents)"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "name": {
+      "type": "string",
+      "required": true
+    },
+    "originalName": {
+      "type": "string",
+      "required": true
+    },
+    "key": {
+      "type": "string",
+      "required": true
+    },
+    "publicUrl": {
+      "type": "string",
+      "required": true
+    },
+    "mimeType": {
+      "type": "string",
+      "required": true
+    },
+    "fileType": {
+      "type": "enumeration",
+      "enum": ["image", "video", "document", "audio", "other"],
+      "required": true
+    },
+    "size": {
+      "type": "biginteger",
+      "required": true
+    },
+    "width": {
+      "type": "integer"
+    },
+    "height": {
+      "type": "integer"
+    },
+    "duration": {
+      "type": "float"
+    },
+    "thumbnailUrl": {
+      "type": "string"
+    },
+    "owner": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user"
+    },
+    "folder": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::storage-folder.storage-folder",
+      "inversedBy": "files"
+    },
+    "isFavorite": {
+      "type": "boolean",
+      "default": false
+    },
+    "isTrash": {
+      "type": "boolean",
+      "default": false
+    },
+    "trashedAt": {
+      "type": "datetime"
+    },
+    "takenAt": {
+      "type": "datetime"
+    },
+    "metadata": {
+      "type": "json"
+    }
+  }
+}

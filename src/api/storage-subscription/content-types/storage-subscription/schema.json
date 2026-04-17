@@ -1,0 +1,70 @@
+{
+  "kind": "collectionType",
+  "collectionName": "storage_subscriptions",
+  "info": {
+    "singularName": "storage-subscription",
+    "pluralName": "storage-subscriptions",
+    "displayName": "Storage Subscription",
+    "description": "User storage plan subscriptions"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "subscriber": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user"
+    },
+    "storageGB": {
+      "type": "integer",
+      "required": true,
+      "default": 1
+    },
+    "amount": {
+      "type": "integer",
+      "required": true
+    },
+    "durationMonths": {
+      "type": "integer",
+      "required": true,
+      "default": 1
+    },
+    "paymentMethod": {
+      "type": "enumeration",
+      "enum": ["mtn_momo", "airtel_money", "pesapal", "dgateway", "admin_granted"],
+      "required": true
+    },
+    "paymentPhone": {
+      "type": "string"
+    },
+    "transactionId": {
+      "type": "string"
+    },
+    "pesapalTrackingId": {
+      "type": "string"
+    },
+    "dgatewayReference": {
+      "type": "string"
+    },
+    "status": {
+      "type": "enumeration",
+      "enum": ["active", "expired", "cancelled", "pending"],
+      "default": "pending",
+      "required": true
+    },
+    "startDate": {
+      "type": "datetime",
+      "required": true
+    },
+    "endDate": {
+      "type": "datetime",
+      "required": true
+    },
+    "isUnlimited": {
+      "type": "boolean",
+      "default": false
+    }
+  }
+}

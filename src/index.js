@@ -305,6 +305,10 @@ module.exports = {
           { action: 'api::pesapal-webhook.pesapal-webhook.verify' },
           // Contact messages - anyone can submit
           { action: 'api::contact-message.contact-message.create' },
+          // MrKeyp shared links - public access
+          { action: 'api::shared-link.shared-link.access' },
+          // MrKeyp storage pricing - public
+          { action: 'api::storage-subscription.storage-subscription.pricing' },
         ];
 
         for (const perm of publicPermissions) {
@@ -363,6 +367,38 @@ module.exports = {
           { action: 'plugin::users-permissions.user.me' },
           { action: 'plugin::users-permissions.auth.callback' },
           { action: 'plugin::users-permissions.auth.connect' },
+          // MrKeyp Storage Files
+          { action: 'api::storage-file.storage-file.find' },
+          { action: 'api::storage-file.storage-file.findOne' },
+          { action: 'api::storage-file.storage-file.create' },
+          { action: 'api::storage-file.storage-file.update' },
+          { action: 'api::storage-file.storage-file.delete' },
+          { action: 'api::storage-file.storage-file.bulkDelete' },
+          { action: 'api::storage-file.storage-file.trash' },
+          { action: 'api::storage-file.storage-file.restore' },
+          { action: 'api::storage-file.storage-file.emptyTrash' },
+          { action: 'api::storage-file.storage-file.storageUsage' },
+          { action: 'api::storage-file.storage-file.getUploadUrl' },
+          { action: 'api::storage-file.storage-file.initiateUpload' },
+          { action: 'api::storage-file.storage-file.getPartUrl' },
+          { action: 'api::storage-file.storage-file.completeUpload' },
+          // MrKeyp Storage Folders
+          { action: 'api::storage-folder.storage-folder.find' },
+          { action: 'api::storage-folder.storage-folder.findOne' },
+          { action: 'api::storage-folder.storage-folder.create' },
+          { action: 'api::storage-folder.storage-folder.update' },
+          { action: 'api::storage-folder.storage-folder.delete' },
+          // MrKeyp Shared Links
+          { action: 'api::shared-link.shared-link.find' },
+          { action: 'api::shared-link.shared-link.create' },
+          { action: 'api::shared-link.shared-link.delete' },
+          { action: 'api::shared-link.shared-link.access' },
+          // MrKeyp Storage Subscriptions
+          { action: 'api::storage-subscription.storage-subscription.me' },
+          { action: 'api::storage-subscription.storage-subscription.find' },
+          { action: 'api::storage-subscription.storage-subscription.create' },
+          { action: 'api::storage-subscription.storage-subscription.checkStatus' },
+          { action: 'api::storage-subscription.storage-subscription.pricing' },
         ];
 
         for (const perm of authPermissions) {
@@ -451,6 +487,38 @@ module.exports = {
           // Email notifications (admin only)
           { action: 'api::email-notification.email-notification.sendContentUpdate' },
           { action: 'api::email-notification.email-notification.testExpiry' },
+          // MrKeyp Storage Admin
+          { action: 'api::storage-file.storage-file.find' },
+          { action: 'api::storage-file.storage-file.findOne' },
+          { action: 'api::storage-file.storage-file.create' },
+          { action: 'api::storage-file.storage-file.update' },
+          { action: 'api::storage-file.storage-file.delete' },
+          { action: 'api::storage-file.storage-file.bulkDelete' },
+          { action: 'api::storage-file.storage-file.trash' },
+          { action: 'api::storage-file.storage-file.restore' },
+          { action: 'api::storage-file.storage-file.emptyTrash' },
+          { action: 'api::storage-file.storage-file.storageUsage' },
+          { action: 'api::storage-file.storage-file.getUploadUrl' },
+          { action: 'api::storage-file.storage-file.initiateUpload' },
+          { action: 'api::storage-file.storage-file.getPartUrl' },
+          { action: 'api::storage-file.storage-file.completeUpload' },
+          { action: 'api::storage-folder.storage-folder.find' },
+          { action: 'api::storage-folder.storage-folder.findOne' },
+          { action: 'api::storage-folder.storage-folder.create' },
+          { action: 'api::storage-folder.storage-folder.update' },
+          { action: 'api::storage-folder.storage-folder.delete' },
+          { action: 'api::shared-link.shared-link.find' },
+          { action: 'api::shared-link.shared-link.create' },
+          { action: 'api::shared-link.shared-link.delete' },
+          { action: 'api::shared-link.shared-link.access' },
+          { action: 'api::storage-subscription.storage-subscription.me' },
+          { action: 'api::storage-subscription.storage-subscription.find' },
+          { action: 'api::storage-subscription.storage-subscription.create' },
+          { action: 'api::storage-subscription.storage-subscription.checkStatus' },
+          { action: 'api::storage-subscription.storage-subscription.grant' },
+          { action: 'api::storage-subscription.storage-subscription.revoke' },
+          { action: 'api::storage-subscription.storage-subscription.adminStats' },
+          { action: 'api::storage-subscription.storage-subscription.pricing' },
         ];
 
         for (const perm of adminPermissions) {

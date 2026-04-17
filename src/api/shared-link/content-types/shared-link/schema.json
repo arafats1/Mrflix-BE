@@ -1,0 +1,55 @@
+{
+  "kind": "collectionType",
+  "collectionName": "shared_links",
+  "info": {
+    "singularName": "shared-link",
+    "pluralName": "shared-links",
+    "displayName": "Shared Link",
+    "description": "Shareable links for folders and files"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "token": {
+      "type": "string",
+      "required": true,
+      "unique": true
+    },
+    "owner": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user"
+    },
+    "folder": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::storage-folder.storage-folder"
+    },
+    "file": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::storage-file.storage-file"
+    },
+    "permission": {
+      "type": "enumeration",
+      "enum": ["view", "download"],
+      "default": "view"
+    },
+    "expiresAt": {
+      "type": "datetime"
+    },
+    "isActive": {
+      "type": "boolean",
+      "default": true
+    },
+    "accessCount": {
+      "type": "integer",
+      "default": 0
+    },
+    "password": {
+      "type": "string"
+    }
+  }
+}

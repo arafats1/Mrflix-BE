@@ -1,0 +1,61 @@
+{
+  "kind": "collectionType",
+  "collectionName": "storage_folders",
+  "info": {
+    "singularName": "storage-folder",
+    "pluralName": "storage-folders",
+    "displayName": "Storage Folder",
+    "description": "User folders for organizing files"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "name": {
+      "type": "string",
+      "required": true
+    },
+    "description": {
+      "type": "text"
+    },
+    "owner": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user"
+    },
+    "parent": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::storage-folder.storage-folder",
+      "inversedBy": "children"
+    },
+    "children": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::storage-folder.storage-folder",
+      "mappedBy": "parent"
+    },
+    "files": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::storage-file.storage-file",
+      "mappedBy": "folder"
+    },
+    "color": {
+      "type": "string",
+      "default": "#6366f1"
+    },
+    "icon": {
+      "type": "string",
+      "default": "folder"
+    },
+    "isTrash": {
+      "type": "boolean",
+      "default": false
+    },
+    "trashedAt": {
+      "type": "datetime"
+    }
+  }
+}

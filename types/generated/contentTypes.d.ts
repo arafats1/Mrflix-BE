@@ -914,6 +914,55 @@ export interface ApiSearchHistorySearchHistory
   };
 }
 
+export interface ApiSharedLinkSharedLink extends Struct.CollectionTypeSchema {
+  collectionName: 'shared_links';
+  info: {
+    description: 'Shareable links for folders and files';
+    displayName: 'Shared Link';
+    pluralName: 'shared-links';
+    singularName: 'shared-link';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    accessCount: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    expiresAt: Schema.Attribute.DateTime;
+    file: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::storage-file.storage-file'
+    >;
+    folder: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::storage-folder.storage-folder'
+    >;
+    isActive: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<true>;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::shared-link.shared-link'
+    > &
+      Schema.Attribute.Private;
+    owner: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+    password: Schema.Attribute.String;
+    permission: Schema.Attribute.Enumeration<['view', 'download']> &
+      Schema.Attribute.DefaultTo<'view'>;
+    publishedAt: Schema.Attribute.DateTime;
+    token: Schema.Attribute.String &
+      Schema.Attribute.Required &
+      Schema.Attribute.Unique;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface ApiSiteSettingSiteSetting extends Struct.SingleTypeSchema {
   collectionName: 'site_settings';
   info: {
@@ -975,11 +1024,177 @@ export interface ApiSiteSettingSiteSetting extends Struct.SingleTypeSchema {
     seriesPrice: Schema.Attribute.Integer &
       Schema.Attribute.Required &
       Schema.Attribute.DefaultTo<5000>;
+    storageEnabled: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<true>;
+    storageFreeTierGB: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<1>;
+    storagePricePerMonth: Schema.Attribute.Integer &
+      Schema.Attribute.DefaultTo<5000>;
     subscriptionEnabled: Schema.Attribute.Boolean &
       Schema.Attribute.DefaultTo<true>;
     subscriptionPrice: Schema.Attribute.Integer &
       Schema.Attribute.Required &
       Schema.Attribute.DefaultTo<20000>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
+export interface ApiStorageFileStorageFile extends Struct.CollectionTypeSchema {
+  collectionName: 'storage_files';
+  info: {
+    description: 'User uploaded files (photos, videos, documents)';
+    displayName: 'Storage File';
+    pluralName: 'storage-files';
+    singularName: 'storage-file';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    duration: Schema.Attribute.Float;
+    fileType: Schema.Attribute.Enumeration<
+      ['image', 'video', 'document', 'audio', 'other']
+    > &
+      Schema.Attribute.Required;
+    folder: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::storage-folder.storage-folder'
+    >;
+    height: Schema.Attribute.Integer;
+    isFavorite: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
+    isTrash: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
+    key: Schema.Attribute.String & Schema.Attribute.Required;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::storage-file.storage-file'
+    > &
+      Schema.Attribute.Private;
+    metadata: Schema.Attribute.JSON;
+    mimeType: Schema.Attribute.String & Schema.Attribute.Required;
+    name: Schema.Attribute.String & Schema.Attribute.Required;
+    originalName: Schema.Attribute.String & Schema.Attribute.Required;
+    owner: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+    publicUrl: Schema.Attribute.String & Schema.Attribute.Required;
+    publishedAt: Schema.Attribute.DateTime;
+    size: Schema.Attribute.BigInteger & Schema.Attribute.Required;
+    takenAt: Schema.Attribute.DateTime;
+    thumbnailUrl: Schema.Attribute.String;
+    trashedAt: Schema.Attribute.DateTime;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    width: Schema.Attribute.Integer;
+  };
+}
+
+export interface ApiStorageFolderStorageFolder
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'storage_folders';
+  info: {
+    description: 'User folders for organizing files';
+    displayName: 'Storage Folder';
+    pluralName: 'storage-folders';
+    singularName: 'storage-folder';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    children: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::storage-folder.storage-folder'
+    >;
+    color: Schema.Attribute.String & Schema.Attribute.DefaultTo<'#6366f1'>;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    description: Schema.Attribute.Text;
+    files: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::storage-file.storage-file'
+    >;
+    icon: Schema.Attribute.String & Schema.Attribute.DefaultTo<'folder'>;
+    isTrash: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::storage-folder.storage-folder'
+    > &
+      Schema.Attribute.Private;
+    name: Schema.Attribute.String & Schema.Attribute.Required;
+    owner: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+    parent: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::storage-folder.storage-folder'
+    >;
+    publishedAt: Schema.Attribute.DateTime;
+    trashedAt: Schema.Attribute.DateTime;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
+export interface ApiStorageSubscriptionStorageSubscription
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'storage_subscriptions';
+  info: {
+    description: 'User storage plan subscriptions';
+    displayName: 'Storage Subscription';
+    pluralName: 'storage-subscriptions';
+    singularName: 'storage-subscription';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    amount: Schema.Attribute.Integer & Schema.Attribute.Required;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    dgatewayReference: Schema.Attribute.String;
+    durationMonths: Schema.Attribute.Integer &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<1>;
+    endDate: Schema.Attribute.DateTime & Schema.Attribute.Required;
+    isUnlimited: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::storage-subscription.storage-subscription'
+    > &
+      Schema.Attribute.Private;
+    paymentMethod: Schema.Attribute.Enumeration<
+      ['mtn_momo', 'airtel_money', 'pesapal', 'dgateway', 'admin_granted']
+    > &
+      Schema.Attribute.Required;
+    paymentPhone: Schema.Attribute.String;
+    pesapalTrackingId: Schema.Attribute.String;
+    publishedAt: Schema.Attribute.DateTime;
+    startDate: Schema.Attribute.DateTime & Schema.Attribute.Required;
+    status: Schema.Attribute.Enumeration<
+      ['active', 'expired', 'cancelled', 'pending']
+    > &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<'pending'>;
+    storageGB: Schema.Attribute.Integer &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<1>;
+    subscriber: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+    transactionId: Schema.Attribute.String;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -1693,7 +1908,11 @@ declare module '@strapi/strapi' {
       'api::purchase.purchase': ApiPurchasePurchase;
       'api::referral.referral': ApiReferralReferral;
       'api::search-history.search-history': ApiSearchHistorySearchHistory;
+      'api::shared-link.shared-link': ApiSharedLinkSharedLink;
       'api::site-setting.site-setting': ApiSiteSettingSiteSetting;
+      'api::storage-file.storage-file': ApiStorageFileStorageFile;
+      'api::storage-folder.storage-folder': ApiStorageFolderStorageFolder;
+      'api::storage-subscription.storage-subscription': ApiStorageSubscriptionStorageSubscription;
       'api::story.story': ApiStoryStory;
       'api::subscription.subscription': ApiSubscriptionSubscription;
       'api::tv-code.tv-code': ApiTvCodeTvCode;
