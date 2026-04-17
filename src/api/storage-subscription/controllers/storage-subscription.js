@@ -1,6 +1,7 @@
 'use strict';
 
 const { submitPayment, getActiveGateway } = require('../../../utils/payment-gateway');
+const { getAccessibleSpace, getRequestedSpaceOwnerId } = require('../../../utils/mrkeyp-space');
 
 // Storage pricing tiers (GB options)
 const STORAGE_TIERS = [100, 200, 300, 400, 500, 1000, 2000, 3000, 4000, 5000];
@@ -10,10 +11,13 @@ module.exports = {
   async me(ctx) {
     if (!ctx.state.user) return ctx.unauthorized('You must be logged in');
 
+    const space = await getAccessibleSpace(strapi, ctx.state.user, getRequestedSpaceOwnerId(ctx));
+    if (!space) return ctx.forbidden('Access denied');
+
     const now = new Date().toISOString();
     const entries = await strapi.entityService.findMany('api::storage-subscription.storage-subscription', {
       filters: {
-        subscriber: { id: ctx.state.user.id },
+        subscriber: { id: space.ownerId },
         status: 'active',
         endDate: { $gte: now },
       },
@@ -147,7 +151,7 @@ module.exports = {
     try {
       const user = ctx.state.user;
       const nameParts = (user.fullName || user.username || '').split(' ');
-      const frontendUrl = process.env.MRKEYP_URL || process.env.FRONTEND_URL || 'http://localhost:3001';
+      const frontendUrl = process.env.MRKEYP_URL || process.env.FRONTEND_URL;
 
       const paymentResult = await submitPayment(strapi, {
         merchantReference,

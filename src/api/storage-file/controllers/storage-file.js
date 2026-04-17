@@ -2,6 +2,7 @@
 
 const { S3Client, DeleteObjectCommand, ListObjectsV2Command } = require('@aws-sdk/client-s3');
 const crypto = require('crypto');
+const { getAccessibleSpace, getRequestedSpaceOwnerId, getSpacePrefixForUser } = require('../../../utils/mrkeyp-space');
 
 function getStorage() {
   const PROVIDER = (process.env.STORAGE_PROVIDER || 'cloudflare').toLowerCase();
@@ -58,6 +59,9 @@ module.exports = {
   async find(ctx) {
     if (!ctx.state.user) return ctx.unauthorized('You must be logged in');
 
+    const space = await getAccessibleSpace(strapi, ctx.state.user, getRequestedSpaceOwnerId(ctx));
+    if (!space) return ctx.forbidden('Access denied');
+
     const {
       fileType,
       folderId,
@@ -69,7 +73,7 @@ module.exports = {
       search,
     } = ctx.query;
 
-    const filters = { owner: { id: ctx.state.user.id } };
+    const filters = { owner: { id: space.ownerId } };
 
     if (fileType) filters.fileType = fileType;
     if (folderId) filters.folder = { id: folderId };
@@ -104,13 +108,16 @@ module.exports = {
   async findOne(ctx) {
     if (!ctx.state.user) return ctx.unauthorized('You must be logged in');
 
+    const space = await getAccessibleSpace(strapi, ctx.state.user, getRequestedSpaceOwnerId(ctx));
+    if (!space) return ctx.forbidden('Access denied');
+
     const { id } = ctx.params;
     const entry = await strapi.entityService.findOne('api::storage-file.storage-file', id, {
       populate: { folder: true, owner: true },
     });
 
     if (!entry) return ctx.notFound('File not found');
-    if (entry.owner?.id !== ctx.state.user.id) return ctx.forbidden('Access denied');
+    if (entry.owner?.id !== space.ownerId) return ctx.forbidden('Access denied');
 
     return { data: entry };
   },
@@ -118,6 +125,9 @@ module.exports = {
   // Save file metadata after upload
   async create(ctx) {
     if (!ctx.state.user) return ctx.unauthorized('You must be logged in');
+
+    const space = await getAccessibleSpace(strapi, ctx.state.user, getRequestedSpaceOwnerId(ctx));
+    if (!space) return ctx.forbidden('Access denied');
 
     const { name, originalName, key, publicUrl, mimeType, size, width, height, duration, folderId, takenAt, metadata } =
       ctx.request.body.data || ctx.request.body;
@@ -127,8 +137,8 @@ module.exports = {
     }
 
     // Check storage quota
-    const storageUsed = await getUserStorageUsed(ctx.state.user.id);
-    const storageLimit = await getUserStorageLimit(ctx.state.user.id);
+    const storageUsed = await getUserStorageUsed(space.ownerId);
+    const storageLimit = await getUserStorageLimit(space.ownerId);
 
     if (storageUsed + parseInt(size) > storageLimit) {
       return ctx.badRequest('Storage limit exceeded. Please upgrade your plan.');
@@ -146,7 +156,7 @@ module.exports = {
         width: width || null,
         height: height || null,
         duration: duration || null,
-        owner: ctx.state.user.id,
+        owner: space.ownerId,
         folder: folderId || null,
         takenAt: takenAt || null,
         metadata: metadata || null,
@@ -160,13 +170,16 @@ module.exports = {
   async update(ctx) {
     if (!ctx.state.user) return ctx.unauthorized('You must be logged in');
 
+    const space = await getAccessibleSpace(strapi, ctx.state.user, getRequestedSpaceOwnerId(ctx));
+    if (!space) return ctx.forbidden('Access denied');
+
     const { id } = ctx.params;
     const existing = await strapi.entityService.findOne('api::storage-file.storage-file', id, {
       populate: { owner: true },
     });
 
     if (!existing) return ctx.notFound('File not found');
-    if (existing.owner?.id !== ctx.state.user.id) return ctx.forbidden('Access denied');
+    if (existing.owner?.id !== space.ownerId) return ctx.forbidden('Access denied');
 
     const { name, folderId, isFavorite, isTrash } = ctx.request.body.data || ctx.request.body;
     const updateData = {};
@@ -190,13 +203,16 @@ module.exports = {
   async delete(ctx) {
     if (!ctx.state.user) return ctx.unauthorized('You must be logged in');
 
+    const space = await getAccessibleSpace(strapi, ctx.state.user, getRequestedSpaceOwnerId(ctx));
+    if (!space) return ctx.forbidden('Access denied');
+
     const { id } = ctx.params;
     const existing = await strapi.entityService.findOne('api::storage-file.storage-file', id, {
       populate: { owner: true },
     });
 
     if (!existing) return ctx.notFound('File not found');
-    if (existing.owner?.id !== ctx.state.user.id) return ctx.forbidden('Access denied');
+    if (existing.owner?.id !== space.ownerId) return ctx.forbidden('Access denied');
 
     // Delete from cloud storage
     try {
@@ -222,6 +238,9 @@ module.exports = {
   async bulkDelete(ctx) {
     if (!ctx.state.user) return ctx.unauthorized('You must be logged in');
 
+    const space = await getAccessibleSpace(strapi, ctx.state.user, getRequestedSpaceOwnerId(ctx));
+    if (!space) return ctx.forbidden('Access denied');
+
     const { fileIds } = ctx.request.body.data || ctx.request.body;
     if (!fileIds || !Array.isArray(fileIds)) {
       return ctx.badRequest('fileIds array is required');
@@ -234,7 +253,7 @@ module.exports = {
       const file = await strapi.entityService.findOne('api::storage-file.storage-file', fileId, {
         populate: { owner: true },
       });
-      if (file && file.owner?.id === ctx.state.user.id) {
+      if (file && file.owner?.id === space.ownerId) {
         try {
           await s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: file.key }));
         } catch (e) { /* continue */ }
@@ -250,6 +269,9 @@ module.exports = {
   async trash(ctx) {
     if (!ctx.state.user) return ctx.unauthorized('You must be logged in');
 
+    const space = await getAccessibleSpace(strapi, ctx.state.user, getRequestedSpaceOwnerId(ctx));
+    if (!space) return ctx.forbidden('Access denied');
+
     const { fileIds } = ctx.request.body.data || ctx.request.body;
     if (!fileIds || !Array.isArray(fileIds)) {
       return ctx.badRequest('fileIds array is required');
@@ -260,7 +282,7 @@ module.exports = {
       const file = await strapi.entityService.findOne('api::storage-file.storage-file', fileId, {
         populate: { owner: true },
       });
-      if (file && file.owner?.id === ctx.state.user.id) {
+      if (file && file.owner?.id === space.ownerId) {
         await strapi.entityService.update('api::storage-file.storage-file', fileId, {
           data: { isTrash: true, trashedAt: new Date().toISOString() },
         });
@@ -275,6 +297,9 @@ module.exports = {
   async restore(ctx) {
     if (!ctx.state.user) return ctx.unauthorized('You must be logged in');
 
+    const space = await getAccessibleSpace(strapi, ctx.state.user, getRequestedSpaceOwnerId(ctx));
+    if (!space) return ctx.forbidden('Access denied');
+
     const { fileIds } = ctx.request.body.data || ctx.request.body;
     if (!fileIds || !Array.isArray(fileIds)) {
       return ctx.badRequest('fileIds array is required');
@@ -285,7 +310,7 @@ module.exports = {
       const file = await strapi.entityService.findOne('api::storage-file.storage-file', fileId, {
         populate: { owner: true },
       });
-      if (file && file.owner?.id === ctx.state.user.id) {
+      if (file && file.owner?.id === space.ownerId) {
         await strapi.entityService.update('api::storage-file.storage-file', fileId, {
           data: { isTrash: false, trashedAt: null },
         });
@@ -300,8 +325,11 @@ module.exports = {
   async emptyTrash(ctx) {
     if (!ctx.state.user) return ctx.unauthorized('You must be logged in');
 
+    const space = await getAccessibleSpace(strapi, ctx.state.user, getRequestedSpaceOwnerId(ctx));
+    if (!space) return ctx.forbidden('Access denied');
+
     const trashedFiles = await strapi.entityService.findMany('api::storage-file.storage-file', {
-      filters: { owner: { id: ctx.state.user.id }, isTrash: true },
+      filters: { owner: { id: space.ownerId }, isTrash: true },
       limit: -1,
     });
 
@@ -323,12 +351,15 @@ module.exports = {
   async storageUsage(ctx) {
     if (!ctx.state.user) return ctx.unauthorized('You must be logged in');
 
-    const used = await getUserStorageUsed(ctx.state.user.id);
-    const limit = await getUserStorageLimit(ctx.state.user.id);
+    const space = await getAccessibleSpace(strapi, ctx.state.user, getRequestedSpaceOwnerId(ctx));
+    if (!space) return ctx.forbidden('Access denied');
+
+    const used = await getUserStorageUsed(space.ownerId);
+    const limit = await getUserStorageLimit(space.ownerId);
 
     // Get counts by type
     const files = await strapi.entityService.findMany('api::storage-file.storage-file', {
-      filters: { owner: { id: ctx.state.user.id }, isTrash: false },
+      filters: { owner: { id: space.ownerId }, isTrash: false },
       limit: -1,
     });
 
@@ -356,14 +387,17 @@ module.exports = {
   async getUploadUrl(ctx) {
     if (!ctx.state.user) return ctx.unauthorized('You must be logged in');
 
+    const space = await getAccessibleSpace(strapi, ctx.state.user, getRequestedSpaceOwnerId(ctx));
+    if (!space) return ctx.forbidden('Access denied');
+
     const { fileName, contentType } = ctx.request.body;
     if (!fileName || !contentType) {
       return ctx.badRequest('fileName and contentType are required');
     }
 
     // Check storage quota
-    const storageUsed = await getUserStorageUsed(ctx.state.user.id);
-    const storageLimit = await getUserStorageLimit(ctx.state.user.id);
+    const storageUsed = await getUserStorageUsed(space.ownerId);
+    const storageLimit = await getUserStorageLimit(space.ownerId);
 
     if (storageUsed >= storageLimit) {
       return ctx.badRequest('Storage limit exceeded. Please upgrade your plan.');
@@ -373,8 +407,7 @@ module.exports = {
     const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 
     const ext = fileName.split('.').pop();
-    // Per-user directory: mrkeyp/user_{id}/
-    const key = `mrkeyp/user_${ctx.state.user.id}/${Date.now()}_${crypto.randomBytes(8).toString('hex')}.${ext}`;
+    const key = `${getSpacePrefixForUser(space.owner)}/${Date.now()}_${crypto.randomBytes(8).toString('hex')}.${ext}`;
 
     const { s3, bucket, publicUrl } = getStorage();
     const command = new (require('@aws-sdk/client-s3').PutObjectCommand)({
@@ -396,6 +429,9 @@ module.exports = {
   async initiateUpload(ctx) {
     if (!ctx.state.user) return ctx.unauthorized('You must be logged in');
 
+    const space = await getAccessibleSpace(strapi, ctx.state.user, getRequestedSpaceOwnerId(ctx));
+    if (!space) return ctx.forbidden('Access denied');
+
     const { fileName, contentType } = ctx.request.body;
     if (!fileName || !contentType) {
       return ctx.badRequest('fileName and contentType are required');
@@ -404,7 +440,7 @@ module.exports = {
     const { CreateMultipartUploadCommand } = require('@aws-sdk/client-s3');
 
     const ext = fileName.split('.').pop();
-    const key = `mrkeyp/user_${ctx.state.user.id}/${Date.now()}_${crypto.randomBytes(8).toString('hex')}.${ext}`;
+    const key = `${getSpacePrefixForUser(space.owner)}/${Date.now()}_${crypto.randomBytes(8).toString('hex')}.${ext}`;
 
     const { s3, bucket, publicUrl } = getStorage();
     const { UploadId } = await s3.send(new CreateMultipartUploadCommand({
@@ -420,13 +456,16 @@ module.exports = {
   async getPartUrl(ctx) {
     if (!ctx.state.user) return ctx.unauthorized('You must be logged in');
 
+    const space = await getAccessibleSpace(strapi, ctx.state.user, getRequestedSpaceOwnerId(ctx));
+    if (!space) return ctx.forbidden('Access denied');
+
     const { key, uploadId, partNumber } = ctx.request.body;
     if (!key || !uploadId || !partNumber) {
       return ctx.badRequest('key, uploadId, and partNumber are required');
     }
 
     // Verify the key belongs to this user
-    if (!key.includes(`user_${ctx.state.user.id}/`)) {
+    if (!key.startsWith(`${getSpacePrefixForUser(space.owner)}/`)) {
       return ctx.forbidden('Access denied');
     }
 
@@ -448,12 +487,15 @@ module.exports = {
   async completeUpload(ctx) {
     if (!ctx.state.user) return ctx.unauthorized('You must be logged in');
 
+    const space = await getAccessibleSpace(strapi, ctx.state.user, getRequestedSpaceOwnerId(ctx));
+    if (!space) return ctx.forbidden('Access denied');
+
     const { key, uploadId, parts } = ctx.request.body;
     if (!key || !uploadId || !parts) {
       return ctx.badRequest('key, uploadId, and parts are required');
     }
 
-    if (!key.includes(`user_${ctx.state.user.id}/`)) {
+    if (!key.startsWith(`${getSpacePrefixForUser(space.owner)}/`)) {
       return ctx.forbidden('Access denied');
     }
 

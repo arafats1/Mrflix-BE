@@ -1,0 +1,46 @@
+{
+  "kind": "collectionType",
+  "collectionName": "account_invitations",
+  "info": {
+    "singularName": "account-invitation",
+    "pluralName": "account-invitations",
+    "displayName": "Account Invitation",
+    "description": "Invitations for shared MrKeyp spaces"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "token": {
+      "type": "string",
+      "required": true,
+      "unique": true
+    },
+    "inviteeEmail": {
+      "type": "email"
+    },
+    "status": {
+      "type": "enumeration",
+      "enum": ["pending", "accepted", "revoked", "rejected", "expired"],
+      "default": "pending",
+      "required": true
+    },
+    "expiresAt": {
+      "type": "datetime"
+    },
+    "acceptedAt": {
+      "type": "datetime"
+    },
+    "inviter": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user"
+    },
+    "invitee": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user"
+    }
+  }
+}

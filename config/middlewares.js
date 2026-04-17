@@ -1,3 +1,8 @@
+const corsOrigins = [
+  process.env.FRONTEND_URL,
+  ...(process.env.CORS_ORIGINS || '').split(',').map((origin) => origin.trim()).filter(Boolean),
+].filter(Boolean);
+
 module.exports = [
   'strapi::logger',
   'strapi::errors',
@@ -29,16 +34,9 @@ module.exports = [
   {
     name: 'strapi::cors',
     config: {
-      origin: [
-        'http://localhost:3000',
-        'http://127.0.0.1:3000',
-        'https://mrflix-ug.vercel.app',
-        'https://www.mrflix.app',
-        'https://mrflix-movies-app.up.railway.app',
-        process.env.FRONTEND_URL || 'http://localhost:3000',
-      ],
+      origin: corsOrigins,
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'],
-      headers: ['Content-Type', 'Authorization', 'Origin', 'Accept'],
+      headers: ['Content-Type', 'Authorization', 'Origin', 'Accept', 'X-MrKeyp-Space-Owner', 'x-mrkeyp-space-owner'],
       keepHeaderOnError: true,
     },
   },

@@ -430,6 +430,54 @@ export interface AdminUser extends Struct.CollectionTypeSchema {
   };
 }
 
+export interface ApiAccountInvitationAccountInvitation
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'account_invitations';
+  info: {
+    description: 'Invitations for shared MrKeyp spaces';
+    displayName: 'Account Invitation';
+    pluralName: 'account-invitations';
+    singularName: 'account-invitation';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    acceptedAt: Schema.Attribute.DateTime;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    expiresAt: Schema.Attribute.DateTime;
+    invitee: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+    inviteeEmail: Schema.Attribute.Email;
+    inviter: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::account-invitation.account-invitation'
+    > &
+      Schema.Attribute.Private;
+    publishedAt: Schema.Attribute.DateTime;
+    status: Schema.Attribute.Enumeration<
+      ['pending', 'accepted', 'revoked', 'rejected', 'expired']
+    > &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<'pending'>;
+    token: Schema.Attribute.String &
+      Schema.Attribute.Required &
+      Schema.Attribute.Unique;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface ApiActiveStreamActiveStream
   extends Struct.CollectionTypeSchema {
   collectionName: 'active_streams';
@@ -1898,6 +1946,7 @@ declare module '@strapi/strapi' {
       'admin::transfer-token': AdminTransferToken;
       'admin::transfer-token-permission': AdminTransferTokenPermission;
       'admin::user': AdminUser;
+      'api::account-invitation.account-invitation': ApiAccountInvitationAccountInvitation;
       'api::active-stream.active-stream': ApiActiveStreamActiveStream;
       'api::chat-log.chat-log': ApiChatLogChatLog;
       'api::contact-message.contact-message': ApiContactMessageContactMessage;

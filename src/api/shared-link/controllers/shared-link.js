@@ -43,7 +43,7 @@ module.exports = {
       },
     });
 
-    const baseUrl = process.env.MRKEYP_URL || 'http://localhost:3001';
+    const baseUrl = process.env.MRKEYP_URL || process.env.FRONTEND_URL;
 
     return {
       data: {
@@ -108,7 +108,7 @@ module.exports = {
       sort: 'createdAt:desc',
     });
 
-    const baseUrl = process.env.MRKEYP_URL || 'http://localhost:3001';
+    const baseUrl = process.env.MRKEYP_URL || process.env.FRONTEND_URL;
 
     return {
       data: entries.map((e) => ({

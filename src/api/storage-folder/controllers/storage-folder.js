@@ -1,6 +1,7 @@
 'use strict';
 
 const { S3Client, DeleteObjectCommand } = require('@aws-sdk/client-s3');
+const { getAccessibleSpace, getRequestedSpaceOwnerId } = require('../../../utils/mrkeyp-space');
 
 function getStorage() {
   const PROVIDER = (process.env.STORAGE_PROVIDER || 'cloudflare').toLowerCase();
@@ -31,8 +32,11 @@ module.exports = {
   async find(ctx) {
     if (!ctx.state.user) return ctx.unauthorized('You must be logged in');
 
+    const space = await getAccessibleSpace(strapi, ctx.state.user, getRequestedSpaceOwnerId(ctx));
+    if (!space) return ctx.forbidden('Access denied');
+
     const { parentId, isTrash, search } = ctx.query;
-    const filters = { owner: { id: ctx.state.user.id } };
+    const filters = { owner: { id: space.ownerId } };
 
     if (parentId) filters.parent = { id: parentId };
     if (parentId === 'null' || !parentId) filters.parent = { id: { $null: true } };
@@ -45,16 +49,45 @@ module.exports = {
 
     const entries = await strapi.entityService.findMany('api::storage-folder.storage-folder', {
       filters,
-      populate: { children: true, files: { count: true } },
+      populate: { children: true },
       sort: 'name:asc',
     });
 
-    return { data: entries };
+    const folderIds = entries.map((entry) => entry.id);
+    let fileCounts = {};
+
+    if (folderIds.length > 0) {
+      const folderFiles = await strapi.entityService.findMany('api::storage-file.storage-file', {
+        filters: {
+          owner: { id: space.ownerId },
+          isTrash: false,
+          folder: { id: { $in: folderIds } },
+        },
+        populate: { folder: true },
+        limit: -1,
+      });
+
+      fileCounts = folderFiles.reduce((acc, file) => {
+        const folderId = file.folder?.id;
+        if (folderId) acc[folderId] = (acc[folderId] || 0) + 1;
+        return acc;
+      }, {});
+    }
+
+    return {
+      data: entries.map((entry) => ({
+        ...entry,
+        fileCount: fileCounts[entry.id] || 0,
+      })),
+    };
   },
 
   // Get single folder with contents
   async findOne(ctx) {
     if (!ctx.state.user) return ctx.unauthorized('You must be logged in');
+
+    const space = await getAccessibleSpace(strapi, ctx.state.user, getRequestedSpaceOwnerId(ctx));
+    if (!space) return ctx.forbidden('Access denied');
 
     const { id } = ctx.params;
     const entry = await strapi.entityService.findOne('api::storage-folder.storage-folder', id, {
@@ -70,7 +103,7 @@ module.exports = {
     });
 
     if (!entry) return ctx.notFound('Folder not found');
-    if (entry.owner?.id !== ctx.state.user.id) return ctx.forbidden('Access denied');
+    if (entry.owner?.id !== space.ownerId) return ctx.forbidden('Access denied');
 
     // Build breadcrumb path
     const breadcrumbs = [];
@@ -92,6 +125,9 @@ module.exports = {
   async create(ctx) {
     if (!ctx.state.user) return ctx.unauthorized('You must be logged in');
 
+    const space = await getAccessibleSpace(strapi, ctx.state.user, getRequestedSpaceOwnerId(ctx));
+    if (!space) return ctx.forbidden('Access denied');
+
     const { name, parentId, color, icon, description } = ctx.request.body.data || ctx.request.body;
 
     if (!name) return ctx.badRequest('Folder name is required');
@@ -99,7 +135,7 @@ module.exports = {
     // Check for duplicate name in same parent
     const existing = await strapi.entityService.findMany('api::storage-folder.storage-folder', {
       filters: {
-        owner: { id: ctx.state.user.id },
+        owner: { id: space.ownerId },
         name,
         parent: parentId ? { id: parentId } : { id: { $null: true } },
         isTrash: false,
@@ -115,7 +151,7 @@ module.exports = {
       data: {
         name,
         description: description || null,
-        owner: ctx.state.user.id,
+        owner: space.ownerId,
         parent: parentId || null,
         color: color || '#6366f1',
         icon: icon || 'folder',
@@ -129,13 +165,16 @@ module.exports = {
   async update(ctx) {
     if (!ctx.state.user) return ctx.unauthorized('You must be logged in');
 
+    const space = await getAccessibleSpace(strapi, ctx.state.user, getRequestedSpaceOwnerId(ctx));
+    if (!space) return ctx.forbidden('Access denied');
+
     const { id } = ctx.params;
     const existing = await strapi.entityService.findOne('api::storage-folder.storage-folder', id, {
       populate: { owner: true },
     });
 
     if (!existing) return ctx.notFound('Folder not found');
-    if (existing.owner?.id !== ctx.state.user.id) return ctx.forbidden('Access denied');
+    if (existing.owner?.id !== space.ownerId) return ctx.forbidden('Access denied');
 
     const { name, parentId, color, icon, description, isTrash } = ctx.request.body.data || ctx.request.body;
     const updateData = {};
@@ -161,13 +200,16 @@ module.exports = {
   async delete(ctx) {
     if (!ctx.state.user) return ctx.unauthorized('You must be logged in');
 
+    const space = await getAccessibleSpace(strapi, ctx.state.user, getRequestedSpaceOwnerId(ctx));
+    if (!space) return ctx.forbidden('Access denied');
+
     const { id } = ctx.params;
     const folder = await strapi.entityService.findOne('api::storage-folder.storage-folder', id, {
       populate: { owner: true, files: true, children: true },
     });
 
     if (!folder) return ctx.notFound('Folder not found');
-    if (folder.owner?.id !== ctx.state.user.id) return ctx.forbidden('Access denied');
+    if (folder.owner?.id !== space.ownerId) return ctx.forbidden('Access denied');
 
     // Recursively delete all files and subfolders
     await deleteFolderRecursive(id, ctx.state.user.id);

@@ -103,7 +103,7 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
       return ctx.badRequest('Phone number is required for mobile money payment.');
     }
 
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const frontendUrl = process.env.FRONTEND_URL;
     const callbackUrl = `${frontendUrl}/payment/callback`;
     const description = seasonNumber
       ? `${movie.title} - Season ${seasonNumber}`
@@ -243,7 +243,7 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
       return ctx.badRequest('No new movies to purchase');
     }
 
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const frontendUrl = process.env.FRONTEND_URL;
 
     try {
       const user = ctx.state.user;

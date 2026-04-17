@@ -206,7 +206,7 @@ module.exports = {
     // ── Register Pesapal IPN URL ──
     try {
       const pesapal = require('./utils/pesapal');
-      const backendUrl = process.env.PUBLIC_URL || `http://localhost:${process.env.PORT || 1337}`;
+      const backendUrl = process.env.PUBLIC_URL || '';
       const ipnUrl = `${backendUrl}/api/pesapal/ipn`;
       const ipnId = await pesapal.registerIPN(ipnUrl);
 
@@ -307,6 +307,7 @@ module.exports = {
           { action: 'api::contact-message.contact-message.create' },
           // MrKeyp shared links - public access
           { action: 'api::shared-link.shared-link.access' },
+          { action: 'api::account-invitation.account-invitation.preview' },
           // MrKeyp storage pricing - public
           { action: 'api::storage-subscription.storage-subscription.pricing' },
         ];
@@ -393,6 +394,12 @@ module.exports = {
           { action: 'api::shared-link.shared-link.create' },
           { action: 'api::shared-link.shared-link.delete' },
           { action: 'api::shared-link.shared-link.access' },
+          // MrKeyp Shared Accounts
+          { action: 'api::account-invitation.account-invitation.create' },
+          { action: 'api::account-invitation.account-invitation.mine' },
+          { action: 'api::account-invitation.account-invitation.accept' },
+          { action: 'api::account-invitation.account-invitation.delete' },
+          { action: 'api::account-invitation.account-invitation.preview' },
           // MrKeyp Storage Subscriptions
           { action: 'api::storage-subscription.storage-subscription.me' },
           { action: 'api::storage-subscription.storage-subscription.find' },
@@ -511,6 +518,11 @@ module.exports = {
           { action: 'api::shared-link.shared-link.create' },
           { action: 'api::shared-link.shared-link.delete' },
           { action: 'api::shared-link.shared-link.access' },
+          { action: 'api::account-invitation.account-invitation.create' },
+          { action: 'api::account-invitation.account-invitation.mine' },
+          { action: 'api::account-invitation.account-invitation.accept' },
+          { action: 'api::account-invitation.account-invitation.delete' },
+          { action: 'api::account-invitation.account-invitation.preview' },
           { action: 'api::storage-subscription.storage-subscription.me' },
           { action: 'api::storage-subscription.storage-subscription.find' },
           { action: 'api::storage-subscription.storage-subscription.create' },

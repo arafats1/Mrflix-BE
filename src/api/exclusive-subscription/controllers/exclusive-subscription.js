@@ -142,7 +142,7 @@ module.exports = createCoreController('api::exclusive-subscription.exclusive-sub
     try {
       const user = ctx.state.user;
       const nameParts = (user.fullName || user.username || '').split(' ');
-      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+      const frontendUrl = process.env.FRONTEND_URL;
 
       const paymentResult = await submitPayment(strapi, {
         merchantReference,
