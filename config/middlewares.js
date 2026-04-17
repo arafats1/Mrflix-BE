@@ -36,7 +36,7 @@ module.exports = [
     config: {
       origin: corsOrigins,
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'],
-      headers: ['Content-Type', 'Authorization', 'Origin', 'Accept', 'X-MrKeyp-Space-Owner', 'x-mrkeyp-space-owner'],
+      headers: ['Content-Type', 'Authorization', 'Origin', 'Accept', 'X-MrKeyp-Space-Owner', 'x-mrkeyp-space-owner', 'X-MrKeyp-Client', 'x-mrkeyp-client'],
       keepHeaderOnError: true,
     },
   },

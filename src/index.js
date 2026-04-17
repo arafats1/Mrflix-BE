@@ -538,6 +538,7 @@ module.exports = {
           { action: 'api::storage-subscription.storage-subscription.grant' },
           { action: 'api::storage-subscription.storage-subscription.revoke' },
           { action: 'api::storage-subscription.storage-subscription.adminStats' },
+          { action: 'api::storage-subscription.storage-subscription.adminUsers' },
           { action: 'api::storage-subscription.storage-subscription.pricing' },
         ];
 
@@ -550,6 +551,61 @@ module.exports = {
               data: { action: perm.action, role: adminRole.id, enabled: true },
             });
           }
+        }
+      }
+
+      const [storageFiles, storageFolders, storageSubscriptions, accountInvitations] = await Promise.all([
+        strapi.entityService.findMany('api::storage-file.storage-file', {
+          limit: -1,
+          populate: { owner: { fields: ['id'] } },
+        }),
+        strapi.entityService.findMany('api::storage-folder.storage-folder', {
+          limit: -1,
+          populate: { owner: { fields: ['id'] } },
+        }),
+        strapi.entityService.findMany('api::storage-subscription.storage-subscription', {
+          limit: -1,
+          populate: { subscriber: { fields: ['id'] } },
+        }),
+        strapi.entityService.findMany('api::account-invitation.account-invitation', {
+          limit: -1,
+          populate: {
+            inviter: { fields: ['id'] },
+            invitee: { fields: ['id'] },
+          },
+        }),
+      ]);
+
+      const keypUserIds = new Set();
+      for (const file of storageFiles || []) {
+        if (file.owner?.id) keypUserIds.add(file.owner.id);
+      }
+      for (const folder of storageFolders || []) {
+        if (folder.owner?.id) keypUserIds.add(folder.owner.id);
+      }
+      for (const subscription of storageSubscriptions || []) {
+        if (subscription.subscriber?.id) keypUserIds.add(subscription.subscriber.id);
+      }
+      for (const invitation of accountInvitations || []) {
+        if (invitation.inviter?.id) keypUserIds.add(invitation.inviter.id);
+        if (invitation.invitee?.id) keypUserIds.add(invitation.invitee.id);
+      }
+
+      if (keypUserIds.size > 0) {
+        const knownKeypUsers = await strapi.db.query('plugin::users-permissions.user').findMany({
+          where: { id: { $in: [...keypUserIds] } },
+          select: ['id', 'isKeypUser', 'keypActivatedAt'],
+        });
+
+        for (const keypUser of knownKeypUsers) {
+          if (keypUser.isKeypUser) continue;
+          await strapi.db.query('plugin::users-permissions.user').update({
+            where: { id: keypUser.id },
+            data: {
+              isKeypUser: true,
+              keypActivatedAt: keypUser.keypActivatedAt || new Date().toISOString(),
+            },
+          });
         }
       }
     } catch (err) {

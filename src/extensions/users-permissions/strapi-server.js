@@ -6,6 +6,15 @@
  * - Override Google provider to use full name as username
  */
 module.exports = (plugin) => {
+  plugin.contentTypes.user.schema.attributes.isKeypUser = {
+    type: 'boolean',
+    default: false,
+  };
+
+  plugin.contentTypes.user.schema.attributes.keypActivatedAt = {
+    type: 'datetime',
+  };
+
   // Override the me controller to populate role
   const originalMe = plugin.controllers.user.me;
 
@@ -16,8 +25,9 @@ module.exports = (plugin) => {
       return ctx.unauthorized();
     }
 
-    // Fetch user with role populated
-    const userWithRole = await strapi.db
+    const isKeypClient = ['true', '1', 'web', 'mrkeyp'].includes(String(ctx.request.header['x-mrkeyp-client'] || '').toLowerCase());
+
+    let userWithRole = await strapi.db
       .query('plugin::users-permissions.user')
       .findOne({
         where: { id: user.id },
@@ -26,6 +36,22 @@ module.exports = (plugin) => {
 
     if (!userWithRole) {
       return ctx.unauthorized();
+    }
+
+    if (isKeypClient && !userWithRole.isKeypUser) {
+      await strapi.db.query('plugin::users-permissions.user').update({
+        where: { id: user.id },
+        data: {
+          isKeypUser: true,
+          keypActivatedAt: new Date().toISOString(),
+        },
+      });
+
+      userWithRole = {
+        ...userWithRole,
+        isKeypUser: true,
+        keypActivatedAt: new Date().toISOString(),
+      };
     }
 
     // Check for active subscription
@@ -59,6 +85,8 @@ module.exports = (plugin) => {
       confirmed: userWithRole.confirmed,
       blocked: userWithRole.blocked,
       fullName: userWithRole.fullName,
+      isKeypUser: !!userWithRole.isKeypUser,
+      keypActivatedAt: userWithRole.keypActivatedAt,
       createdAt: userWithRole.createdAt,
       updatedAt: userWithRole.updatedAt,
       isPremium: activeSub && activeSub.length > 0,

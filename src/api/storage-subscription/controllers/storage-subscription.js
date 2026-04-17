@@ -65,6 +65,8 @@ module.exports = {
     const settings = await strapi.entityService.findMany('api::site-setting.site-setting');
     const pricePerMonth = settings?.storagePricePerMonth || 7000;
     const freeGB = settings?.storageFreeTierGB || 1;
+    const paymentGateway = settings?.paymentGateway || 'pesapal';
+    const storageEnabled = settings?.storageEnabled ?? true;
 
     const plans = STORAGE_TIERS.map((gb) => ({
       storageGB: gb,
@@ -77,14 +79,14 @@ module.exports = {
       })),
     }));
 
-    return { data: { freeGB, pricePerMonth, plans } };
+    return { data: { freeGB, pricePerMonth, plans, paymentGateway, storageEnabled } };
   },
 
   // Subscribe to storage plan
   async create(ctx) {
     if (!ctx.state.user) return ctx.unauthorized('You must be logged in');
 
-    const { storageGB, durationMonths: rawDuration, paymentMethod, paymentPhone } =
+    const { storageGB, durationMonths: rawDuration, paymentPhone } =
       ctx.request.body.data || ctx.request.body;
 
     if (!storageGB || !STORAGE_TIERS.includes(parseInt(storageGB))) {
@@ -102,6 +104,11 @@ module.exports = {
 
     const ipnId = settings?.pesapalIpnId;
     const activeGateway = settings?.paymentGateway || 'pesapal';
+    const storageEnabled = settings?.storageEnabled ?? true;
+
+    if (!storageEnabled) {
+      return ctx.badRequest('Storage plan purchases are currently disabled.');
+    }
 
     if (activeGateway === 'pesapal' && !ipnId) {
       return ctx.badRequest('Payment system not configured. Please contact support.');
@@ -138,7 +145,7 @@ module.exports = {
         storageGB: gb,
         amount: totalPrice,
         durationMonths,
-        paymentMethod: paymentMethod || activeGateway,
+        paymentMethod: activeGateway,
         paymentPhone: paymentPhone || '',
         transactionId: merchantReference,
         status: 'pending',
@@ -299,7 +306,7 @@ module.exports = {
     const now = new Date().toISOString();
 
     const [totalUsers, totalFiles, totalFolders, activeSubs, pendingSubs, sharedLinks, files] = await Promise.all([
-      strapi.db.query('plugin::users-permissions.user').count({}),
+      strapi.db.query('plugin::users-permissions.user').count({ where: { isKeypUser: true } }),
       strapi.db.query('api::storage-file.storage-file').count({}),
       strapi.db.query('api::storage-folder.storage-folder').count({}),
       strapi.db.query('api::storage-subscription.storage-subscription').count({
@@ -324,6 +331,41 @@ module.exports = {
         totalStorageUsed,
         totalStorageUsedGB: (totalStorageUsed / (1024 * 1024 * 1024)).toFixed(2),
       },
+    };
+  },
+
+  async adminUsers(ctx) {
+    if (!ctx.state.user) return ctx.unauthorized('You must be logged in');
+
+    const isAdmin = ctx.state.user.role?.type === 'admin' || ctx.state.user.role?.name === 'Admin';
+    if (!isAdmin) return ctx.forbidden('Admin only');
+
+    const users = await strapi.db.query('plugin::users-permissions.user').findMany({
+      where: { isKeypUser: true },
+      orderBy: { username: 'asc' },
+      populate: ['role'],
+    });
+
+    return {
+      data: users.map((entry) => ({
+        id: entry.id,
+        username: entry.username,
+        email: entry.email,
+        fullName: entry.fullName,
+        isKeypUser: !!entry.isKeypUser,
+        keypActivatedAt: entry.keypActivatedAt || null,
+        blocked: !!entry.blocked,
+        confirmed: !!entry.confirmed,
+        createdAt: entry.createdAt,
+        updatedAt: entry.updatedAt,
+        role: entry.role
+          ? {
+              id: entry.role.id,
+              name: entry.role.name,
+              type: entry.role.type,
+            }
+          : null,
+      })),
     };
   },
 };

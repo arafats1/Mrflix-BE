@@ -1905,6 +1905,8 @@ export interface PluginUsersPermissionsUser
       Schema.Attribute.SetMinMaxLength<{
         minLength: 6;
       }>;
+    isKeypUser: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
+    keypActivatedAt: Schema.Attribute.DateTime;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
       'oneToMany',
