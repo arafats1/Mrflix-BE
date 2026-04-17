@@ -43,9 +43,22 @@ module.exports = createCoreController('api::movie.movie', ({ strapi }) => ({
     else if (luganda === 'all') { /* no filter — show both */ }
     else filters.$or = [{ isLuganda: false }, { isLuganda: { $null: true } }];
 
-    // Search by title
+    // Search by title, genres, overview, and countryOfOrigin
     if (q) {
-      filters.title = { $containsi: q };
+      const searchOr = [
+        { title: { $containsi: q } },
+        { genres: { $containsi: q } },
+        { overview: { $containsi: q } },
+        { countryOfOrigin: { $containsi: q } },
+      ];
+      // If query mentions "adult", also match isAdult content
+      if (/adult/i.test(q)) {
+        searchOr.push({ isAdult: true });
+      }
+      filters.$and = [
+        ...(filters.$and || []),
+        { $or: searchOr },
+      ];
     }
 
     // Exclude XXX content unless explicitly requested (admin use)
