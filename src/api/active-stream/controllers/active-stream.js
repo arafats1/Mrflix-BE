@@ -48,13 +48,7 @@ module.exports = createCoreController('api::active-stream.active-stream', ({ str
       // Update heartbeat timestamp and progress
       const updateData = { lastHeartbeat: now };
       if (progressVal !== null) updateData.progress = progressVal;
-      
-      // Auto-mark as completed ONLY IF progress is 100% or very close (e.g., 98%)
-      if (progressVal >= 98) {
-        updateData.status = 'completed';
-        updateData.endedAt = now;
-      }
-      
+
       await strapi.documents('api::active-stream.active-stream').update({
         documentId: existing[0].documentId,
         data: updateData,
