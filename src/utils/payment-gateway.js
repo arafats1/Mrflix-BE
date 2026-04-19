@@ -9,6 +9,7 @@
 
 const pesapal = require('./pesapal');
 const dgateway = require('./dgateway');
+const { normalizePaymentMethod } = require('./payment-methods');
 
 /**
  * Get the active payment gateway name from site settings.
@@ -99,7 +100,7 @@ async function checkPaymentStatus(strapi, params) {
 
     return {
       status: normalizedStatus,
-      paymentMethod: result.data?.provider || 'dgateway',
+      paymentMethod: normalizePaymentMethod(result.data?.provider, 'dgateway'),
       failureReason: result.data?.failure_reason || '',
       raw: result.data,
     };
@@ -115,7 +116,7 @@ async function checkPaymentStatus(strapi, params) {
 
     return {
       status: normalizedStatus,
-      paymentMethod: status.payment_method || 'pesapal',
+      paymentMethod: normalizePaymentMethod(status.payment_method, 'pesapal'),
       confirmationCode: status.confirmation_code || '',
       raw: status,
     };

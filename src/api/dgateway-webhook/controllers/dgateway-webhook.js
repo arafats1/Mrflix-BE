@@ -1,5 +1,7 @@
 'use strict';
 
+const { normalizePaymentMethod } = require('../../../utils/payment-methods');
+
 const crypto = require('crypto');
 const dgateway = require('../../../utils/dgateway');
 
@@ -150,7 +152,8 @@ module.exports = {
           status: normalizedStatus,
           reference,
           amount: result.data?.amount,
-          paymentMethod: result.data?.provider || 'dgateway',
+          paymentMethod: normalizePaymentMethod(result.data?.provider, 'dgateway'),
+          rawPaymentMethod: result.data?.provider || '',
           failureReason: result.data?.failure_reason || '',
           purchaseType,
           movieInfo,

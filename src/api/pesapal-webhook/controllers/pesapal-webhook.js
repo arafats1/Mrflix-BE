@@ -1,6 +1,7 @@
 'use strict';
 
 const pesapal = require('../../../utils/pesapal');
+const { normalizePaymentMethod } = require('../../../utils/payment-methods');
 
 module.exports = {
   /**
@@ -29,7 +30,7 @@ module.exports = {
 
       const paymentStatus = (status.payment_status_description || '').toLowerCase();
       const confirmationCode = status.confirmation_code || '';
-      const paymentMethod = status.payment_method || '';
+      const paymentMethod = normalizePaymentMethod(status.payment_method, 'pesapal');
 
       if (paymentStatus === 'completed') {
         // Check if this is a subscription (SUB_) or purchase (PUR_ / CART_)
@@ -176,7 +177,7 @@ module.exports = {
       let movieInfo = null;
 
       if (paymentStatus === 'completed') {
-        const actualPaymentMethod = status.payment_method || '';
+        const actualPaymentMethod = normalizePaymentMethod(status.payment_method, 'pesapal');
 
         if (ref.startsWith('SUB_')) {
           purchaseType = 'subscription';
@@ -236,7 +237,8 @@ module.exports = {
           merchantReference: ref,
           confirmationCode: status.confirmation_code || '',
           amount: status.amount,
-          paymentMethod: status.payment_method || '',
+          paymentMethod: actualPaymentMethod,
+          rawPaymentMethod: status.payment_method || '',
           purchaseType,
           movieInfo,
         },
