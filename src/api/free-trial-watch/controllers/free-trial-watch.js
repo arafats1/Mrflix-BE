@@ -290,10 +290,17 @@ module.exports = createCoreController('api::free-trial-watch.free-trial-watch', 
       limit: 1000,
     });
 
+    const activeUserWatches = [];
+    for (const watch of watches) {
+      if (watch.user?.id) {
+        activeUserWatches.push(watch);
+      }
+    }
+
     const userMap = /** @type {Record<string, any>} */ ({});
 
-    for (const watch of watches) {
-      const userId = String(watch.user?.id || 'unknown');
+    for (const watch of activeUserWatches) {
+      const userId = String(watch.user.id);
 
       if (!userMap[userId]) {
         userMap[userId] = {
@@ -331,7 +338,7 @@ module.exports = createCoreController('api::free-trial-watch.free-trial-watch', 
       data: {
         freeTrialCount,
         totalTrialUsers: users.length,
-        totalWatches: watches.length,
+        totalWatches: activeUserWatches.length,
         users,
       },
     };
