@@ -79,6 +79,37 @@ module.exports = createCoreController('api::free-trial-watch.free-trial-watch', 
       filters: { user: { id: ctx.state.user.id } },
     });
 
+    // Find the movie early so exact-match replay checks use the same numeric id
+    const movie = await strapi.documents('api::movie.movie').findOne({
+      documentId: movieId,
+    });
+
+    if (!movie) {
+      return ctx.notFound('Movie not found');
+    }
+
+    // Already-recorded content must remain replayable even when the user has no
+    // remaining trial credits.
+    const alreadyWatched = existing.some(w => {
+      const sameMovie = String(w.movie?.id || w.movie) === String(movie.id);
+      if (contentType === 'episode') {
+        return sameMovie && w.episodeSeason === episodeSeason && w.episodeNumber === episodeNumber;
+      }
+      return sameMovie && w.contentType === 'movie';
+    });
+
+    if (alreadyWatched) {
+      const remaining = Math.max(0, freeTrialCount - existing.length);
+      return {
+        data: {
+          alreadyRecorded: true,
+          freeTrialCount,
+          used: existing.length,
+          remaining,
+        },
+      };
+    }
+
     if (existing.length >= freeTrialCount) {
       // Check if this is the free movie of the week — always allow
       try {
@@ -96,37 +127,6 @@ module.exports = createCoreController('api::free-trial-watch.free-trial-watch', 
         }
       } catch (e) { /* ignore */ }
       return ctx.badRequest('Free trial limit reached. Please purchase or subscribe.');
-    }
-
-    // Find the movie
-    const movie = await strapi.documents('api::movie.movie').findOne({
-      documentId: movieId,
-    });
-
-    if (!movie) {
-      return ctx.notFound('Movie not found');
-    }
-
-    // Check if this exact movie/episode was already recorded
-    const alreadyWatched = existing.some(w => {
-      const sameMovie = String(w.movie?.id || w.movie) === String(movie.id);
-      if (contentType === 'episode') {
-        return sameMovie && w.episodeSeason === episodeSeason && w.episodeNumber === episodeNumber;
-      }
-      return sameMovie && w.contentType === 'movie';
-    });
-
-    if (alreadyWatched) {
-      // Already recorded — still allow watching, just return current status
-      const remaining = Math.max(0, freeTrialCount - existing.length);
-      return {
-        data: {
-          alreadyRecorded: true,
-          freeTrialCount,
-          used: existing.length,
-          remaining,
-        },
-      };
     }
 
     // Record the trial watch
@@ -290,37 +290,35 @@ module.exports = createCoreController('api::free-trial-watch.free-trial-watch', 
       limit: 1000,
     });
 
-    // Group by user
-    const userMap = {};
-    for (const w of watches) {
-      const uid = w.user?.id;
-      if (!uid) continue;
-      if (!userMap[uid]) {
-        userMap[uid] = {
-          user: {
-            id: uid,
-            username: w.user.username,
-            email: w.user.email,
-          },
-          watches: [],
+    const userMap = /** @type {Record<string, any>} */ ({});
+
+    for (const watch of watches) {
+      const userId = String(watch.user?.id || 'unknown');
+
+      if (!userMap[userId]) {
+        userMap[userId] = {
+          userId,
+          username: watch.user?.username || 'Unknown',
+          email: watch.user?.email || '',
           used: 0,
+          watches: [],
         };
       }
-      userMap[uid].watches.push({
-        id: w.documentId || w.id,
-        movie: {
-          id: w.movie?.documentId || w.movie?.id,
-          title: w.movie?.title,
-          type: w.movie?.type,
-          posterUrl: w.movie?.posterUrl,
-        },
-        contentType: w.contentType,
-        episodeSeason: w.episodeSeason,
-        episodeNumber: w.episodeNumber,
-        watchedAt: w.createdAt,
+
+      userMap[userId].used += 1;
+      userMap[userId].watches.push({
+        id: watch.documentId || watch.id,
+        movieId: watch.movie?.documentId || watch.movie?.id,
+        movieTitle: watch.movie?.title,
+        movieType: watch.movie?.type,
+        posterUrl: watch.movie?.posterUrl || null,
+        contentType: watch.contentType,
+        episodeSeason: watch.episodeSeason,
+        episodeNumber: watch.episodeNumber,
+        createdAt: watch.createdAt,
       });
-      userMap[uid].used++;
     }
+
 
     // Convert to array and add remaining count
     const users = Object.values(userMap).map(u => ({
