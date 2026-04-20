@@ -2,6 +2,8 @@
 
 const { createCoreController } = require('@strapi/strapi').factories;
 
+const ADULT_SEARCH_TERMS = /(^|\b)(adult|18\+|18\s*plus|mature|sex|erotic|explicit)(\b|$)/i;
+
 /**
  * Helper: fetch site-setting default prices once and cache for the request.
  */
@@ -51,8 +53,8 @@ module.exports = createCoreController('api::movie.movie', ({ strapi }) => ({
         { overview: { $containsi: q } },
         { countryOfOrigin: { $containsi: q } },
       ];
-      // If query mentions "adult", also match isAdult content
-      if (/adult/i.test(q)) {
+      // Adult-intent searches should surface catalog titles marked as Adult 18+.
+      if (ADULT_SEARCH_TERMS.test(q)) {
         searchOr.push({ isAdult: true });
       }
       filters.$and = [
