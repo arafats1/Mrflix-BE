@@ -3,6 +3,7 @@
 const { createCoreController } = require('@strapi/strapi').factories;
 
 const ADULT_SEARCH_TERMS = /(^|\b)(adult|18\+|18\s*plus|mature|sex|erotic|explicit)(\b|$)/i;
+const TMDB_BASE = 'https://api.themoviedb.org/3';
 
 /**
  * Helper: fetch site-setting default prices once and cache for the request.
@@ -31,11 +32,100 @@ function applyDefaultPrices(movies, defaults) {
   });
 }
 
+function buildYoutubeUrls(video) {
+  if (!video?.key) {
+    return {
+      url: null,
+      embedUrl: null,
+    };
+  }
+
+  return {
+    url: `https://www.youtube.com/watch?v=${video.key}`,
+    embedUrl: `https://www.youtube.com/embed/${video.key}`,
+  };
+}
+
+function pickYoutubeVideo(videos, type) {
+  if (!Array.isArray(videos) || videos.length === 0) return null;
+
+  return videos.find((video) => video.site === 'YouTube' && video.type === type && video.official)
+    || videos.find((video) => video.site === 'YouTube' && video.type === type)
+    || null;
+}
+
+async function fetchTmdbPreview(strapi, movie, cache) {
+  const tmdbApiKey = process.env.TMDB_API_KEY;
+  const tmdbId = movie?.tmdbId;
+
+  if (!tmdbApiKey || !tmdbId) {
+    return null;
+  }
+
+  const mediaType = movie.type === 'series' ? 'tv' : 'movie';
+  const cacheKey = `${mediaType}:${tmdbId}`;
+
+  if (!cache.has(cacheKey)) {
+    cache.set(cacheKey, (async () => {
+      try {
+        const url = `${TMDB_BASE}/${mediaType}/${tmdbId}/videos?api_key=${tmdbApiKey}&language=en-US`;
+        const response = await fetch(url);
+
+        if (!response.ok) {
+          return null;
+        }
+
+        const payload = await response.json();
+        const videos = Array.isArray(payload?.results) ? payload.results : [];
+        const teaser = pickYoutubeVideo(videos, 'Teaser');
+        const trailer = pickYoutubeVideo(videos, 'Trailer');
+        const teaserUrls = buildYoutubeUrls(teaser);
+        const trailerUrls = buildYoutubeUrls(trailer);
+
+        return {
+          teaserUrl: teaserUrls.url,
+          teaserEmbedUrl: teaserUrls.embedUrl,
+          trailerEmbedUrl: trailerUrls.embedUrl,
+          previewType: teaser ? 'teaser' : trailer ? 'trailer' : null,
+        };
+      } catch (error) {
+        strapi.log.error(`TMDb preview fetch failed for ${cacheKey}:`, error);
+        return null;
+      }
+    })());
+  }
+
+  return cache.get(cacheKey);
+}
+
+async function enrichMoviesWithPreviews(strapi, movies) {
+  if (!Array.isArray(movies) || movies.length === 0) {
+    return movies;
+  }
+
+  const cache = new Map();
+  return Promise.all(
+    movies.map(async (movie) => {
+      const preview = await fetchTmdbPreview(strapi, movie, cache);
+      return preview ? { ...movie, ...preview } : movie;
+    })
+  );
+}
+
+async function enrichMovieWithPreview(strapi, movie) {
+  if (!movie) {
+    return movie;
+  }
+
+  const [enrichedMovie] = await enrichMoviesWithPreviews(strapi, [movie]);
+  return enrichedMovie;
+}
+
 module.exports = createCoreController('api::movie.movie', ({ strapi }) => ({
   // Override find to add custom filtering and apply site-setting prices
   async find(ctx) {
     // Allow filtering by type, featured, available
-    const { type, featured, available, q, luganda, includeXXX } = ctx.query;
+    const { type, featured, available, q, luganda, includeXXX, includePreviews } = ctx.query;
 
     const filters = {};
     if (type) filters.type = type;
@@ -81,7 +171,13 @@ module.exports = createCoreController('api::movie.movie', ({ strapi }) => ({
 
     // Apply site-setting default prices
     const defaults = await getSiteDefaultPrices(strapi);
-    return { data: applyDefaultPrices(data, defaults), meta };
+    let movies = applyDefaultPrices(data, defaults);
+
+    if (includePreviews === 'true') {
+      movies = await enrichMoviesWithPreviews(strapi, movies);
+    }
+
+    return { data: movies, meta };
   },
 
   // Override findOne to populate relations and apply site-setting price
@@ -92,6 +188,7 @@ module.exports = createCoreController('api::movie.movie', ({ strapi }) => ({
     };
 
     const response = await super.findOne(ctx);
+    const { includePreviews } = ctx.query;
 
     // Apply site-setting default price to single movie
     if (response?.data) {
@@ -99,7 +196,9 @@ module.exports = createCoreController('api::movie.movie', ({ strapi }) => ({
       const m = response.data.toJSON ? response.data.toJSON() : { ...response.data };
       const defaultPrice = m.type === 'series' ? defaults.seriesPrice : defaults.moviePrice;
       m.priceUGX = defaultPrice;
-      response.data = m;
+      response.data = includePreviews === 'true'
+        ? await enrichMovieWithPreview(strapi, m)
+        : m;
     }
 
     return response;
