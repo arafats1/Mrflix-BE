@@ -125,12 +125,16 @@ module.exports = createCoreController('api::movie.movie', ({ strapi }) => ({
   // Override find to add custom filtering and apply site-setting prices
   async find(ctx) {
     // Allow filtering by type, featured, available
-    const { type, featured, available, q, luganda, includeXXX, includePreviews } = ctx.query;
+    const { type, featured, available, q, luganda, includeXXX, includePreviews, includeUnavailable } = ctx.query;
 
     const filters = {};
     if (type) filters.type = type;
     if (featured === 'true') filters.isFeatured = true;
-    if (available !== 'false') filters.isAvailable = true;
+    // Hide unavailable titles unless the caller explicitly asks for them
+    // (admin Content page passes `includeUnavailable=true` to surface hidden items).
+    if (available !== 'false' && includeUnavailable !== 'true') {
+      filters.isAvailable = true;
+    }
     if (luganda === 'true') filters.isLuganda = true;
     else if (luganda === 'all') { /* no filter — show both */ }
     else filters.$or = [{ isLuganda: false }, { isLuganda: { $null: true } }];
