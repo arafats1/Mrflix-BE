@@ -1,5 +1,7 @@
 const corsOrigins = [
   process.env.FRONTEND_URL,
+  'https://www.mymovokids.com',
+  'https://mymovokids.com',
   ...(process.env.CORS_ORIGINS || '').split(',').map((origin) => origin.trim()).filter(Boolean),
 ].filter(Boolean);
 
