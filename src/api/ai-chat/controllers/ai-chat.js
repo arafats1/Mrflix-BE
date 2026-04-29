@@ -34,7 +34,6 @@ module.exports = {
       const isLugandaMode = luganda === true || luganda === 'true' || asksForLuganda;
       const filters = {
         isAvailable: true,
-        isXXX: { $ne: true },
         genres: { $containsi: 'animation' },
         ...(isLugandaMode && { isLuganda: true }),
       };

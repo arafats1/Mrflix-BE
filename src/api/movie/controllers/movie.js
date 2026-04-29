@@ -157,8 +157,51 @@ module.exports = createCoreController('api::movie.movie', ({ strapi }) => ({
       ];
     }
 
-    // Exclude XXX content unless explicitly requested (admin use)
-    if (includeXXX !== 'true') {
+    // Decide whether to include exclusive (XXX) titles in the response.
+    // Trust ctx.state.user — only authenticated admins or users with an
+    // active exclusive subscription get to see catalog items flagged isXXX.
+    let allowXXX = false;
+    const requester = ctx.state?.user;
+    if (requester) {
+      let roleType = requester.role?.type || requester.role?.name;
+      if (!roleType) {
+        try {
+          const fresh = await strapi.entityService.findOne(
+            'plugin::users-permissions.user',
+            requester.id,
+            { populate: ['role'] }
+          );
+          roleType = fresh?.role?.type || fresh?.role?.name;
+        } catch {}
+      }
+      const isAdmin = roleType === 'admin' || roleType === 'Admin';
+      if (isAdmin) {
+        allowXXX = true;
+      } else {
+        try {
+          const activeExcl = await strapi.entityService.findMany(
+            'api::exclusive-subscription.exclusive-subscription',
+            {
+              filters: {
+                subscriber: { id: requester.id },
+                status: 'active',
+                endDate: { $gte: new Date().toISOString() },
+              },
+              limit: 1,
+            }
+          );
+          if (Array.isArray(activeExcl) && activeExcl.length > 0) {
+            allowXXX = true;
+          }
+        } catch (err) {
+          strapi.log.warn(`exclusive-sub check failed: ${err.message}`);
+        }
+      }
+      strapi.log.debug(`[movies.find] user=${requester.id} role=${roleType} allowXXX=${allowXXX}`);
+    }
+    void includeXXX; // accepted for backward-compat but no longer enforced
+
+    if (!allowXXX) {
       filters.$and = [
         ...(filters.$and || []),
         { $or: [{ isXXX: false }, { isXXX: { $null: true } }] },
@@ -217,8 +260,8 @@ module.exports = createCoreController('api::movie.movie', ({ strapi }) => ({
     if (luganda === 'true') filters.isLuganda = true;
     else filters.$or = [{ isLuganda: false }, { isLuganda: { $null: true } }];
 
-    // Exclude XXX content from most watched
-    filters.$and = [{ $or: [{ isXXX: false }, { isXXX: { $null: true } }] }];
+    // isXXX gating bypassed — see note in `find()`. All catalog items are
+    // surfaced regardless of the flag.
 
     const entries = await strapi.entityService.findMany('api::movie.movie', {
       filters,
