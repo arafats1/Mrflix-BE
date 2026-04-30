@@ -451,6 +451,7 @@ module.exports = {
           { action: 'api::movie.movie.create' },
           { action: 'api::movie.movie.update' },
           { action: 'api::movie.movie.delete' },
+          { action: 'api::movie.movie.bulkDrafts' },
           // Full purchase access
           { action: 'api::purchase.purchase.find' },
           { action: 'api::purchase.purchase.findOne' },

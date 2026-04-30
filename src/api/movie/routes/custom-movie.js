@@ -18,5 +18,15 @@ module.exports = {
         policies: [],
       },
     },
+    {
+      method: 'GET',
+      path: '/movies/bulk-drafts',
+      handler: 'movie.bulkDrafts',
+      config: {
+        // Auth required; the controller itself enforces admin-only access
+        // by inspecting ctx.state.user.role.
+        policies: [],
+      },
+    },
   ],
 };

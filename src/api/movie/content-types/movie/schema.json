@@ -132,6 +132,9 @@
     "isXXX": {
       "type": "boolean",
       "default": false
+    },
+    "bulkFolder": {
+      "type": "string"
     }
   }
 }

@@ -304,4 +304,43 @@ module.exports = createCoreController('api::movie.movie', ({ strapi }) => ({
       return ctx.badRequest('Failed to update watch count');
     }
   },
+
+  // List bulk-upload drafts (admin only). A draft is a movie that was
+  // uploaded via the bulk uploader but hasn't had TMDB metadata attached
+  // yet — i.e. tmdbId is null AND posterUrl is empty AND isAvailable=false.
+  // This endpoint exists so the bulk upload page doesn't have to fight
+  // with the public /movies listing's role/permission/draft-publish logic.
+  async bulkDrafts(ctx) {
+    const requester = ctx.state?.user;
+    if (!requester) return ctx.unauthorized('Login required');
+
+    let roleType = requester.role?.type || requester.role?.name;
+    if (!roleType) {
+      try {
+        const fresh = await strapi.entityService.findOne(
+          'plugin::users-permissions.user',
+          requester.id,
+          { populate: ['role'] }
+        );
+        roleType = fresh?.role?.type || fresh?.role?.name;
+      } catch {}
+    }
+    const isAdmin = roleType === 'admin' || roleType === 'Admin';
+    if (!isAdmin) return ctx.forbidden('Admin only');
+
+    const entries = await strapi.entityService.findMany('api::movie.movie', {
+      filters: {
+        $and: [
+          { isAvailable: false },
+          { $or: [{ tmdbId: { $null: true } }, { tmdbId: 0 }] },
+          { $or: [{ posterUrl: { $null: true } }, { posterUrl: '' }] },
+        ],
+      },
+      sort: [{ createdAt: 'desc' }],
+      populate: ['poster', 'backdrop'],
+      limit: 1000,
+    });
+
+    return { data: entries };
+  },
 }));
