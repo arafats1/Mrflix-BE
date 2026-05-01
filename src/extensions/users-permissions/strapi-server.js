@@ -1,6 +1,9 @@
 'use strict';
 
 const bcrypt = require('bcryptjs');
+const utils = require('@strapi/utils');
+
+const { ValidationError } = utils.errors;
 
 /**
  * Extend the users-permissions plugin:
@@ -22,6 +25,20 @@ const RELIGION_OPTIONS = [
   'Other',
 ];
 
+function normalizePhone(phone) {
+  const raw = typeof phone === 'string' ? phone.trim() : '';
+  if (!raw) return '';
+
+  let normalized = raw.replace(/[\s()+-]/g, '');
+  if (normalized.startsWith('0')) normalized = `256${normalized.slice(1)}`;
+  return normalized;
+}
+
+function looksLikePhone(identifier) {
+  const normalized = normalizePhone(identifier);
+  return /^\d{9,15}$/.test(normalized);
+}
+
 module.exports = (plugin) => {
   plugin.contentTypes.user.schema.attributes.isKeypUser = {
     type: 'boolean',
@@ -36,6 +53,7 @@ module.exports = (plugin) => {
   // and gets parental-control features (watch-time limits, content blocks).
   plugin.contentTypes.user.schema.attributes.phone = {
     type: 'string',
+    unique: true,
   };
 
   plugin.contentTypes.user.schema.attributes.religion = {
@@ -65,7 +83,9 @@ module.exports = (plugin) => {
     mappedBy: 'parent',
   };
 
-  // Override the me controller to populate role
+  // Override the me controller to populate role.
+  // `plugin.controllers.user` is a plain object (not a factory), so direct
+  // property assignment is the correct override pattern here.
   const originalMe = plugin.controllers.user.me;
 
   plugin.controllers.user.me = async (ctx) => {
@@ -168,58 +188,114 @@ module.exports = (plugin) => {
     };
   };
 
-  // Wrap the register controller so we can persist parent-account fields
-  // (phone, religion, isParent, fullName) that the default users-permissions
-  // register strips out. We let the original handler create the user, then
-  // patch the new record with our extras and re-issue the response.
-  const originalRegister = plugin.controllers.auth.register;
+  // Wrap the auth controller factory so our overrides actually take effect.
+  // In Strapi v5, `plugin.controllers.auth` is a factory `({ strapi }) => ({ ...actions })`,
+  // so assigning to `.callback`/`.register` on the factory itself is silently ignored.
+  // We replace the factory with one that calls the original, then layers our wrappers
+  // on top of the resolved action object.
+  const originalAuthFactory = plugin.controllers.auth;
 
-  plugin.controllers.auth.register = async (ctx) => {
-    const body = ctx.request.body || {};
-    const extras = {
-      fullName: typeof body.fullName === 'string' ? body.fullName.trim() : undefined,
-      phone: typeof body.phone === 'string' ? body.phone.trim() : undefined,
-      religion: RELIGION_OPTIONS.includes(body.religion) ? body.religion : undefined,
-      isParent: body.isParent === true || body.isParent === 'true',
-    };
+  plugin.controllers.auth = (context) => {
+    const original = originalAuthFactory(context);
+    const originalCallback = original.callback.bind(original);
+    const originalRegister = original.register.bind(original);
 
-    // Strapi v5's users-permissions register validator rejects unknown keys
-    // (e.g. religion, isParent, phone, fullName) before reaching our wrapper,
-    // so we strip them off the request body, let the core handler run with
-    // only the canonical { username, email, password }, then patch the new
-    // user with our extras afterwards.
-    ctx.request.body = {
-      username: body.username,
-      email: body.email,
-      password: body.password,
-    };
+    return {
+      ...original,
 
-    await originalRegister(ctx);
+      async callback(ctx) {
+        const provider = ctx.params.provider || 'local';
 
-    // If registration failed the body will be an error — bail out.
-    const created = ctx.body && ctx.body.user;
-    if (!created || !created.id) return;
+        if (provider === 'local') {
+          const identifier = typeof ctx.request.body?.identifier === 'string'
+            ? ctx.request.body.identifier.trim()
+            : '';
 
-    const updateData = {};
-    if (extras.fullName) updateData.fullName = extras.fullName;
-    if (extras.phone) updateData.phone = extras.phone;
-    if (extras.religion) updateData.religion = extras.religion;
-    if (extras.isParent) updateData.isParent = true;
+          if (identifier && looksLikePhone(identifier)) {
+            const normalizedIdentifier = normalizePhone(identifier);
+            const users = await strapi.db.query('plugin::users-permissions.user').findMany({
+              where: { provider: 'local' },
+              select: ['id', 'email', 'username', 'phone'],
+              limit: 20000,
+            });
 
-    if (Object.keys(updateData).length > 0) {
-      try {
-        await strapi.db.query('plugin::users-permissions.user').update({
-          where: { id: created.id },
-          data: updateData,
-        });
-        ctx.body = {
-          ...ctx.body,
-          user: { ...created, ...updateData },
+            const matchedUser = users.find(
+              (entry) => normalizePhone(entry.phone) === normalizedIdentifier
+            );
+
+            if (matchedUser) {
+              ctx.request.body.identifier = matchedUser.email || matchedUser.username;
+            }
+          }
+        }
+
+        return originalCallback(ctx);
+      },
+
+      async register(ctx) {
+        const body = ctx.request.body || {};
+        const normalizedPhone = normalizePhone(body.phone);
+        const extras = {
+          fullName: typeof body.fullName === 'string' ? body.fullName.trim() : undefined,
+          phone: normalizedPhone || undefined,
+          religion: RELIGION_OPTIONS.includes(body.religion) ? body.religion : undefined,
+          isParent: body.isParent === true || body.isParent === 'true',
         };
-      } catch (err) {
-        strapi.log.warn(`[register-extension] failed to persist parent fields: ${err.message}`);
-      }
-    }
+
+        if (normalizedPhone) {
+          const existingUsers = await strapi.db.query('plugin::users-permissions.user').findMany({
+            where: { phone: { $notNull: true } },
+            select: ['id', 'phone'],
+            limit: 20000,
+          });
+
+          const duplicatePhone = existingUsers.find(
+            (entry) => normalizePhone(entry.phone) === normalizedPhone
+          );
+          if (duplicatePhone) {
+            throw new ValidationError('Phone number is already in use');
+          }
+        }
+
+        // Strapi v5's users-permissions register validator rejects unknown keys
+        // (e.g. religion, isParent, phone, fullName) before reaching our wrapper,
+        // so we strip them off the request body, let the core handler run with
+        // only the canonical { username, email, password }, then patch the new
+        // user with our extras afterwards.
+        ctx.request.body = {
+          username: body.username,
+          email: body.email,
+          password: body.password,
+        };
+
+        await originalRegister(ctx);
+
+        // If registration failed the body will be an error — bail out.
+        const created = ctx.body && ctx.body.user;
+        if (!created || !created.id) return;
+
+        const updateData = {};
+        if (extras.fullName) updateData.fullName = extras.fullName;
+        if (extras.phone) updateData.phone = extras.phone;
+        if (extras.religion) updateData.religion = extras.religion;
+        if (extras.isParent) updateData.isParent = true;
+
+        if (Object.keys(updateData).length > 0) {
+          try {
+            await strapi.db.query('plugin::users-permissions.user').update({
+              where: { id: created.id },
+              data: updateData,
+            });
+            ctx.body = {
+              ...ctx.body,
+              user: { ...created, ...updateData },
+            };
+          } catch (err) {
+            strapi.log.warn(`[register-extension] failed to persist parent fields: ${err.message}`);
+          }
+        }
+      },
+    };
   };
 
   // Override Google provider to use full name instead of email prefix as username
