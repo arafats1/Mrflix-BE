@@ -35,7 +35,7 @@ module.exports = ({ env }) => ({
         expiresIn: '7d',
       },
       register: {
-        allowedFields: ['phone', 'fullName'],
+        allowedFields: ['phone', 'fullName', 'religion', 'isParent'],
       },
     },
   },

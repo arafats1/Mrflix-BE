@@ -294,6 +294,10 @@ module.exports = {
           // Movies - public can find and findOne
           { action: 'api::movie.movie.find' },
           { action: 'api::movie.movie.findOne' },
+          // Music - public can browse the catalog (gating happens client-side
+          // by isExclusive + age + religion)
+          { action: 'api::music.music.find' },
+          { action: 'api::music.music.findOne' },
           // Site settings - public can read pricing
           { action: 'api::site-setting.site-setting.find' },
           // Auth - public can register, login, callback
@@ -368,6 +372,15 @@ module.exports = {
           { action: 'plugin::users-permissions.user.me' },
           { action: 'plugin::users-permissions.auth.callback' },
           { action: 'plugin::users-permissions.auth.connect' },
+          // Child profiles (parent-only enforcement happens in controller)
+          { action: 'api::child-profile.child-profile.mine' },
+          { action: 'api::child-profile.child-profile.create' },
+          { action: 'api::child-profile.child-profile.update' },
+          { action: 'api::child-profile.child-profile.delete' },
+          { action: 'api::child-profile.child-profile.toggleBlock' },
+          // Music
+          { action: 'api::music.music.find' },
+          { action: 'api::music.music.findOne' },
           // MrKeyp Storage Files
           { action: 'api::storage-file.storage-file.find' },
           { action: 'api::storage-file.storage-file.findOne' },
@@ -541,6 +554,12 @@ module.exports = {
           { action: 'api::storage-subscription.storage-subscription.adminStats' },
           { action: 'api::storage-subscription.storage-subscription.adminUsers' },
           { action: 'api::storage-subscription.storage-subscription.pricing' },
+          // Music management
+          { action: 'api::music.music.find' },
+          { action: 'api::music.music.findOne' },
+          { action: 'api::music.music.create' },
+          { action: 'api::music.music.update' },
+          { action: 'api::music.music.delete' },
         ];
 
         for (const perm of adminPermissions) {

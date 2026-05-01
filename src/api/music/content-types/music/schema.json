@@ -1,0 +1,86 @@
+{
+  "kind": "collectionType",
+  "collectionName": "music_tracks",
+  "info": {
+    "singularName": "music",
+    "pluralName": "musics",
+    "displayName": "Music",
+    "description": "Music videos and audio tracks for the dedicated Music section"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "title": {
+      "type": "string",
+      "required": true
+    },
+    "description": {
+      "type": "text"
+    },
+    "artist": {
+      "type": "string"
+    },
+    "mediaType": {
+      "type": "enumeration",
+      "enum": ["video", "audio"],
+      "default": "video",
+      "required": true
+    },
+    "videoUrl": {
+      "type": "string"
+    },
+    "audioUrl": {
+      "type": "string"
+    },
+    "posterUrl": {
+      "type": "string"
+    },
+    "durationSeconds": {
+      "type": "integer",
+      "default": 0
+    },
+    "minAge": {
+      "type": "integer",
+      "default": 0,
+      "min": 0,
+      "max": 21
+    },
+    "religiousCategory": {
+      "type": "enumeration",
+      "enum": [
+        "Catholic",
+        "Protestant",
+        "Pentecostal",
+        "Adventist",
+        "Orthodox",
+        "Muslim",
+        "Hindu",
+        "Bahai",
+        "Traditional",
+        "Other"
+      ]
+    },
+    "genres": {
+      "type": "json",
+      "default": []
+    },
+    "isExclusive": {
+      "type": "boolean",
+      "default": true
+    },
+    "isPublished": {
+      "type": "boolean",
+      "default": true
+    },
+    "isFeatured": {
+      "type": "boolean",
+      "default": false
+    },
+    "watchCount": {
+      "type": "integer",
+      "default": 0
+    }
+  }
+}

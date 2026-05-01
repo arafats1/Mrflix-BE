@@ -580,6 +580,52 @@ export interface ApiChatLogChatLog extends Struct.CollectionTypeSchema {
   };
 }
 
+export interface ApiChildProfileChildProfile
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'child_profiles';
+  info: {
+    description: 'Per-child sub-profile owned by a parent account';
+    displayName: 'Child Profile';
+    pluralName: 'child-profiles';
+    singularName: 'child-profile';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    avatarUrl: Schema.Attribute.String;
+    blockedMovieIds: Schema.Attribute.JSON & Schema.Attribute.DefaultTo<[]>;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    dailyWatchMinutes: Schema.Attribute.Integer &
+      Schema.Attribute.SetMinMax<
+        {
+          max: 1440;
+          min: 0;
+        },
+        number
+      > &
+      Schema.Attribute.DefaultTo<60>;
+    dateOfBirth: Schema.Attribute.Date & Schema.Attribute.Required;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::child-profile.child-profile'
+    > &
+      Schema.Attribute.Private;
+    name: Schema.Attribute.String & Schema.Attribute.Required;
+    parent: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+    publishedAt: Schema.Attribute.DateTime;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface ApiContactMessageContactMessage
   extends Struct.CollectionTypeSchema {
   collectionName: 'contact_messages';
@@ -798,6 +844,15 @@ export interface ApiMovieMovie extends Struct.CollectionTypeSchema {
     lugandaVideoUrl: Schema.Attribute.String;
     lugandaVideoUrl480: Schema.Attribute.String;
     lugandaVideoUrl720: Schema.Attribute.String;
+    minAge: Schema.Attribute.Integer &
+      Schema.Attribute.SetMinMax<
+        {
+          max: 21;
+          min: 0;
+        },
+        number
+      > &
+      Schema.Attribute.DefaultTo<0>;
     overview: Schema.Attribute.Text;
     poster: Schema.Attribute.Media<'images'>;
     posterUrl: Schema.Attribute.String;
@@ -807,6 +862,20 @@ export interface ApiMovieMovie extends Struct.CollectionTypeSchema {
     publishedAt: Schema.Attribute.DateTime;
     rating: Schema.Attribute.Decimal;
     releaseDate: Schema.Attribute.Date;
+    religiousCategory: Schema.Attribute.Enumeration<
+      [
+        'Catholic',
+        'Protestant',
+        'Pentecostal',
+        'Adventist',
+        'Orthodox',
+        'Muslim',
+        'Hindu',
+        'Bahai',
+        'Traditional',
+        'Other',
+      ]
+    >;
     seasons: Schema.Attribute.Integer;
     subtitleUrl: Schema.Attribute.String;
     title: Schema.Attribute.String & Schema.Attribute.Required;
@@ -823,6 +892,69 @@ export interface ApiMovieMovie extends Struct.CollectionTypeSchema {
     videoUrl480: Schema.Attribute.String;
     videoUrl720: Schema.Attribute.String;
     vjName: Schema.Attribute.String;
+    watchCount: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+  };
+}
+
+export interface ApiMusicMusic extends Struct.CollectionTypeSchema {
+  collectionName: 'music_tracks';
+  info: {
+    description: 'Music videos and audio tracks for the dedicated Music section';
+    displayName: 'Music';
+    pluralName: 'musics';
+    singularName: 'music';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    artist: Schema.Attribute.String;
+    audioUrl: Schema.Attribute.String;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    description: Schema.Attribute.Text;
+    durationSeconds: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    genres: Schema.Attribute.JSON & Schema.Attribute.DefaultTo<[]>;
+    isExclusive: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<true>;
+    isFeatured: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
+    isPublished: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<true>;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<'oneToMany', 'api::music.music'> &
+      Schema.Attribute.Private;
+    mediaType: Schema.Attribute.Enumeration<['video', 'audio']> &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<'video'>;
+    minAge: Schema.Attribute.Integer &
+      Schema.Attribute.SetMinMax<
+        {
+          max: 21;
+          min: 0;
+        },
+        number
+      > &
+      Schema.Attribute.DefaultTo<0>;
+    posterUrl: Schema.Attribute.String;
+    publishedAt: Schema.Attribute.DateTime;
+    religiousCategory: Schema.Attribute.Enumeration<
+      [
+        'Catholic',
+        'Protestant',
+        'Pentecostal',
+        'Adventist',
+        'Orthodox',
+        'Muslim',
+        'Hindu',
+        'Bahai',
+        'Traditional',
+        'Other',
+      ]
+    >;
+    title: Schema.Attribute.String & Schema.Attribute.Required;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    videoUrl: Schema.Attribute.String;
     watchCount: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
   };
 }
@@ -1896,6 +2028,10 @@ export interface PluginUsersPermissionsUser
   };
   attributes: {
     blocked: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
+    childProfiles: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::child-profile.child-profile'
+    >;
     confirmationToken: Schema.Attribute.String & Schema.Attribute.Private;
     confirmed: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
     createdAt: Schema.Attribute.DateTime;
@@ -1907,6 +2043,7 @@ export interface PluginUsersPermissionsUser
         minLength: 6;
       }>;
     isKeypUser: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
+    isParent: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
     keypActivatedAt: Schema.Attribute.DateTime;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
@@ -1919,8 +2056,23 @@ export interface PluginUsersPermissionsUser
       Schema.Attribute.SetMinMaxLength<{
         minLength: 6;
       }>;
+    phone: Schema.Attribute.String;
     provider: Schema.Attribute.String;
     publishedAt: Schema.Attribute.DateTime;
+    religion: Schema.Attribute.Enumeration<
+      [
+        'Catholic',
+        'Protestant',
+        'Pentecostal',
+        'Adventist',
+        'Orthodox',
+        'Muslim',
+        'Hindu',
+        'Bahai',
+        'Traditional',
+        'Other',
+      ]
+    >;
     resetPasswordToken: Schema.Attribute.String & Schema.Attribute.Private;
     role: Schema.Attribute.Relation<
       'manyToOne',
@@ -1952,11 +2104,13 @@ declare module '@strapi/strapi' {
       'api::account-invitation.account-invitation': ApiAccountInvitationAccountInvitation;
       'api::active-stream.active-stream': ApiActiveStreamActiveStream;
       'api::chat-log.chat-log': ApiChatLogChatLog;
+      'api::child-profile.child-profile': ApiChildProfileChildProfile;
       'api::contact-message.contact-message': ApiContactMessageContactMessage;
       'api::exclusive-subscription.exclusive-subscription': ApiExclusiveSubscriptionExclusiveSubscription;
       'api::free-trial-watch.free-trial-watch': ApiFreeTrialWatchFreeTrialWatch;
       'api::movie-request.movie-request': ApiMovieRequestMovieRequest;
       'api::movie.movie': ApiMovieMovie;
+      'api::music.music': ApiMusicMusic;
       'api::purchase.purchase': ApiPurchasePurchase;
       'api::referral.referral': ApiReferralReferral;
       'api::search-history.search-history': ApiSearchHistorySearchHistory;

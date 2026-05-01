@@ -135,6 +135,27 @@
     },
     "bulkFolder": {
       "type": "string"
+    },
+    "minAge": {
+      "type": "integer",
+      "default": 0,
+      "min": 0,
+      "max": 21
+    },
+    "religiousCategory": {
+      "type": "enumeration",
+      "enum": [
+        "Catholic",
+        "Protestant",
+        "Pentecostal",
+        "Adventist",
+        "Orthodox",
+        "Muslim",
+        "Hindu",
+        "Bahai",
+        "Traditional",
+        "Other"
+      ]
     }
   }
 }

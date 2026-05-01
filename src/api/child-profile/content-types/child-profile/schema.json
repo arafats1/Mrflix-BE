@@ -1,0 +1,43 @@
+{
+  "kind": "collectionType",
+  "collectionName": "child_profiles",
+  "info": {
+    "singularName": "child-profile",
+    "pluralName": "child-profiles",
+    "displayName": "Child Profile",
+    "description": "Per-child sub-profile owned by a parent account"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "name": {
+      "type": "string",
+      "required": true
+    },
+    "dateOfBirth": {
+      "type": "date",
+      "required": true
+    },
+    "avatarUrl": {
+      "type": "string"
+    },
+    "dailyWatchMinutes": {
+      "type": "integer",
+      "default": 60,
+      "min": 0,
+      "max": 1440
+    },
+    "blockedMovieIds": {
+      "type": "json",
+      "default": []
+    },
+    "parent": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user",
+      "inversedBy": "childProfiles"
+    }
+  }
+}

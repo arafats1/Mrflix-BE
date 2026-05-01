@@ -5,6 +5,21 @@
  * - Include role in /users/me response
  * - Override Google provider to use full name as username
  */
+// Religion options must match the dropdown used on registration AND
+// religion-content tagging in the admin panel so filtering stays uniform.
+const RELIGION_OPTIONS = [
+  'Catholic',
+  'Protestant',
+  'Pentecostal',
+  'Adventist',
+  'Orthodox',
+  'Muslim',
+  'Hindu',
+  'Bahai',
+  'Traditional',
+  'Other',
+];
+
 module.exports = (plugin) => {
   plugin.contentTypes.user.schema.attributes.isKeypUser = {
     type: 'boolean',
@@ -13,6 +28,30 @@ module.exports = (plugin) => {
 
   plugin.contentTypes.user.schema.attributes.keypActivatedAt = {
     type: 'datetime',
+  };
+
+  // Parent-account fields. A "parent" account can create child profiles
+  // and gets parental-control features (watch-time limits, content blocks).
+  plugin.contentTypes.user.schema.attributes.phone = {
+    type: 'string',
+  };
+
+  plugin.contentTypes.user.schema.attributes.religion = {
+    type: 'enumeration',
+    enum: RELIGION_OPTIONS,
+  };
+
+  plugin.contentTypes.user.schema.attributes.isParent = {
+    type: 'boolean',
+    default: false,
+  };
+
+  // Child profiles created by this parent account.
+  plugin.contentTypes.user.schema.attributes.childProfiles = {
+    type: 'relation',
+    relation: 'oneToMany',
+    target: 'api::child-profile.child-profile',
+    mappedBy: 'parent',
   };
 
   // Override the me controller to populate role
@@ -31,7 +70,7 @@ module.exports = (plugin) => {
       .query('plugin::users-permissions.user')
       .findOne({
         where: { id: user.id },
-        populate: ['role'],
+        populate: ['role', 'childProfiles'],
       });
 
     if (!userWithRole) {
@@ -85,6 +124,20 @@ module.exports = (plugin) => {
       confirmed: userWithRole.confirmed,
       blocked: userWithRole.blocked,
       fullName: userWithRole.fullName,
+      phone: userWithRole.phone || null,
+      religion: userWithRole.religion || null,
+      isParent: !!userWithRole.isParent,
+      childProfiles: Array.isArray(userWithRole.childProfiles)
+        ? userWithRole.childProfiles.map((c) => ({
+            id: c.id,
+            documentId: c.documentId,
+            name: c.name,
+            dateOfBirth: c.dateOfBirth,
+            avatarUrl: c.avatarUrl,
+            dailyWatchMinutes: c.dailyWatchMinutes,
+            blockedMovieIds: Array.isArray(c.blockedMovieIds) ? c.blockedMovieIds : [],
+          }))
+        : [],
       isKeypUser: !!userWithRole.isKeypUser,
       keypActivatedAt: userWithRole.keypActivatedAt,
       createdAt: userWithRole.createdAt,
@@ -100,6 +153,60 @@ module.exports = (plugin) => {
           }
         : null,
     };
+  };
+
+  // Wrap the register controller so we can persist parent-account fields
+  // (phone, religion, isParent, fullName) that the default users-permissions
+  // register strips out. We let the original handler create the user, then
+  // patch the new record with our extras and re-issue the response.
+  const originalRegister = plugin.controllers.auth.register;
+
+  plugin.controllers.auth.register = async (ctx) => {
+    const body = ctx.request.body || {};
+    const extras = {
+      fullName: typeof body.fullName === 'string' ? body.fullName.trim() : undefined,
+      phone: typeof body.phone === 'string' ? body.phone.trim() : undefined,
+      religion: RELIGION_OPTIONS.includes(body.religion) ? body.religion : undefined,
+      isParent: body.isParent === true || body.isParent === 'true',
+    };
+
+    // Strapi v5's users-permissions register validator rejects unknown keys
+    // (e.g. religion, isParent, phone, fullName) before reaching our wrapper,
+    // so we strip them off the request body, let the core handler run with
+    // only the canonical { username, email, password }, then patch the new
+    // user with our extras afterwards.
+    ctx.request.body = {
+      username: body.username,
+      email: body.email,
+      password: body.password,
+    };
+
+    await originalRegister(ctx);
+
+    // If registration failed the body will be an error — bail out.
+    const created = ctx.body && ctx.body.user;
+    if (!created || !created.id) return;
+
+    const updateData = {};
+    if (extras.fullName) updateData.fullName = extras.fullName;
+    if (extras.phone) updateData.phone = extras.phone;
+    if (extras.religion) updateData.religion = extras.religion;
+    if (extras.isParent) updateData.isParent = true;
+
+    if (Object.keys(updateData).length > 0) {
+      try {
+        await strapi.db.query('plugin::users-permissions.user').update({
+          where: { id: created.id },
+          data: updateData,
+        });
+        ctx.body = {
+          ...ctx.body,
+          user: { ...created, ...updateData },
+        };
+      } catch (err) {
+        strapi.log.warn(`[register-extension] failed to persist parent fields: ${err.message}`);
+      }
+    }
   };
 
   // Override Google provider to use full name instead of email prefix as username
