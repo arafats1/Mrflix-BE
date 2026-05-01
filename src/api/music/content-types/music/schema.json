@@ -93,6 +93,10 @@
     "watchCount": {
       "type": "integer",
       "default": 0
+    },
+    "comments": {
+      "type": "json",
+      "default": []
     }
   }
 }

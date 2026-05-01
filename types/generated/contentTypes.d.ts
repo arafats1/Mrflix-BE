@@ -922,6 +922,7 @@ export interface ApiMusicMusic extends Struct.CollectionTypeSchema {
   attributes: {
     artist: Schema.Attribute.String;
     audioUrl: Schema.Attribute.String;
+    comments: Schema.Attribute.JSON & Schema.Attribute.DefaultTo<[]>;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -1172,6 +1173,7 @@ export interface ApiSiteSettingSiteSetting extends Struct.SingleTypeSchema {
     draftAndPublish: false;
   };
   attributes: {
+    aboutPageContent: Schema.Attribute.JSON;
     apkDownloadCount: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
     apkSize: Schema.Attribute.String;
     apkUpdatedAt: Schema.Attribute.DateTime;

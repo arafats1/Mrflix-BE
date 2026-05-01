@@ -124,6 +124,9 @@
     "storageEnabled": {
       "type": "boolean",
       "default": true
+    },
+    "aboutPageContent": {
+      "type": "json"
     }
   }
 }
