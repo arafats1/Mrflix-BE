@@ -235,11 +235,17 @@ module.exports = (plugin) => {
       async register(ctx) {
         const body = ctx.request.body || {};
         const normalizedPhone = normalizePhone(body.phone);
+        const isParent = body.isParent === true || body.isParent === 'true';
+
+        if (!isParent) {
+          throw new ValidationError('You must confirm that you are a parent to register');
+        }
+
         const extras = {
           fullName: typeof body.fullName === 'string' ? body.fullName.trim() : undefined,
           phone: normalizedPhone || undefined,
           religion: RELIGION_OPTIONS.includes(body.religion) ? body.religion : undefined,
-          isParent: body.isParent === true || body.isParent === 'true',
+          isParent,
         };
 
         if (normalizedPhone) {
