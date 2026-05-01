@@ -969,6 +969,8 @@ export interface ApiMusicMusic extends Struct.CollectionTypeSchema {
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
     videoUrl: Schema.Attribute.String;
+    videoUrl480: Schema.Attribute.String;
+    videoUrl720: Schema.Attribute.String;
     watchCount: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
   };
 }

@@ -31,6 +31,12 @@
     "videoUrl": {
       "type": "string"
     },
+    "videoUrl720": {
+      "type": "string"
+    },
+    "videoUrl480": {
+      "type": "string"
+    },
     "embedUrl": {
       "type": "string"
     },
