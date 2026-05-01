@@ -1,5 +1,7 @@
 'use strict';
 
+const bcrypt = require('bcryptjs');
+
 /**
  * Extend the users-permissions plugin:
  * - Include role in /users/me response
@@ -44,6 +46,15 @@ module.exports = (plugin) => {
   plugin.contentTypes.user.schema.attributes.isParent = {
     type: 'boolean',
     default: false,
+  };
+
+  plugin.contentTypes.user.schema.attributes.parentPinHash = {
+    type: 'password',
+    private: true,
+  };
+
+  plugin.contentTypes.user.schema.attributes.parentPinUpdatedAt = {
+    type: 'datetime',
   };
 
   // Child profiles created by this parent account.
@@ -127,6 +138,8 @@ module.exports = (plugin) => {
       phone: userWithRole.phone || null,
       religion: userWithRole.religion || null,
       isParent: !!userWithRole.isParent,
+      hasParentPin: !!userWithRole.parentPinHash,
+      parentPinUpdatedAt: userWithRole.parentPinUpdatedAt || null,
       childProfiles: Array.isArray(userWithRole.childProfiles)
         ? userWithRole.childProfiles.map((c) => ({
             id: c.id,
