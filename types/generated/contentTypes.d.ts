@@ -927,6 +927,7 @@ export interface ApiMusicMusic extends Struct.CollectionTypeSchema {
       Schema.Attribute.Private;
     description: Schema.Attribute.Text;
     durationSeconds: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    embedUrl: Schema.Attribute.String;
     featureImageUrl: Schema.Attribute.String;
     genres: Schema.Attribute.JSON & Schema.Attribute.DefaultTo<[]>;
     isExclusive: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<true>;
