@@ -3,6 +3,17 @@
 const { createCoreController } = require('@strapi/strapi').factories;
 
 const MIN_WATCHED_SECONDS = 4 * 60;
+const MOVIE_POPULATE = {
+  fields: ['title', 'type', 'posterUrl', 'backdropUrl', 'documentId', 'isLuganda', 'vjName'],
+  populate: {
+    poster: {
+      fields: ['url'],
+    },
+    backdrop: {
+      fields: ['url'],
+    },
+  },
+};
 
 async function resolveOwnedChildProfile(strapi, userId, childProfileId) {
   if (!childProfileId) return null;
@@ -36,6 +47,9 @@ function mapStream(stream) {
       title: stream.movie?.title,
       type: stream.movie?.type,
       posterUrl: stream.movie?.posterUrl,
+      backdropUrl: stream.movie?.backdropUrl,
+      poster: stream.movie?.poster,
+      backdrop: stream.movie?.backdrop,
       isLuganda: stream.movie?.isLuganda || false,
       vjName: stream.movie?.vjName || '',
     },
@@ -240,7 +254,7 @@ module.exports = createCoreController('api::active-stream.active-stream', ({ str
       filters: { status: 'watching' },
       populate: {
         user: { fields: ['username', 'email'] },
-        movie: { fields: ['title', 'type', 'posterUrl', 'documentId', 'isLuganda', 'vjName'] },
+        movie: MOVIE_POPULATE,
       },
       sort: 'lastHeartbeat:desc',
     });
@@ -300,7 +314,7 @@ module.exports = createCoreController('api::active-stream.active-stream', ({ str
       filters,
       populate: {
         user: { fields: ['username', 'email'] },
-        movie: { fields: ['title', 'type', 'posterUrl', 'documentId', 'isLuganda', 'vjName'] },
+        movie: MOVIE_POPULATE,
       },
       sort: 'endedAt:desc',
       start: (page - 1) * pageSize,
@@ -365,7 +379,7 @@ module.exports = createCoreController('api::active-stream.active-stream', ({ str
       },
       populate: {
         childProfile: { fields: ['name', 'avatarUrl', 'documentId'] },
-        movie: { fields: ['title', 'type', 'posterUrl', 'documentId', 'isLuganda', 'vjName'] },
+        movie: MOVIE_POPULATE,
       },
       sort: 'lastHeartbeat:desc',
       limit: 500,
