@@ -37,6 +37,9 @@
     "posterUrl": {
       "type": "string"
     },
+    "featureImageUrl": {
+      "type": "string"
+    },
     "durationSeconds": {
       "type": "integer",
       "default": 0
