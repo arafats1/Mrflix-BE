@@ -495,6 +495,10 @@ export interface ApiActiveStreamActiveStream
       ['purchased', 'subscription', 'free_trial', 'free_movie_of_week']
     > &
       Schema.Attribute.DefaultTo<'purchased'>;
+    childProfile: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::child-profile.child-profile'
+    >;
     contentType: Schema.Attribute.Enumeration<['movie', 'episode']> &
       Schema.Attribute.DefaultTo<'movie'>;
     createdAt: Schema.Attribute.DateTime;
@@ -537,6 +541,14 @@ export interface ApiActiveStreamActiveStream
       'manyToOne',
       'plugin::users-permissions.user'
     >;
+    watchedSeconds: Schema.Attribute.Integer &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0;
+        },
+        number
+      > &
+      Schema.Attribute.DefaultTo<0>;
   };
 }
 

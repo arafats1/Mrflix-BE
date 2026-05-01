@@ -39,6 +39,15 @@ module.exports = {
       },
     },
     {
+      method: 'GET',
+      path: '/active-streams/parent-history',
+      handler: 'active-stream.parentHistory',
+      config: {
+        policies: [],
+        middlewares: [],
+      },
+    },
+    {
       method: 'POST',
       path: '/active-streams/clear-history',
       handler: 'active-stream.clearHistory',

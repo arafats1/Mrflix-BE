@@ -366,6 +366,7 @@ module.exports = {
           // Active Streaming
           { action: 'api::active-stream.active-stream.heartbeat' },
           { action: 'api::active-stream.active-stream.stop' },
+          { action: 'api::active-stream.active-stream.parentHistory' },
           // Contact messages
           { action: 'api::contact-message.contact-message.create' },
           // User profile
@@ -497,6 +498,7 @@ module.exports = {
           { action: 'api::active-stream.active-stream.stop' },
           { action: 'api::active-stream.active-stream.adminList' },
           { action: 'api::active-stream.active-stream.adminHistory' },
+          { action: 'api::active-stream.active-stream.parentHistory' },
           // Contact messages (admin)
           { action: 'api::contact-message.contact-message.find' },
           { action: 'api::contact-message.contact-message.findOne' },

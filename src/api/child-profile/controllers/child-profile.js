@@ -3,6 +3,7 @@
 const { createCoreController } = require('@strapi/strapi').factories;
 
 const ALLOWED_FIELDS = ['name', 'dateOfBirth', 'avatarUrl', 'dailyWatchMinutes', 'blockedMovieIds'];
+const MAX_CHILD_PROFILES = 4;
 
 function pickAllowed(input = {}) {
   const out = {};
@@ -66,6 +67,14 @@ module.exports = createCoreController('api::child-profile.child-profile', ({ str
     if (!user) return ctx.unauthorized();
     if (!user.isParent) {
       return ctx.forbidden('Only parent accounts can create child profiles.');
+    }
+
+    const existingCount = await strapi.db.query('api::child-profile.child-profile').count({
+      where: { parent: { id: user.id } },
+    });
+
+    if (existingCount >= MAX_CHILD_PROFILES) {
+      return ctx.badRequest(`You can only create up to ${MAX_CHILD_PROFILES} child profiles.`);
     }
 
     const body = (ctx.request.body && ctx.request.body.data) || ctx.request.body || {};

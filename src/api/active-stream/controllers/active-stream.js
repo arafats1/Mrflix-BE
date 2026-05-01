@@ -2,6 +2,57 @@
 
 const { createCoreController } = require('@strapi/strapi').factories;
 
+const MIN_WATCHED_SECONDS = 4 * 60;
+
+async function resolveOwnedChildProfile(strapi, userId, childProfileId) {
+  if (!childProfileId) return null;
+
+  const where = {
+    parent: { id: userId },
+  };
+
+  if (/^\d+$/.test(String(childProfileId))) {
+    where.id = Number(childProfileId);
+  } else {
+    where.documentId = String(childProfileId);
+  }
+
+  return strapi.db.query('api::child-profile.child-profile').findOne({ where });
+}
+
+function mapStream(stream) {
+  return {
+    id: stream.documentId || stream.id,
+    childProfile: stream.childProfile
+      ? {
+          id: stream.childProfile.id,
+          documentId: stream.childProfile.documentId,
+          name: stream.childProfile.name,
+          avatarUrl: stream.childProfile.avatarUrl || null,
+        }
+      : null,
+    movie: {
+      id: stream.movie?.documentId || stream.movie?.id,
+      title: stream.movie?.title,
+      type: stream.movie?.type,
+      posterUrl: stream.movie?.posterUrl,
+      isLuganda: stream.movie?.isLuganda || false,
+      vjName: stream.movie?.vjName || '',
+    },
+    contentType: stream.contentType,
+    episodeSeason: stream.episodeSeason,
+    episodeNumber: stream.episodeNumber,
+    platform: stream.platform,
+    startedAt: stream.startedAt,
+    endedAt: stream.endedAt,
+    lastHeartbeat: stream.lastHeartbeat,
+    progress: stream.progress || 0,
+    watchedSeconds: stream.watchedSeconds || 0,
+    status: stream.status,
+    accessType: stream.accessType || 'purchased',
+  };
+}
+
 module.exports = createCoreController('api::active-stream.active-stream', ({ strapi }) => ({
 
   /**
@@ -14,7 +65,7 @@ module.exports = createCoreController('api::active-stream.active-stream', ({ str
       return ctx.unauthorized('You must be logged in');
     }
 
-    const { movieId, contentType, episodeSeason, episodeNumber, platform, progress, accessType, deviceId } = ctx.request.body.data || ctx.request.body;
+    const { movieId, contentType, episodeSeason, episodeNumber, platform, progress, accessType, deviceId, childProfileId, watchedSeconds } = ctx.request.body.data || ctx.request.body;
 
     if (!movieId) {
       return ctx.badRequest('Missing required field: movieId');
@@ -22,8 +73,14 @@ module.exports = createCoreController('api::active-stream.active-stream', ({ str
 
     const now = new Date().toISOString();
     const progressVal = typeof progress === 'number' ? Math.min(100, Math.max(0, Math.round(progress))) : null;
+    const watchedSecondsVal = typeof watchedSeconds === 'number' ? Math.max(0, Math.round(watchedSeconds)) : null;
     const validAccessTypes = ['purchased', 'subscription', 'free_trial', 'free_movie_of_week'];
     const accessTypeVal = validAccessTypes.includes(accessType) ? accessType : 'purchased';
+    const childProfile = await resolveOwnedChildProfile(strapi, ctx.state.user.id, childProfileId);
+
+    if (childProfileId && !childProfile) {
+      return ctx.badRequest('Invalid child profile');
+    }
 
     // Look for an existing ACTIVE stream for this user + movie + episode + device
     const filters = {
@@ -48,6 +105,8 @@ module.exports = createCoreController('api::active-stream.active-stream', ({ str
       // Update heartbeat timestamp and progress
       const updateData = { lastHeartbeat: now };
       if (progressVal !== null) updateData.progress = progressVal;
+      if (watchedSecondsVal !== null) updateData.watchedSeconds = Math.max(existing[0].watchedSeconds || 0, watchedSecondsVal);
+      if (childProfile) updateData.childProfile = childProfile.documentId || childProfile.id;
 
       await strapi.documents('api::active-stream.active-stream').update({
         documentId: existing[0].documentId,
@@ -102,8 +161,10 @@ module.exports = createCoreController('api::active-stream.active-stream', ({ str
           platform: platform || 'web',
           status: 'watching',
           progress: progressVal || 0,
+          watchedSeconds: watchedSecondsVal || 0,
           accessType: accessTypeVal,
           deviceId: deviceId || null,
+          childProfile: childProfile ? (childProfile.documentId || childProfile.id) : null,
         },
       });
     }
@@ -121,9 +182,10 @@ module.exports = createCoreController('api::active-stream.active-stream', ({ str
       return ctx.unauthorized('You must be logged in');
     }
 
-    const { progress, deviceId } = ctx.request.body?.data || ctx.request.body || {};
+    const { progress, deviceId, watchedSeconds } = ctx.request.body?.data || ctx.request.body || {};
     const now = new Date().toISOString();
     const progressVal = typeof progress === 'number' ? Math.min(100, Math.max(0, Math.round(progress))) : null;
+    const watchedSecondsVal = typeof watchedSeconds === 'number' ? Math.max(0, Math.round(watchedSeconds)) : null;
 
     // If deviceId is provided, only stop streams for that device; otherwise stop all
     const filters = { user: { id: ctx.state.user.id }, status: 'watching' };
@@ -144,6 +206,7 @@ module.exports = createCoreController('api::active-stream.active-stream', ({ str
           status: finalProgress >= 90 ? 'completed' : 'stopped',
           endedAt: now,
           progress: finalProgress,
+          watchedSeconds: watchedSecondsVal !== null ? Math.max(stream.watchedSeconds || 0, watchedSecondsVal) : (stream.watchedSeconds || 0),
         },
       });
     }
@@ -205,6 +268,7 @@ module.exports = createCoreController('api::active-stream.active-stream', ({ str
         startedAt: s.startedAt,
         lastHeartbeat: s.lastHeartbeat,
         progress: s.progress || 0,
+        watchedSeconds: s.watchedSeconds || 0,
         status: s.status,
         accessType: s.accessType || 'purchased',
         deviceId: s.deviceId || null,
@@ -273,6 +337,7 @@ module.exports = createCoreController('api::active-stream.active-stream', ({ str
         startedAt: s.startedAt,
         endedAt: s.endedAt,
         progress: s.progress || 0,
+        watchedSeconds: s.watchedSeconds || 0,
         status: s.status,
         accessType: s.accessType || 'purchased',
       })),
@@ -280,6 +345,53 @@ module.exports = createCoreController('api::active-stream.active-stream', ({ str
         total: allHistory.length,
         page,
         pageSize,
+      },
+    };
+  },
+
+  async parentHistory(ctx) {
+    if (!ctx.state.user) {
+      return ctx.unauthorized('You must be logged in');
+    }
+
+    if (!ctx.state.user.isParent) {
+      return ctx.forbidden('Only parent accounts can view child watch history');
+    }
+
+    const streams = await strapi.documents('api::active-stream.active-stream').findMany({
+      filters: {
+        childProfile: { parent: { id: ctx.state.user.id } },
+        watchedSeconds: { $gte: MIN_WATCHED_SECONDS },
+      },
+      populate: {
+        childProfile: { fields: ['name', 'avatarUrl', 'documentId'] },
+        movie: { fields: ['title', 'type', 'posterUrl', 'documentId', 'isLuganda', 'vjName'] },
+      },
+      sort: 'lastHeartbeat:desc',
+      limit: 500,
+    });
+
+    const deduped = [];
+    const seen = new Set();
+    for (const stream of streams) {
+      const key = [
+        stream.childProfile?.documentId || stream.childProfile?.id || 'none',
+        stream.movie?.documentId || stream.movie?.id || 'none',
+        stream.contentType || 'movie',
+        stream.episodeSeason || 0,
+        stream.episodeNumber || 0,
+      ].join(':');
+
+      if (seen.has(key)) continue;
+      seen.add(key);
+      deduped.push(mapStream(stream));
+    }
+
+    return {
+      data: deduped,
+      meta: {
+        total: deduped.length,
+        minimumWatchedSeconds: MIN_WATCHED_SECONDS,
       },
     };
   },
