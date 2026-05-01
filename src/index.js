@@ -382,6 +382,7 @@ module.exports = {
           // Music
           { action: 'api::music.music.find' },
           { action: 'api::music.music.findOne' },
+          { action: 'api::music.music.addComment' },
           // MrKeyp Storage Files
           { action: 'api::storage-file.storage-file.find' },
           { action: 'api::storage-file.storage-file.findOne' },
@@ -559,6 +560,7 @@ module.exports = {
           // Music management
           { action: 'api::music.music.find' },
           { action: 'api::music.music.findOne' },
+          { action: 'api::music.music.addComment' },
           { action: 'api::music.music.create' },
           { action: 'api::music.music.update' },
           { action: 'api::music.music.delete' },
