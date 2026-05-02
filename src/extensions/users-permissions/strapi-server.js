@@ -169,6 +169,7 @@ module.exports = (plugin) => {
             avatarUrl: c.avatarUrl,
             dailyWatchMinutes: c.dailyWatchMinutes,
             blockedMovieIds: Array.isArray(c.blockedMovieIds) ? c.blockedMovieIds : [],
+            allowedMovieIds: Array.isArray(c.allowedMovieIds) ? c.allowedMovieIds : [],
           }))
         : [],
       isKeypUser: !!userWithRole.isKeypUser,

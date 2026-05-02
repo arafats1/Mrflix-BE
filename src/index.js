@@ -381,6 +381,7 @@ module.exports = {
           { action: 'api::child-profile.child-profile.update' },
           { action: 'api::child-profile.child-profile.delete' },
           { action: 'api::child-profile.child-profile.toggleBlock' },
+          { action: 'api::child-profile.child-profile.toggleAllowed' },
           // Music
           { action: 'api::music.music.find' },
           { action: 'api::music.music.findOne' },

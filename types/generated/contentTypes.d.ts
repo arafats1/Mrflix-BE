@@ -605,6 +605,7 @@ export interface ApiChildProfileChildProfile
     draftAndPublish: false;
   };
   attributes: {
+    allowedMovieIds: Schema.Attribute.JSON & Schema.Attribute.DefaultTo<[]>;
     avatarUrl: Schema.Attribute.String;
     blockedMovieIds: Schema.Attribute.JSON & Schema.Attribute.DefaultTo<[]>;
     createdAt: Schema.Attribute.DateTime;
@@ -837,6 +838,7 @@ export interface ApiMovieMovie extends Struct.CollectionTypeSchema {
     draftAndPublish: true;
   };
   attributes: {
+    adultsOnly: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
     backdrop: Schema.Attribute.Media<'images'>;
     backdropUrl: Schema.Attribute.String;
     bulkFolder: Schema.Attribute.String;

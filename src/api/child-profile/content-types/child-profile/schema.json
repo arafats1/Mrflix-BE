@@ -33,6 +33,10 @@
       "type": "json",
       "default": []
     },
+    "allowedMovieIds": {
+      "type": "json",
+      "default": []
+    },
     "parent": {
       "type": "relation",
       "relation": "manyToOne",

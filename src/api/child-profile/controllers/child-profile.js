@@ -2,7 +2,7 @@
 
 const { createCoreController } = require('@strapi/strapi').factories;
 
-const ALLOWED_FIELDS = ['name', 'dateOfBirth', 'avatarUrl', 'dailyWatchMinutes', 'blockedMovieIds'];
+const ALLOWED_FIELDS = ['name', 'dateOfBirth', 'avatarUrl', 'dailyWatchMinutes', 'blockedMovieIds', 'allowedMovieIds'];
 const MAX_CHILD_PROFILES = 4;
 
 function pickAllowed(input = {}) {
@@ -12,6 +12,9 @@ function pickAllowed(input = {}) {
   }
   if (out.blockedMovieIds && !Array.isArray(out.blockedMovieIds)) {
     out.blockedMovieIds = [];
+  }
+  if (out.allowedMovieIds && !Array.isArray(out.allowedMovieIds)) {
+    out.allowedMovieIds = [];
   }
   if (out.dailyWatchMinutes != null) {
     const n = Number(out.dailyWatchMinutes);
@@ -30,6 +33,7 @@ function shape(profile) {
     avatarUrl: profile.avatarUrl || null,
     dailyWatchMinutes: profile.dailyWatchMinutes ?? 60,
     blockedMovieIds: Array.isArray(profile.blockedMovieIds) ? profile.blockedMovieIds : [],
+    allowedMovieIds: Array.isArray(profile.allowedMovieIds) ? profile.allowedMovieIds : [],
     createdAt: profile.createdAt,
     updatedAt: profile.updatedAt,
   };
@@ -83,6 +87,7 @@ module.exports = createCoreController('api::child-profile.child-profile', ({ str
       return ctx.badRequest('name and dateOfBirth are required');
     }
     if (!Array.isArray(data.blockedMovieIds)) data.blockedMovieIds = [];
+    if (!Array.isArray(data.allowedMovieIds)) data.allowedMovieIds = [];
 
     // Use entityService so JSON fields (blockedMovieIds) are serialized
     // correctly for SQLite — db.query passes arrays straight to knex which
@@ -148,6 +153,35 @@ module.exports = createCoreController('api::child-profile.child-profile', ({ str
 
     const updated = await strapi.entityService.update('api::child-profile.child-profile', profile.id, {
       data: { blockedMovieIds: next },
+    });
+
+    ctx.body = { data: shape(updated) };
+  },
+
+  // PATCH /child-profiles/:id/allowed — add/remove a single movieId from the
+  // child's curated allow-list. Action: "allow" | "disallow".
+  async toggleAllowed(ctx) {
+    const user = ctx.state.user;
+    if (!user) return ctx.unauthorized();
+
+    const profile = await findOwnedProfile(user.id, ctx.params.id);
+    if (!profile) return ctx.notFound();
+
+    const body = ctx.request.body || {};
+    const movieId = String(body.movieId || '').trim();
+    const action = body.action === 'disallow' ? 'disallow' : 'allow';
+    if (!movieId) return ctx.badRequest('movieId required');
+
+    const current = Array.isArray(profile.allowedMovieIds) ? profile.allowedMovieIds.map(String) : [];
+    let next;
+    if (action === 'allow') {
+      next = current.includes(movieId) ? current : [...current, movieId];
+    } else {
+      next = current.filter((id) => id !== movieId);
+    }
+
+    const updated = await strapi.entityService.update('api::child-profile.child-profile', profile.id, {
+      data: { allowedMovieIds: next },
     });
 
     ctx.body = { data: shape(updated) };

@@ -32,5 +32,11 @@ module.exports = {
       handler: 'child-profile.toggleBlock',
       config: { auth: { scope: [] } },
     },
+    {
+      method: 'PATCH',
+      path: '/child-profiles/:id/allowed',
+      handler: 'child-profile.toggleAllowed',
+      config: { auth: { scope: [] } },
+    },
   ],
 };
