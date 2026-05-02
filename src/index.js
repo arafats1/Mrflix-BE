@@ -685,14 +685,29 @@ module.exports = {
             // Find pending movies with at least one Bunny video that isn't
             // yet marked available. Limit per pass so we don't hammer Bunny
             // or hold DB connections for long.
+            //
+            // IMPORTANT: exclude bulk-upload drafts. A draft is a movie that
+            // was uploaded via /admin/bulk-upload but hasn't had TMDB/IMDb
+            // metadata attached yet (no tmdbId, no posterUrl). We must NOT
+            // auto-publish those — the admin still needs to fill in title,
+            // poster, genres, etc. on /admin/add?draftId=X. Only flip
+            // isAvailable=true for movies that already have metadata.
             let pending = [];
             try {
               pending = await strapi.db.query('api::movie.movie').findMany({
                 where: {
                   isAvailable: false,
-                  $or: [
-                    { bunnyVideoId: { $notNull: true } },
-                    { lugandaBunnyVideoId: { $notNull: true } },
+                  $and: [
+                    {
+                      $or: [
+                        { bunnyVideoId: { $notNull: true } },
+                        { lugandaBunnyVideoId: { $notNull: true } },
+                      ],
+                    },
+                    { tmdbId: { $notNull: true } },
+                    { tmdbId: { $ne: 0 } },
+                    { posterUrl: { $notNull: true } },
+                    { posterUrl: { $ne: '' } },
                   ],
                 },
                 select: ['id', 'documentId', 'title', 'bunnyVideoId', 'lugandaBunnyVideoId'],
