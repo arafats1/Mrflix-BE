@@ -28,5 +28,23 @@ module.exports = {
         policies: [],
       },
     },
+    {
+      method: 'POST',
+      path: '/movies/bunny/create-upload',
+      handler: 'movie.bunnyCreateUpload',
+      config: {
+        // Admin-only check happens inside the controller.
+        policies: [],
+      },
+    },
+    {
+      method: 'GET',
+      path: '/movies/bunny/encode-status/:videoId',
+      handler: 'movie.bunnyEncodeStatus',
+      config: {
+        // Admin-only check happens inside the controller.
+        policies: [],
+      },
+    },
   ],
 };

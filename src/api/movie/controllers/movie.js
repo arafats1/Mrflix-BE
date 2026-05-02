@@ -368,4 +368,132 @@ module.exports = createCoreController('api::movie.movie', ({ strapi }) => ({
 
     return { data: entries };
   },
+
+  // Create a Bunny Stream video record and return TUS upload credentials so
+  // the admin browser can stream the file directly to Bunny (bypasses Railway
+  // bandwidth). Bunny then auto-transcodes the upload into an HLS ABR ladder.
+  async bunnyCreateUpload(ctx) {
+    const requester = ctx.state?.user;
+    if (!requester) return ctx.unauthorized('Login required');
+
+    let roleType = requester.role?.type || requester.role?.name;
+    if (!roleType) {
+      try {
+        const fresh = await strapi.entityService.findOne(
+          'plugin::users-permissions.user',
+          requester.id,
+          { populate: ['role'] }
+        );
+        roleType = fresh?.role?.type || fresh?.role?.name;
+      } catch {}
+    }
+    const isAdmin = roleType === 'admin' || roleType === 'Admin';
+    if (!isAdmin) return ctx.forbidden('Admin only');
+
+    const libraryId = process.env.BUNNY_STREAM_LIBRARY_ID;
+    const apiKey = process.env.BUNNY_STREAM_API_KEY;
+    const cdnHostname = process.env.BUNNY_STREAM_CDN_HOSTNAME;
+    if (!libraryId || !apiKey) {
+      return ctx.internalServerError('Bunny Stream not configured');
+    }
+
+    const title = (ctx.request.body?.title || 'Untitled').toString().slice(0, 200);
+
+    // 1) Create the video record on Bunny
+    let createRes;
+    try {
+      createRes = await fetch(`https://video.bunnycdn.com/library/${libraryId}/videos`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          accept: 'application/json',
+          AccessKey: apiKey,
+        },
+        body: JSON.stringify({ title }),
+      });
+    } catch (err) {
+      strapi.log.error('Bunny create video failed', err);
+      return ctx.internalServerError('Failed to reach Bunny Stream');
+    }
+    if (!createRes.ok) {
+      const text = await createRes.text().catch(() => '');
+      strapi.log.error('Bunny create video bad status', createRes.status, text);
+      return ctx.internalServerError('Bunny Stream rejected create');
+    }
+    const created = await createRes.json();
+    const videoId = created?.guid;
+    if (!videoId) return ctx.internalServerError('Bunny did not return videoId');
+
+    // 2) Build TUS authorization signature for direct browser upload
+    const crypto = require('crypto');
+    const expirationTime = Math.floor(Date.now() / 1000) + 60 * 60 * 24; // 24h
+    const signature = crypto
+      .createHash('sha256')
+      .update(`${libraryId}${apiKey}${expirationTime}${videoId}`)
+      .digest('hex');
+
+    return {
+      videoId,
+      libraryId: String(libraryId),
+      signature,
+      expirationTime,
+      cdnHostname,
+    };
+  },
+
+  // Check Bunny Stream encoding progress for a videoId. Used by the admin
+  // UI to show "Still transcoding (45%)" or "Ready to publish".
+  async bunnyEncodeStatus(ctx) {
+    const requester = ctx.state?.user;
+    if (!requester) return ctx.unauthorized('Login required');
+
+    let roleType = requester.role?.type || requester.role?.name;
+    if (!roleType) {
+      try {
+        const fresh = await strapi.entityService.findOne(
+          'plugin::users-permissions.user',
+          requester.id,
+          { populate: ['role'] }
+        );
+        roleType = fresh?.role?.type || fresh?.role?.name;
+      } catch {}
+    }
+    const isAdmin = roleType === 'admin' || roleType === 'Admin';
+    if (!isAdmin) return ctx.forbidden('Admin only');
+
+    const libraryId = process.env.BUNNY_STREAM_LIBRARY_ID;
+    const apiKey = process.env.BUNNY_STREAM_API_KEY;
+    if (!libraryId || !apiKey) {
+      return ctx.internalServerError('Bunny Stream not configured');
+    }
+
+    const videoId = (ctx.params?.videoId || '').toString().trim();
+    if (!videoId) return ctx.badRequest('videoId required');
+
+    try {
+      const res = await fetch(
+        `https://video.bunnycdn.com/library/${libraryId}/videos/${videoId}`,
+        { headers: { AccessKey: apiKey, accept: 'application/json' } }
+      );
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        return ctx.send({ ok: false, httpStatus: res.status, error: text }, 200);
+      }
+      const info = await res.json();
+      const encState = Number(info.status);
+      return {
+        ok: true,
+        videoId,
+        encodeState: encState, // 0..6 — see Bunny docs
+        isFinished: encState === 4,
+        isErrored: encState === 5 || encState === 6,
+        encodeProgress: Number(info.encodeProgress) || 0,
+        length: Number(info.length) || 0,
+        title: info.title || '',
+      };
+    } catch (err) {
+      strapi.log.error('Bunny status check failed', err);
+      return ctx.internalServerError('Failed to query Bunny');
+    }
+  },
 }));

@@ -467,6 +467,8 @@ module.exports = {
           { action: 'api::movie.movie.update' },
           { action: 'api::movie.movie.delete' },
           { action: 'api::movie.movie.bulkDrafts' },
+          { action: 'api::movie.movie.bunnyCreateUpload' },
+          { action: 'api::movie.movie.bunnyEncodeStatus' },
           // Full purchase access
           { action: 'api::purchase.purchase.find' },
           { action: 'api::purchase.purchase.findOne' },
@@ -634,6 +636,119 @@ module.exports = {
       }
     } catch (err) {
       // Failed to set permissions
+    }
+
+    // ── Bunny Stream encode poller ──
+    // When admins upload via Bunny, the video isn't playable until Bunny
+    // finishes transcoding into the HLS ABR ladder. We start movies as
+    // isAvailable: false on upload, then poll Bunny here every minute and
+    // flip them to isAvailable: true once encoding is finished.
+    // Note: we deliberately use `isAvailable` (not a "status" field) because
+    // `status` is a reserved Strapi keyword that has caused issues here.
+    try {
+      const libraryId = process.env.BUNNY_STREAM_LIBRARY_ID;
+      const apiKey = process.env.BUNNY_STREAM_API_KEY;
+      if (libraryId && apiKey) {
+        const BUNNY_FINISHED = 4; // 0=Created 1=Uploaded 2=Processing 3=Transcoding 4=Finished 5=Error 6=UploadFailed
+        const fetchBunnyEncode = async (videoId) => {
+          try {
+            const res = await fetch(
+              `https://video.bunnycdn.com/library/${libraryId}/videos/${videoId}`,
+              { headers: { AccessKey: apiKey, accept: 'application/json' } }
+            );
+            if (!res.ok) return null;
+            return await res.json();
+          } catch {
+            return null;
+          }
+        };
+
+        // Re-entrancy guard — if a pass is still in flight (slow Bunny API,
+        // many pending videos), skip the next tick rather than stacking up
+        // queries and exhausting the DB connection pool.
+        let pollInFlight = false;
+
+        const pollBunnyEncoding = async () => {
+          if (pollInFlight) return;
+          pollInFlight = true;
+          try {
+            // Find pending movies with at least one Bunny video that isn't
+            // yet marked available. Limit per pass so we don't hammer Bunny
+            // or hold DB connections for long.
+            let pending = [];
+            try {
+              pending = await strapi.db.query('api::movie.movie').findMany({
+                where: {
+                  isAvailable: false,
+                  $or: [
+                    { bunnyVideoId: { $notNull: true } },
+                    { lugandaBunnyVideoId: { $notNull: true } },
+                  ],
+                },
+                select: ['id', 'documentId', 'title', 'bunnyVideoId', 'lugandaBunnyVideoId'],
+                limit: 20,
+              });
+            } catch (qErr) {
+              // DB unavailable / pool exhausted — just skip this pass.
+              strapi.log.warn(`[bunny-poll] Skipping pass (DB unavailable): ${qErr.message || qErr}`);
+              return;
+            }
+
+            if (!pending.length) return;
+
+            for (const m of pending) {
+              const ids = [m.bunnyVideoId, m.lugandaBunnyVideoId].filter(Boolean);
+              if (!ids.length) continue;
+
+              let allFinished = true;
+              let anyError = false;
+              for (const vid of ids) {
+                const info = await fetchBunnyEncode(vid);
+                if (!info) { allFinished = false; continue; }
+                const encState = Number(info.status); // Bunny's field, used locally only
+                if (encState === BUNNY_FINISHED) continue;
+                if (encState === 5 || encState === 6) {
+                  anyError = true;
+                  allFinished = false;
+                  strapi.log.warn(
+                    `[bunny-poll] Encoding error for movie "${m.title}" (videoId=${vid}, encState=${encState})`
+                  );
+                  break;
+                }
+                allFinished = false;
+              }
+
+              if (allFinished && !anyError) {
+                try {
+                  await strapi.documents('api::movie.movie').update({
+                    documentId: m.documentId,
+                    data: { isAvailable: true },
+                    status: 'published',
+                  });
+                  strapi.log.info(
+                    `[bunny-poll] Movie "${m.title}" finished encoding — set isAvailable=true`
+                  );
+                } catch (err) {
+                  strapi.log.error('[bunny-poll] Failed to update movie', err?.message || err);
+                }
+              }
+            }
+          } catch (err) {
+            strapi.log.error('[bunny-poll] Pass failed', err?.message || err);
+          } finally {
+            pollInFlight = false;
+          }
+        };
+
+        // First pass after a longer delay (let Strapi finish booting and DB
+        // pool settle), then repeat every 2 minutes — long enough that a slow
+        // pass won't overlap, short enough to keep new uploads timely.
+        setTimeout(pollBunnyEncoding, 30 * 1000);
+        setInterval(pollBunnyEncoding, 2 * 60 * 1000);
+        strapi.log.info('[bunny-poll] Bunny Stream encode poller started');
+      }
+    } catch (err) {
+      strapi.log.error('[bunny-poll] Failed to start poller', err);
     }
   },
 };

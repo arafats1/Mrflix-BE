@@ -836,6 +836,7 @@ export interface ApiMovieMovie extends Struct.CollectionTypeSchema {
     backdrop: Schema.Attribute.Media<'images'>;
     backdropUrl: Schema.Attribute.String;
     bulkFolder: Schema.Attribute.String;
+    bunnyVideoId: Schema.Attribute.String;
     countryOfOrigin: Schema.Attribute.String;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
@@ -852,6 +853,7 @@ export interface ApiMovieMovie extends Struct.CollectionTypeSchema {
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<'oneToMany', 'api::movie.movie'> &
       Schema.Attribute.Private;
+    lugandaBunnyVideoId: Schema.Attribute.String;
     lugandaEpisodes: Schema.Attribute.JSON;
     lugandaVideoUrl: Schema.Attribute.String;
     lugandaVideoUrl480: Schema.Attribute.String;
