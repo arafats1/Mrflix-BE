@@ -854,6 +854,7 @@ export interface ApiMovieMovie extends Struct.CollectionTypeSchema {
     isAvailable: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<true>;
     isFeatured: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
     isLuganda: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
+    isShortClip: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
     isTrending: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
     isXXX: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
