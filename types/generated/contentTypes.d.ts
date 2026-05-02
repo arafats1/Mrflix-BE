@@ -893,6 +893,21 @@ export interface ApiMovieMovie extends Struct.CollectionTypeSchema {
     title: Schema.Attribute.String & Schema.Attribute.Required;
     tmdbId: Schema.Attribute.Integer;
     trailerUrl: Schema.Attribute.String;
+    translatedLanguage: Schema.Attribute.Enumeration<
+      [
+        'Luganda',
+        'Runyankole',
+        'Rutooro',
+        'Runyoro',
+        'Rukiga',
+        'Lusoga',
+        'Acholi',
+        'Lango',
+        'Ateso',
+        'Lugbara',
+        'Swahili',
+      ]
+    >;
     type: Schema.Attribute.Enumeration<['movie', 'series']> &
       Schema.Attribute.Required &
       Schema.Attribute.DefaultTo<'movie'>;

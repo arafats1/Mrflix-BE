@@ -125,7 +125,7 @@ module.exports = createCoreController('api::movie.movie', ({ strapi }) => ({
   // Override find to add custom filtering and apply site-setting prices
   async find(ctx) {
     // Allow filtering by type, featured, available
-    const { type, featured, available, q, luganda, includeXXX, includePreviews, includeUnavailable } = ctx.query;
+    const { type, featured, available, q, luganda, translatedLanguage, includeXXX, includePreviews, includeUnavailable } = ctx.query;
 
     const filters = {};
     if (type) filters.type = type;
@@ -135,9 +135,34 @@ module.exports = createCoreController('api::movie.movie', ({ strapi }) => ({
     if (available !== 'false' && includeUnavailable !== 'true') {
       filters.isAvailable = true;
     }
-    if (luganda === 'true') filters.isLuganda = true;
-    else if (luganda === 'all') { /* no filter — show both */ }
-    else filters.$or = [{ isLuganda: false }, { isLuganda: { $null: true } }];
+
+    // Translation filtering. Three layers:
+    //   ?translatedLanguage=Runyankole  -> only that language
+    //   ?luganda=true                    -> only Luganda (legacy alias)
+    //   ?luganda=all                     -> include translated content alongside English
+    //   (default)                        -> exclude any translated content from English rails
+    if (translatedLanguage) {
+      filters.translatedLanguage = translatedLanguage;
+      if (translatedLanguage === 'Luganda') {
+        filters.$or = [
+          ...(filters.$or || []),
+          { isLuganda: true },
+          { translatedLanguage: 'Luganda' },
+        ];
+        delete filters.translatedLanguage;
+      }
+    } else if (luganda === 'true') {
+      filters.isLuganda = true;
+    } else if (luganda === 'all') {
+      // no filter — show both
+    } else {
+      // Default English view: hide Luganda AND any other translated language
+      filters.$and = [
+        ...(filters.$and || []),
+        { $or: [{ isLuganda: false }, { isLuganda: { $null: true } }] },
+        { $or: [{ translatedLanguage: { $null: true } }, { translatedLanguage: '' }] },
+      ];
+    }
 
     // Search by title, genres, overview, and countryOfOrigin
     if (q) {

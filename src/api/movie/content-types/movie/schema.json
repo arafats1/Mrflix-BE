@@ -110,6 +110,22 @@
       "type": "boolean",
       "default": false
     },
+    "translatedLanguage": {
+      "type": "enumeration",
+      "enum": [
+        "Luganda",
+        "Runyankole",
+        "Rutooro",
+        "Runyoro",
+        "Rukiga",
+        "Lusoga",
+        "Acholi",
+        "Lango",
+        "Ateso",
+        "Lugbara",
+        "Swahili"
+      ]
+    },
     "vjName": {
       "type": "string"
     },
