@@ -715,12 +715,16 @@ export interface ApiExclusiveSubscriptionExclusiveSubscription
       'api::exclusive-subscription.exclusive-subscription'
     > &
       Schema.Attribute.Private;
+    originalAmount: Schema.Attribute.Integer;
     paymentMethod: Schema.Attribute.Enumeration<
       ['mtn_momo', 'airtel_money', 'pesapal', 'dgateway']
     > &
       Schema.Attribute.Required;
     paymentPhone: Schema.Attribute.String & Schema.Attribute.Required;
     pesapalTrackingId: Schema.Attribute.String;
+    promoCode: Schema.Attribute.String;
+    promoDiscountPercent: Schema.Attribute.Integer &
+      Schema.Attribute.DefaultTo<0>;
     publishedAt: Schema.Attribute.DateTime;
     startDate: Schema.Attribute.DateTime & Schema.Attribute.Required;
     status: Schema.Attribute.Enumeration<
@@ -990,6 +994,62 @@ export interface ApiMusicMusic extends Struct.CollectionTypeSchema {
     videoUrl480: Schema.Attribute.String;
     videoUrl720: Schema.Attribute.String;
     watchCount: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+  };
+}
+
+export interface ApiPromoCodePromoCode extends Struct.CollectionTypeSchema {
+  collectionName: 'promo_codes';
+  info: {
+    description: 'Admin-generated promo codes that grant a percentage discount on subscriptions';
+    displayName: 'Promo Code';
+    pluralName: 'promo-codes';
+    singularName: 'promo-code';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    code: Schema.Attribute.String &
+      Schema.Attribute.Required &
+      Schema.Attribute.Unique &
+      Schema.Attribute.SetMinMaxLength<{
+        maxLength: 64;
+      }>;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    description: Schema.Attribute.String;
+    discountPercent: Schema.Attribute.Integer &
+      Schema.Attribute.Required &
+      Schema.Attribute.SetMinMax<
+        {
+          max: 100;
+          min: 1;
+        },
+        number
+      >;
+    isActive: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<true>;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::promo-code.promo-code'
+    > &
+      Schema.Attribute.Private;
+    maxUses: Schema.Attribute.Integer &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0;
+        },
+        number
+      > &
+      Schema.Attribute.DefaultTo<0>;
+    publishedAt: Schema.Attribute.DateTime;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    usedCount: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    validFrom: Schema.Attribute.DateTime;
+    validUntil: Schema.Attribute.DateTime;
   };
 }
 
@@ -2148,6 +2208,7 @@ declare module '@strapi/strapi' {
       'api::movie-request.movie-request': ApiMovieRequestMovieRequest;
       'api::movie.movie': ApiMovieMovie;
       'api::music.music': ApiMusicMusic;
+      'api::promo-code.promo-code': ApiPromoCodePromoCode;
       'api::purchase.purchase': ApiPurchasePurchase;
       'api::referral.referral': ApiReferralReferral;
       'api::search-history.search-history': ApiSearchHistorySearchHistory;

@@ -1,0 +1,50 @@
+{
+  "kind": "collectionType",
+  "collectionName": "promo_codes",
+  "info": {
+    "singularName": "promo-code",
+    "pluralName": "promo-codes",
+    "displayName": "Promo Code",
+    "description": "Admin-generated promo codes that grant a percentage discount on subscriptions"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "code": {
+      "type": "string",
+      "required": true,
+      "unique": true,
+      "maxLength": 64
+    },
+    "discountPercent": {
+      "type": "integer",
+      "required": true,
+      "min": 1,
+      "max": 100
+    },
+    "validFrom": {
+      "type": "datetime"
+    },
+    "validUntil": {
+      "type": "datetime"
+    },
+    "maxUses": {
+      "type": "integer",
+      "min": 0,
+      "default": 0
+    },
+    "usedCount": {
+      "type": "integer",
+      "default": 0
+    },
+    "isActive": {
+      "type": "boolean",
+      "default": true
+    },
+    "description": {
+      "type": "string"
+    }
+  }
+}

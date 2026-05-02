@@ -52,6 +52,16 @@
     },
     "dgatewayReference": {
       "type": "string"
+    },
+    "promoCode": {
+      "type": "string"
+    },
+    "promoDiscountPercent": {
+      "type": "integer",
+      "default": 0
+    },
+    "originalAmount": {
+      "type": "integer"
     }
   }
 }

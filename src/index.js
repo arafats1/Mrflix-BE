@@ -338,6 +338,8 @@ module.exports = {
           // Movies
           { action: 'api::movie.movie.find' },
           { action: 'api::movie.movie.findOne' },
+          // Promo codes — viewers can validate a code at checkout
+          { action: 'api::promo-code.promo-code.validate' },
           // Purchases
           { action: 'api::purchase.purchase.find' },
           { action: 'api::purchase.purchase.findOne' },
@@ -480,6 +482,13 @@ module.exports = {
           { action: 'api::subscription.subscription.create' },
           { action: 'api::subscription.subscription.update' },
           { action: 'api::subscription.subscription.delete' },
+          // Promo codes (admin CRUD)
+          { action: 'api::promo-code.promo-code.find' },
+          { action: 'api::promo-code.promo-code.findOne' },
+          { action: 'api::promo-code.promo-code.create' },
+          { action: 'api::promo-code.promo-code.update' },
+          { action: 'api::promo-code.promo-code.delete' },
+          { action: 'api::promo-code.promo-code.validate' },
           // Site settings (full access)
           { action: 'api::site-setting.site-setting.find' },
           { action: 'api::site-setting.site-setting.createOrUpdate' },

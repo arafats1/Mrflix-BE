@@ -3,6 +3,7 @@
 const { createCoreController } = require('@strapi/strapi').factories;
 const pesapal = require('../../../utils/pesapal');
 const { submitPayment, getActiveGateway } = require('../../../utils/payment-gateway');
+const { evaluatePromoCode, incrementPromoUsage } = require('../../../utils/promo-code');
 
 module.exports = createCoreController('api::exclusive-subscription.exclusive-subscription', ({ strapi }) => ({
   // Admin: list all exclusive subscriptions
@@ -61,7 +62,7 @@ module.exports = createCoreController('api::exclusive-subscription.exclusive-sub
       return ctx.unauthorized('You must be logged in');
     }
 
-    const { paymentMethod, paymentPhone, durationMonths: rawDuration } = ctx.request.body.data || ctx.request.body;
+    const { paymentMethod, paymentPhone, durationMonths: rawDuration, promoCode: rawPromoCode } = ctx.request.body.data || ctx.request.body;
 
     // Validate duration (1-12 months)
     const durationMonths = Math.min(Math.max(parseInt(rawDuration) || 1, 1), 12);
@@ -88,8 +89,25 @@ module.exports = createCoreController('api::exclusive-subscription.exclusive-sub
       exclusivePrice = Math.max(exclusivePrice - premiumPrice, 0);
     }
 
-    // Total price for selected duration
-    const totalPrice = exclusivePrice * durationMonths;
+    // Total price for selected duration (before any promo)
+    const baseTotal = exclusivePrice * durationMonths;
+    let totalPrice = baseTotal;
+
+    // Apply promo code if provided
+    let appliedPromoCode = '';
+    let appliedPromoDiscount = 0;
+    let appliedPromoRecord = null;
+    if (rawPromoCode) {
+      const promoEval = await evaluatePromoCode(strapi, rawPromoCode);
+      if (!promoEval.ok) {
+        return ctx.badRequest(promoEval.reason || 'Invalid promo code');
+      }
+      appliedPromoRecord = promoEval.record;
+      appliedPromoDiscount = promoEval.record.discountPercent;
+      appliedPromoCode = promoEval.record.code;
+      const discountAmount = Math.floor((baseTotal * appliedPromoDiscount) / 100);
+      totalPrice = Math.max(baseTotal - discountAmount, 0);
+    }
 
     const ipnId = settings?.pesapalIpnId;
     const activeGateway = settings?.paymentGateway || 'pesapal';
@@ -129,6 +147,9 @@ module.exports = createCoreController('api::exclusive-subscription.exclusive-sub
       data: {
         subscriber: ctx.state.user.id,
         amount: totalPrice,
+        originalAmount: baseTotal,
+        promoCode: appliedPromoCode || null,
+        promoDiscountPercent: appliedPromoDiscount || 0,
         paymentMethod: paymentMethod || activeGateway,
         paymentPhone: paymentPhone || '',
         transactionId: merchantReference,
@@ -170,6 +191,14 @@ module.exports = createCoreController('api::exclusive-subscription.exclusive-sub
       await strapi.entityService.update('api::exclusive-subscription.exclusive-subscription', entry.id, {
         data: updateData,
       });
+
+      // Bump promo-code usage now that the payment session was created.
+      // We accept a small risk of users abandoning checkout — bumping at
+      // session-create time keeps usage limits enforceable without a
+      // webhook race. Reset/refunds are an admin operation if needed.
+      if (appliedPromoRecord?.id) {
+        await incrementPromoUsage(strapi, appliedPromoRecord);
+      }
 
       return {
         data: {
