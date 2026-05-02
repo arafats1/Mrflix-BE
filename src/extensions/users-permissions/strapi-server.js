@@ -241,6 +241,10 @@ module.exports = (plugin) => {
           throw new ValidationError('You must confirm that you are a parent to register');
         }
 
+        if (!normalizedPhone) {
+          throw new ValidationError('Phone number is required');
+        }
+
         const extras = {
           fullName: typeof body.fullName === 'string' ? body.fullName.trim() : undefined,
           phone: normalizedPhone || undefined,
@@ -263,6 +267,13 @@ module.exports = (plugin) => {
           }
         }
 
+        // Email is optional on phone-first signup. Strapi's core register
+        // validator still requires an email-shaped string + uniqueness, so
+        // synthesize a deterministic placeholder from the phone when the user
+        // didn't provide one. The user can update it later from their profile.
+        const submittedEmail = typeof body.email === 'string' ? body.email.trim() : '';
+        const effectiveEmail = submittedEmail || `${normalizedPhone}@phone.movokids.local`;
+
         // Strapi v5's users-permissions register validator rejects unknown keys
         // (e.g. religion, isParent, phone, fullName) before reaching our wrapper,
         // so we strip them off the request body, let the core handler run with
@@ -270,7 +281,7 @@ module.exports = (plugin) => {
         // user with our extras afterwards.
         ctx.request.body = {
           username: body.username,
-          email: body.email,
+          email: effectiveEmail,
           password: body.password,
         };
 
