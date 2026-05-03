@@ -424,6 +424,11 @@ module.exports = {
           { action: 'api::storage-subscription.storage-subscription.create' },
           { action: 'api::storage-subscription.storage-subscription.checkStatus' },
           { action: 'api::storage-subscription.storage-subscription.pricing' },
+          // Exclusive subscriptions (user-facing)
+          { action: 'api::exclusive-subscription.exclusive-subscription.me' },
+          { action: 'api::exclusive-subscription.exclusive-subscription.create' },
+          { action: 'api::exclusive-subscription.exclusive-subscription.checkStatus' },
+          { action: 'api::exclusive-subscription.exclusive-subscription.getXXXContent' },
         ];
 
         for (const perm of authPermissions) {
@@ -576,7 +581,42 @@ module.exports = {
           { action: 'api::music.music.create' },
           { action: 'api::music.music.update' },
           { action: 'api::music.music.delete' },
+          // Exclusive subscriptions (admin)
+          { action: 'api::exclusive-subscription.exclusive-subscription.find' },
+          { action: 'api::exclusive-subscription.exclusive-subscription.findOne' },
+          { action: 'api::exclusive-subscription.exclusive-subscription.me' },
+          { action: 'api::exclusive-subscription.exclusive-subscription.create' },
+          { action: 'api::exclusive-subscription.exclusive-subscription.grant' },
+          { action: 'api::exclusive-subscription.exclusive-subscription.revoke' },
+          { action: 'api::exclusive-subscription.exclusive-subscription.checkStatus' },
+          { action: 'api::exclusive-subscription.exclusive-subscription.getXXXContent' },
         ];
+
+        // Sweeping fallback: grant every registered api::* content-API action
+        // to the Keyp Admin role. Each custom controller still enforces its
+        // own admin check internally, so this just removes the role-permission
+        // gate that otherwise 403s on newly-added endpoints by default.
+        try {
+          const actionService = strapi
+            .plugin('users-permissions')
+            .service('users-permissions');
+          const allActions = await actionService.getActions();
+          const apiActions = [];
+          for (const [pluginKey, controllers] of Object.entries(allActions || {})) {
+            if (!pluginKey.startsWith('api::')) continue;
+            for (const [controllerKey, actions] of Object.entries(controllers?.controllers || {})) {
+              for (const actionName of Object.keys(actions || {})) {
+                apiActions.push(`${pluginKey}.${controllerKey}.${actionName}`);
+              }
+            }
+          }
+          for (const action of apiActions) {
+            if (adminPermissions.some((p) => p.action === action)) continue;
+            adminPermissions.push({ action });
+          }
+        } catch (err) {
+          // If the actions service shape changes, fall back to the explicit list above.
+        }
 
         for (const perm of adminPermissions) {
           const existing = await strapi.db.query('plugin::users-permissions.permission').findOne({
@@ -585,6 +625,11 @@ module.exports = {
           if (!existing) {
             await strapi.db.query('plugin::users-permissions.permission').create({
               data: { action: perm.action, role: adminRole.id, enabled: true },
+            });
+          } else if (existing.enabled === false) {
+            await strapi.db.query('plugin::users-permissions.permission').update({
+              where: { id: existing.id },
+              data: { enabled: true },
             });
           }
         }
