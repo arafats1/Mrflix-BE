@@ -843,6 +843,10 @@ export interface ApiMovieMovie extends Struct.CollectionTypeSchema {
     backdropUrl: Schema.Attribute.String;
     bulkFolder: Schema.Attribute.String;
     bunnyVideoId: Schema.Attribute.String;
+    childContentCategory: Schema.Attribute.Enumeration<
+      ['General', 'Education', 'Religion']
+    > &
+      Schema.Attribute.DefaultTo<'General'>;
     countryOfOrigin: Schema.Attribute.String;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &

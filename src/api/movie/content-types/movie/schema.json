@@ -186,6 +186,15 @@
         "Traditional",
         "Other"
       ]
+    },
+    "childContentCategory": {
+      "type": "enumeration",
+      "enum": [
+        "General",
+        "Education",
+        "Religion"
+      ],
+      "default": "General"
     }
   }
 }
