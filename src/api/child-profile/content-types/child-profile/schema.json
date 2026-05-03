@@ -23,6 +23,12 @@
     "avatarUrl": {
       "type": "string"
     },
+    "childPinHash": {
+      "type": "string"
+    },
+    "childPinUpdatedAt": {
+      "type": "datetime"
+    },
     "dailyWatchMinutes": {
       "type": "integer",
       "default": 60,

@@ -5,85 +5,52 @@
  * Auto-rotates weekly or allows admin override
  */
 module.exports = {
-  // GET /free-movie-of-the-week — Public: Get current free movie
+  // GET /free-movie-of-the-week — Public: Get current free-watch titles
   async find(ctx) {
     const settings = await strapi.entityService.findMany('api::site-setting.site-setting');
 
     if (!settings?.freeMovieOfWeekEnabled) {
-      return { data: { enabled: false, movie: null, expiresAt: null } };
+      return { data: { enabled: false, movies: [], movie: null, expiresAt: null } };
     }
 
-    let movieId = settings.freeMovieOfWeekId;
+    const selectedIds = Array.isArray(settings.freeWatchMovieIds) && settings.freeWatchMovieIds.length > 0
+      ? settings.freeWatchMovieIds.filter(Boolean)
+      : (settings.freeMovieOfWeekId ? [settings.freeMovieOfWeekId] : []);
     let expiresAt = settings.freeMovieOfWeekExpiresAt;
-    const now = new Date();
+    if (selectedIds.length === 0) {
+      return { data: { enabled: true, movies: [], movie: null, expiresAt } };
+    }
 
-    // Check if the current selection has expired or no selection exists
-    // We only update if there's no movieId, no expiresAt, OR if it's Monday AND the current movie was picked BEFORE today
-    const isMonday = now.getDay() === 1; // 0 = Sunday, 1 = Monday
-    const lastUpdate = expiresAt ? new Date(expiresAt) : null;
-    const shouldUpdate = !movieId || !expiresAt || (isMonday && lastUpdate && lastUpdate <= now);
-
-    if (shouldUpdate) {
-      // Auto-select a new free movie for this week
-      const movies = await strapi.entityService.findMany('api::movie.movie', {
-        filters: { isAvailable: true },
-        sort: [{ watchCount: 'desc' }, { createdAt: 'desc' }],
-        limit: 20,
+    try {
+      const results = await strapi.entityService.findMany('api::movie.movie', {
+        filters: { documentId: { $in: selectedIds } },
+        populate: ['poster', 'backdrop'],
+        limit: selectedIds.length,
       });
+
+      const movies = selectedIds
+        .map((selectedId) => results?.find((movie) => String(movie.documentId || movie.id) === String(selectedId)))
+        .filter(Boolean)
+        .map((movie) => (movie.toJSON ? movie.toJSON() : movie));
 
       if (movies.length === 0) {
-        return { data: { enabled: true, movie: null, expiresAt: null } };
-      }
-
-      // Pick a random movie from the top 20 most-watched (to keep it interesting)
-      const selected = movies[Math.floor(Math.random() * Math.min(movies.length, 10))];
-      movieId = selected.documentId || String(selected.id);
-
-      // Set expiry to next occurrence of Tuesday 00:00 (to ensure it stays for the whole Monday)
-      // If today is Monday, this will set it to next Tuesday.
-      const nextTuesday = new Date(now);
-      const daysUntilTuesday = (2 - now.getDay() + 7) % 7 || 7;
-      nextTuesday.setDate(now.getDate() + daysUntilTuesday);
-      nextTuesday.setHours(0, 0, 0, 0);
-      expiresAt = nextTuesday.toISOString();
-
-      // Persist the selection
-      await strapi.entityService.update('api::site-setting.site-setting', settings.id, {
-        data: {
-          freeMovieOfWeekId: movieId,
-          freeMovieOfWeekExpiresAt: expiresAt,
-        },
-      });
-    }
-
-    // Fetch the full movie data
-    try {
-      // Use findMany with documentId filter (Strapi v5 entityService.findOne expects numeric id)
-      const results = await strapi.entityService.findMany('api::movie.movie', {
-        filters: { documentId: movieId },
-        populate: ['poster', 'backdrop'],
-        limit: 1,
-      });
-
-      const movie = results?.[0] || null;
-
-      if (!movie) {
-        return { data: { enabled: true, movie: null, expiresAt } };
+        return { data: { enabled: true, movies: [], movie: null, expiresAt } };
       }
 
       return {
         data: {
           enabled: true,
-          movie: movie.toJSON ? movie.toJSON() : movie,
+          movies,
+          movie: movies[0],
           expiresAt,
         },
       };
     } catch {
-      return { data: { enabled: true, movie: null, expiresAt } };
+      return { data: { enabled: true, movies: [], movie: null, expiresAt } };
     }
   },
 
-  // PUT /free-movie-of-the-week — Admin: Override or toggle
+  // PUT /free-movie-of-the-week — Admin: manage free-watch titles
   async update(ctx) {
     if (!ctx.state.user) {
       return ctx.unauthorized('You must be logged in');
@@ -94,7 +61,7 @@ module.exports = {
       return ctx.forbidden('Only admins can manage free movie of the week');
     }
 
-    const { movieId, enabled } = ctx.request.body.data || ctx.request.body;
+    const { movieId, movieIds, enabled } = ctx.request.body.data || ctx.request.body;
     const settings = await strapi.entityService.findMany('api::site-setting.site-setting');
 
     const updateData = {};
@@ -103,29 +70,30 @@ module.exports = {
       updateData.freeMovieOfWeekEnabled = enabled;
     }
 
-    if (movieId) {
-      // Verify movie exists (use findMany with documentId filter for Strapi v5 compat)
+    const requestedIds = Array.isArray(movieIds)
+      ? movieIds.filter(Boolean)
+      : movieId
+        ? [movieId]
+        : null;
+
+    if (requestedIds) {
       const results = await strapi.entityService.findMany('api::movie.movie', {
-        filters: { documentId: movieId },
-        limit: 1,
+        filters: { documentId: { $in: requestedIds } },
+        limit: requestedIds.length,
       });
-      if (!results || results.length === 0) {
+      if (!results || results.length !== requestedIds.length) {
         return ctx.notFound('Movie not found');
       }
 
-      updateData.freeMovieOfWeekId = movieId;
-      // Reset expiry to next Monday
-      const now = new Date();
-      const nextMonday = new Date(now);
-      nextMonday.setDate(now.getDate() + (7 - now.getDay() + 1) % 7 || 7);
-      nextMonday.setHours(0, 0, 0, 0);
-      updateData.freeMovieOfWeekExpiresAt = nextMonday.toISOString();
+      updateData.freeWatchMovieIds = requestedIds;
+      updateData.freeMovieOfWeekId = requestedIds[0] || null;
+      updateData.freeMovieOfWeekExpiresAt = null;
     }
 
     await strapi.entityService.update('api::site-setting.site-setting', settings.id, {
       data: updateData,
     });
 
-    return { data: { success: true } };
+    return { data: { success: true, movieIds: updateData.freeWatchMovieIds || settings.freeWatchMovieIds || [] } };
   },
 };

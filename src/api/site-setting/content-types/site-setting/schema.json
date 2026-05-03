@@ -78,6 +78,9 @@
     "freeMovieOfWeekId": {
       "type": "string"
     },
+    "freeWatchMovieIds": {
+      "type": "json"
+    },
     "freeMovieOfWeekExpiresAt": {
       "type": "datetime"
     },

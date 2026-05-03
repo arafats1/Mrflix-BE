@@ -608,6 +608,8 @@ export interface ApiChildProfileChildProfile
     allowedMovieIds: Schema.Attribute.JSON & Schema.Attribute.DefaultTo<[]>;
     avatarUrl: Schema.Attribute.String;
     blockedMovieIds: Schema.Attribute.JSON & Schema.Attribute.DefaultTo<[]>;
+    childPinHash: Schema.Attribute.String;
+    childPinUpdatedAt: Schema.Attribute.DateTime;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -1282,6 +1284,7 @@ export interface ApiSiteSettingSiteSetting extends Struct.SingleTypeSchema {
     freeTrialCount: Schema.Attribute.Integer &
       Schema.Attribute.Required &
       Schema.Attribute.DefaultTo<2>;
+    freeWatchMovieIds: Schema.Attribute.JSON;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
       'oneToMany',

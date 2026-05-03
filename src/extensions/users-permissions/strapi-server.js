@@ -165,6 +165,7 @@ module.exports = (plugin) => {
             id: c.id,
             documentId: c.documentId,
             name: c.name,
+            hasPin: !!c.childPinHash,
             dateOfBirth: c.dateOfBirth,
             avatarUrl: c.avatarUrl,
             dailyWatchMinutes: c.dailyWatchMinutes,
