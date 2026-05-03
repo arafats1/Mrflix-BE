@@ -40,6 +40,33 @@ Strapi gives you many possible deployment options for your project including [St
 yarn strapi deploy
 ```
 
+## Movie Export API
+
+Expose the catalog to another platform with a single endpoint:
+
+```bash
+curl "https://your-backend.example.com/api/movies/export?page=1&pageSize=100" \
+	-H "Authorization: Bearer $MOVIE_EXPORT_API_KEY"
+```
+
+Set `MOVIE_EXPORT_API_KEY` in the backend environment before using it. Send it as `Authorization: Bearer ...` or `?apiKey=...`.
+The key is effectively read-only because it only unlocks the `GET /api/movies/export` endpoint.
+
+Response shape:
+
+- `data[]`: normalized movie objects with metadata, poster/backdrop/video asset URLs, trailer URL, direct video URLs, Bunny HLS/iframe playback links, and episode payloads.
+- `meta`: pagination and filter metadata.
+
+Query params:
+
+- `page`, `pageSize`: paginate results, default `1` and `100`.
+- `includeUnavailable=true`: include titles hidden from the public catalog.
+- `includeDrafts=true`: include unpublished entries.
+- `includeAdult=true`: include `isAdult` and `isXXX` titles.
+- `updatedSince=ISO_DATE`: return only titles updated at or after the provided timestamp.
+
+See [docs/movie-export-api.md](docs/movie-export-api.md) for Postman setup, sample responses, and integration examples.
+
 ## 📚 Learn more
 
 - [Resource center](https://strapi.io/resource-center) - Strapi resource center.

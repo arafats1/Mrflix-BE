@@ -4,6 +4,18 @@ module.exports = {
   routes: [
     {
       method: 'GET',
+      path: '/movies/export',
+      handler: 'movie.exportCatalog',
+      config: {
+        auth: false,
+        // Kept public so we can accept the custom export key manually.
+        // Custom Strapi API tokens are checked inside the controller.
+        scope: ['api::movie.movie.find'],
+        policies: [],
+      },
+    },
+    {
+      method: 'GET',
       path: '/movies/most-watched',
       handler: 'movie.mostWatched',
       config: {

@@ -5,6 +5,185 @@ const { createCoreController } = require('@strapi/strapi').factories;
 const ADULT_SEARCH_TERMS = /(^|\b)(adult|18\+|18\s*plus|mature|sex|erotic|explicit)(\b|$)/i;
 const TMDB_BASE = 'https://api.themoviedb.org/3';
 
+function getBaseUrl(ctx) {
+  const envUrl = (process.env.PUBLIC_URL || '').trim();
+  if (envUrl) return envUrl.replace(/\/$/, '');
+  const origin = ctx.request?.origin || '';
+  return origin.replace(/\/$/, '');
+}
+
+function toAbsoluteUrl(url, baseUrl) {
+  if (!url || typeof url !== 'string') return null;
+  if (/^https?:\/\//i.test(url)) return url;
+  if (!baseUrl) return url;
+  return `${baseUrl}${url.startsWith('/') ? '' : '/'}${url}`;
+}
+
+function getMediaUrl(media, baseUrl) {
+  if (!media) return null;
+  const rawUrl = media.url || media?.formats?.large?.url || media?.formats?.medium?.url || media?.formats?.small?.url || media?.formats?.thumbnail?.url;
+  return toAbsoluteUrl(rawUrl, baseUrl);
+}
+
+function mapMediaAsset(media, baseUrl) {
+  if (!media) return null;
+  return {
+    id: media.id || null,
+    documentId: media.documentId || null,
+    name: media.name || null,
+    alternativeText: media.alternativeText || null,
+    caption: media.caption || null,
+    width: media.width || null,
+    height: media.height || null,
+    mime: media.mime || null,
+    ext: media.ext || null,
+    sizeKB: typeof media.size === 'number' ? media.size : null,
+    url: getMediaUrl(media, baseUrl),
+  };
+}
+
+function buildBunnyPlayback(videoId) {
+  const normalizedVideoId = typeof videoId === 'string' ? videoId.trim() : '';
+  const cdnHostname = (process.env.BUNNY_STREAM_CDN_HOSTNAME || '').trim();
+  const libraryId = (process.env.BUNNY_STREAM_LIBRARY_ID || '').trim();
+  if (!normalizedVideoId) return null;
+
+  return {
+    videoId: normalizedVideoId,
+    hlsUrl: cdnHostname ? `https://${cdnHostname}/${normalizedVideoId}/playlist.m3u8` : null,
+    iframeUrl: libraryId ? `https://iframe.mediadelivery.net/embed/${libraryId}/${normalizedVideoId}?autoplay=false&preload=true&responsive=true` : null,
+  };
+}
+
+function mapEpisodeList(episodes, baseUrl) {
+  if (!Array.isArray(episodes)) return [];
+
+  return episodes.map((episode, index) => {
+    const bunnyPlayback = buildBunnyPlayback(episode?.bunnyVideoId);
+    return {
+      id: episode?.id || null,
+      title: episode?.title || episode?.name || `Episode ${index + 1}`,
+      overview: episode?.overview || episode?.description || null,
+      seasonNumber: episode?.seasonNumber ?? episode?.season ?? null,
+      episodeNumber: episode?.episodeNumber ?? episode?.number ?? index + 1,
+      runtime: episode?.runtime ?? null,
+      thumbnailUrl: toAbsoluteUrl(episode?.thumbnailUrl || episode?.posterUrl || null, baseUrl),
+      videoUrl: toAbsoluteUrl(episode?.videoUrl || null, baseUrl),
+      videoUrl720: toAbsoluteUrl(episode?.videoUrl720 || null, baseUrl),
+      videoUrl480: toAbsoluteUrl(episode?.videoUrl480 || null, baseUrl),
+      subtitleUrl: toAbsoluteUrl(episode?.subtitleUrl || null, baseUrl),
+      bunnyVideoId: episode?.bunnyVideoId || null,
+      playback: bunnyPlayback,
+      raw: episode,
+    };
+  });
+}
+
+function mapCatalogMovie(movie, baseUrl) {
+  const posterAsset = mapMediaAsset(movie.poster, baseUrl);
+  const backdropAsset = mapMediaAsset(movie.backdrop, baseUrl);
+  const videoAsset = mapMediaAsset(movie.video, baseUrl);
+  const playback = buildBunnyPlayback(movie.bunnyVideoId);
+  const lugandaPlayback = buildBunnyPlayback(movie.lugandaBunnyVideoId);
+
+  return {
+    id: movie.documentId || movie.id,
+    strapiId: movie.id,
+    documentId: movie.documentId || null,
+    slug: movie.slug || null,
+    title: movie.title,
+    overview: movie.overview || null,
+    type: movie.type,
+    tmdbId: movie.tmdbId || null,
+    releaseDate: movie.releaseDate || null,
+    rating: movie.rating || null,
+    genres: Array.isArray(movie.genres) ? movie.genres : (movie.genres || []),
+    seasons: movie.seasons || null,
+    countryOfOrigin: movie.countryOfOrigin || null,
+    isLuganda: Boolean(movie.isLuganda),
+    translatedLanguage: movie.translatedLanguage || (movie.isLuganda ? 'Luganda' : null),
+    vjName: movie.vjName || null,
+    religiousCategory: movie.religiousCategory || null,
+    posterUrl: toAbsoluteUrl(movie.posterUrl, baseUrl) || posterAsset?.url,
+    backdropUrl: toAbsoluteUrl(movie.backdropUrl, baseUrl) || backdropAsset?.url,
+    trailerUrl: toAbsoluteUrl(movie.trailerUrl, baseUrl),
+    subtitleUrl: toAbsoluteUrl(movie.subtitleUrl, baseUrl),
+    videoUrl: toAbsoluteUrl(movie.videoUrl, baseUrl) || videoAsset?.url,
+    videoUrl720: toAbsoluteUrl(movie.videoUrl720, baseUrl),
+    videoUrl480: toAbsoluteUrl(movie.videoUrl480, baseUrl),
+    bunnyVideoId: movie.bunnyVideoId || null,
+    playback,
+    translatedAudio: {
+      language: movie.translatedLanguage || (movie.isLuganda ? 'Luganda' : null),
+      videoUrl: toAbsoluteUrl(movie.lugandaVideoUrl, baseUrl),
+      videoUrl720: toAbsoluteUrl(movie.lugandaVideoUrl720, baseUrl),
+      videoUrl480: toAbsoluteUrl(movie.lugandaVideoUrl480, baseUrl),
+      bunnyVideoId: movie.lugandaBunnyVideoId || null,
+      playback: lugandaPlayback,
+    },
+    assets: {
+      poster: posterAsset,
+      backdrop: backdropAsset,
+      video: videoAsset,
+    },
+    episodes: mapEpisodeList(movie.episodes, baseUrl),
+    translatedEpisodes: mapEpisodeList(movie.lugandaEpisodes, baseUrl),
+    createdAt: movie.createdAt || null,
+    updatedAt: movie.updatedAt || null,
+    publishedAt: movie.publishedAt || null,
+  };
+}
+
+function getBearerToken(ctx) {
+  const header = ctx.request?.headers?.authorization || '';
+  return header.toLowerCase().startsWith('bearer ')
+    ? header.slice(7).trim()
+    : '';
+}
+
+async function canUseExportApi(strapi, ctx) {
+  const configuredKey = (process.env.MOVIE_EXPORT_API_KEY || '').trim();
+  const bearer = getBearerToken(ctx);
+  const queryKey = typeof ctx.query?.apiKey === 'string' ? ctx.query.apiKey.trim() : '';
+  const suppliedKey = bearer || queryKey;
+
+  if (configuredKey && suppliedKey && suppliedKey === configuredKey) {
+    return true;
+  }
+
+  if (!bearer) return false;
+
+  try {
+    const apiTokenService = strapi.admin?.services?.['api-token'];
+    if (!apiTokenService?.hash || !apiTokenService?.getBy) {
+      return false;
+    }
+
+    const apiToken = await apiTokenService.getBy({
+      accessKey: apiTokenService.hash(bearer),
+    });
+
+    if (!apiToken) return false;
+
+    if (apiToken.expiresAt && new Date(apiToken.expiresAt) < new Date()) {
+      return false;
+    }
+
+    if (apiToken.type === 'full-access' || apiToken.type === 'read-only') {
+      return true;
+    }
+
+    if (apiToken.type === 'custom') {
+      const permissions = Array.isArray(apiToken.permissions) ? apiToken.permissions : [];
+      return permissions.includes('api::movie.movie.find') || permissions.includes('api::movie.movie.findOne');
+    }
+  } catch (error) {
+    strapi.log.warn(`movie export token check failed: ${error.message}`);
+  }
+
+  return false;
+}
+
 /**
  * Helper: fetch site-setting default prices once and cache for the request.
  */
@@ -274,6 +453,85 @@ module.exports = createCoreController('api::movie.movie', ({ strapi }) => ({
     }
 
     return response;
+  },
+
+  async exportCatalog(ctx) {
+    if (!(await canUseExportApi(strapi, ctx))) {
+      return ctx.forbidden('Invalid or missing export credential. Send either MOVIE_EXPORT_API_KEY or a valid Strapi Content API token in Authorization: Bearer ...');
+    }
+
+    const page = Math.max(parseInt(ctx.query.page, 10) || 1, 1);
+    const pageSize = Math.min(Math.max(parseInt(ctx.query.pageSize, 10) || 100, 1), 500);
+    const includeUnavailable = ctx.query.includeUnavailable === 'true';
+    const includeDrafts = ctx.query.includeDrafts === 'true';
+    const includeAdult = ctx.query.includeAdult === 'true';
+    const updatedSince = typeof ctx.query.updatedSince === 'string' ? ctx.query.updatedSince.trim() : '';
+
+    const filters = { $and: [] };
+
+    if (!includeUnavailable) {
+      filters.$and.push({ isAvailable: true });
+    }
+
+    if (!includeDrafts) {
+      filters.$and.push({ publishedAt: { $notNull: true } });
+    }
+
+    if (!includeAdult) {
+      filters.$and.push({ $or: [{ isAdult: false }, { isAdult: { $null: true } }] });
+      filters.$and.push({ $or: [{ isXXX: false }, { isXXX: { $null: true } }] });
+    }
+
+    if (updatedSince) {
+      const parsedDate = new Date(updatedSince);
+      if (Number.isNaN(parsedDate.getTime())) {
+        return ctx.badRequest('updatedSince must be a valid ISO date');
+      }
+      filters.$and.push({ updatedAt: { $gte: parsedDate.toISOString() } });
+    }
+
+    if (filters.$and.length === 0) {
+      delete filters.$and;
+    }
+
+    const entryQuery = {
+      filters,
+      populate: ['poster', 'backdrop', 'video'],
+      sort: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
+      start: (page - 1) * pageSize,
+      limit: pageSize,
+    };
+
+    if (!includeDrafts) {
+      entryQuery.status = 'published';
+    }
+
+    const [entries, total] = await Promise.all([
+      strapi.documents('api::movie.movie').findMany(entryQuery),
+      strapi.db.query('api::movie.movie').count({ where: filters }),
+    ]);
+
+    const defaults = await getSiteDefaultPrices(strapi);
+    const normalizedEntries = applyDefaultPrices(entries, defaults);
+    const baseUrl = getBaseUrl(ctx);
+
+    return {
+      data: normalizedEntries.map((movie) => mapCatalogMovie(movie, baseUrl)),
+      meta: {
+        page,
+        pageSize,
+        total,
+        pageCount: Math.ceil(total / pageSize),
+        hasNextPage: page * pageSize < total,
+        filters: {
+          includeUnavailable,
+          includeDrafts,
+          includeAdult,
+          updatedSince: updatedSince || null,
+        },
+        generatedAt: new Date().toISOString(),
+      },
+    };
   },
 
   // Most Watched: Return movies sorted by watchCount descending
