@@ -78,6 +78,15 @@
       "type": "json",
       "default": []
     },
+    "childAgeGroup": {
+      "type": "enumeration",
+      "enum": [
+        "ages_0_4",
+        "ages_5_8",
+        "ages_9_12",
+        "ages_13_17"
+      ]
+    },
     "isExclusive": {
       "type": "boolean",
       "default": true

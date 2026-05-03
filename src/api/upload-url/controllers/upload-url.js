@@ -4,6 +4,37 @@ const { S3Client, PutObjectCommand, CreateMultipartUploadCommand, UploadPartComm
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const crypto = require('crypto');
 
+async function getAuthenticatedUser(ctx) {
+  if (ctx.state.user?.id) return ctx.state.user;
+
+  const authHeader = ctx.request.header?.authorization || ctx.request.headers?.authorization;
+  if (!authHeader?.startsWith('Bearer ')) return null;
+
+  try {
+    const token = authHeader.slice(7);
+    const { id } = await strapi.plugins['users-permissions'].services.jwt.verify(token);
+    if (!id) return null;
+
+    return await strapi.query('plugin::users-permissions.user').findOne({
+      where: { id },
+      populate: ['role'],
+    });
+  } catch {
+    return null;
+  }
+}
+
+async function requireUploadUser(ctx) {
+  const user = await getAuthenticatedUser(ctx);
+  if (!user) {
+    ctx.unauthorized('You must be logged in');
+    return null;
+  }
+
+  ctx.state.user = user;
+  return user;
+}
+
 // ──────────────────────────────────────────
 // Storage provider: "backblaze" or "cloudflare"
 // Controlled by STORAGE_PROVIDER env var
@@ -75,16 +106,15 @@ module.exports = {
    * Simple presigned URL for small files (< 100MB)
    */
   async getPresignedUrl(ctx) {
-    if (!ctx.state.user) {
-      return ctx.unauthorized('You must be logged in');
-    }
+    const authUser = await requireUploadUser(ctx);
+    if (!authUser) return;
 
     const { fileName, contentType, folder } = ctx.request.body;
 
     // Non-admin users can only upload to 'stories' folder
     if (folder !== 'stories') {
       const userWithRole = await strapi.query('plugin::users-permissions.user').findOne({
-        where: { id: ctx.state.user.id },
+        where: { id: authUser.id },
         populate: ['role'],
       });
       if (userWithRole?.role?.type !== 'admin' && userWithRole?.role?.name !== 'Admin') {
@@ -120,16 +150,15 @@ module.exports = {
    * Initiate multipart upload for large files (> 100MB)
    */
   async initiateMultipartUpload(ctx) {
-    if (!ctx.state.user) {
-      return ctx.unauthorized('You must be logged in');
-    }
+    const authUser = await requireUploadUser(ctx);
+    if (!authUser) return;
 
     const { fileName, contentType, folder } = ctx.request.body;
 
     // Non-admin users can only upload to 'stories' folder
     if (folder !== 'stories') {
       const userWithRole = await strapi.query('plugin::users-permissions.user').findOne({
-        where: { id: ctx.state.user.id },
+        where: { id: authUser.id },
         populate: ['role'],
       });
       if (userWithRole?.role?.type !== 'admin' && userWithRole?.role?.name !== 'Admin') {
@@ -165,9 +194,8 @@ module.exports = {
    * Get presigned URL for a single part of multipart upload
    */
   async getPartPresignedUrl(ctx) {
-    if (!ctx.state.user) {
-      return ctx.unauthorized('You must be logged in');
-    }
+    const authUser = await requireUploadUser(ctx);
+    if (!authUser) return;
 
     const { key, uploadId, partNumber } = ctx.request.body;
     if (!key || !uploadId || !partNumber) {
@@ -191,9 +219,8 @@ module.exports = {
    * Complete multipart upload after all parts uploaded
    */
   async completeMultipartUpload(ctx) {
-    if (!ctx.state.user) {
-      return ctx.unauthorized('You must be logged in');
-    }
+    const authUser = await requireUploadUser(ctx);
+    if (!authUser) return;
 
     const { key, uploadId, parts } = ctx.request.body;
     if (!key || !uploadId || !parts) {
@@ -225,9 +252,8 @@ module.exports = {
    * Abort a multipart upload (cleanup on failure)
    */
   async abortMultipartUpload(ctx) {
-    if (!ctx.state.user) {
-      return ctx.unauthorized('You must be logged in');
-    }
+    const authUser = await requireUploadUser(ctx);
+    if (!authUser) return;
 
     const { key, uploadId } = ctx.request.body;
     if (!key || !uploadId) {

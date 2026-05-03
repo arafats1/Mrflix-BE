@@ -950,6 +950,9 @@ export interface ApiMusicMusic extends Struct.CollectionTypeSchema {
   attributes: {
     artist: Schema.Attribute.String;
     audioUrl: Schema.Attribute.String;
+    childAgeGroup: Schema.Attribute.Enumeration<
+      ['ages_0_4', 'ages_5_8', 'ages_9_12', 'ages_13_17']
+    >;
     comments: Schema.Attribute.JSON & Schema.Attribute.DefaultTo<[]>;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
