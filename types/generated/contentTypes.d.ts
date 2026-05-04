@@ -2158,7 +2158,7 @@ export interface PluginUsersPermissionsUser
         minLength: 6;
       }>;
     isKeypUser: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
-    isParent: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
+    isParent: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<true>;
     keypActivatedAt: Schema.Attribute.DateTime;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<

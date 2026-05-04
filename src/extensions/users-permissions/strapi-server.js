@@ -75,7 +75,7 @@ module.exports = (plugin) => {
 
   plugin.contentTypes.user.schema.attributes.isParent = {
     type: 'boolean',
-    default: false,
+    default: true,
   };
 
   plugin.contentTypes.user.schema.attributes.parentPinHash = {

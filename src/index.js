@@ -203,6 +203,30 @@ module.exports = {
   },
 
   async bootstrap({ strapi }) {
+    try {
+      const users = await strapi.db.query('plugin::users-permissions.user').findMany({
+        select: ['id', 'isParent'],
+        limit: 50000,
+      });
+
+      const usersToBackfill = users.filter((user) => user.isParent !== true);
+
+      if (usersToBackfill.length > 0) {
+        await Promise.all(
+          usersToBackfill.map((user) =>
+            strapi.db.query('plugin::users-permissions.user').update({
+              where: { id: user.id },
+              data: { isParent: true },
+            })
+          )
+        );
+
+        strapi.log.info(`[bootstrap] Backfilled isParent=true for ${usersToBackfill.length} existing users`);
+      }
+    } catch (err) {
+      strapi.log.warn(`[bootstrap] Failed to backfill parent accounts: ${err.message}`);
+    }
+
     // ── Register Pesapal IPN URL ──
     try {
       const pesapal = require('./utils/pesapal');
