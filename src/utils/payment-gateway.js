@@ -42,16 +42,51 @@ async function submitPayment(strapi, params) {
   const gateway = await getActiveGateway(strapi);
 
   if (gateway === 'dgateway') {
-    const result = await dgateway.collectPayment({
-      amount: params.amount,
-      currency: 'UGX',
-      phone_number: params.paymentPhone || params.billingAddress?.phone || '',
-      provider: 'iotec',
-      description: params.description,
-      metadata: {
-        merchant_reference: params.merchantReference,
-      },
-    });
+    let result;
+
+    try {
+      result = await dgateway.collectPayment({
+        amount: params.amount,
+        currency: 'UGX',
+        phone_number: params.paymentPhone || params.billingAddress?.phone || '',
+        provider: 'iotec',
+        description: params.description,
+        metadata: {
+          merchant_reference: params.merchantReference,
+        },
+      });
+    } catch (error) {
+      const ambiguousGatewayFailure =
+        error?.code === 'DGATEWAY_NON_JSON_RESPONSE' ||
+        error?.status >= 500;
+
+      if (!ambiguousGatewayFailure) {
+        throw error;
+      }
+
+      const recoveredTransaction = await dgateway.findTransactionByMerchantReference(
+        params.merchantReference,
+        { perPage: 50, status: 'all' }
+      ).catch(() => null);
+
+      if (!recoveredTransaction?.reference) {
+        throw error;
+      }
+
+      result = {
+        data: {
+          reference: recoveredTransaction.reference,
+          status: recoveredTransaction.status || 'pending',
+          provider: recoveredTransaction.provider || recoveredTransaction.provider_slug || 'iotec',
+        },
+      };
+
+      if (strapi?.log?.warn) {
+        strapi.log.warn(
+          `[DGateway] Recovered collect request for ${params.merchantReference} from recent transactions after upstream ${error?.status || 'unknown'} response.`
+        );
+      }
+    }
 
     return {
       gateway: 'dgateway',
