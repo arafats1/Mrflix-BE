@@ -33,7 +33,7 @@
     },
     "paymentMethod": {
       "type": "enumeration",
-      "enum": ["mtn_momo", "airtel_money", "pesapal", "dgateway", "admin_granted"],
+      "enum": ["mtn_momo", "airtel_money", "pesapal", "dgateway", "yo", "admin_granted"],
       "required": true
     },
     "paymentPhone": {
@@ -46,6 +46,9 @@
       "type": "string"
     },
     "dgatewayReference": {
+      "type": "string"
+    },
+    "yoReference": {
       "type": "string"
     },
     "status": {

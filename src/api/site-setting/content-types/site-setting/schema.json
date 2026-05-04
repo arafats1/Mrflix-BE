@@ -110,7 +110,7 @@
     },
     "paymentGateway": {
       "type": "enumeration",
-      "enum": ["pesapal", "dgateway"],
+      "enum": ["pesapal", "dgateway", "yo"],
       "default": "pesapal"
     },
     "revenueResetDate": {

@@ -23,7 +23,7 @@
     },
     "paymentMethod": {
       "type": "enumeration",
-      "enum": ["mtn_momo", "airtel_money", "pesapal", "dgateway"],
+      "enum": ["mtn_momo", "airtel_money", "pesapal", "dgateway", "yo"],
       "required": true
     },
     "paymentPhone": {
@@ -51,6 +51,9 @@
       "type": "string"
     },
     "dgatewayReference": {
+      "type": "string"
+    },
+    "yoReference": {
       "type": "string"
     },
     "promoCode": {

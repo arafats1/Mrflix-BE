@@ -148,6 +148,8 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
         updateData.pesapalTrackingId = paymentResult.order_tracking_id;
       } else if (paymentResult.gateway === 'dgateway') {
         updateData.dgatewayReference = paymentResult.reference;
+      } else if (paymentResult.gateway === 'yo') {
+        updateData.yoReference = paymentResult.reference;
       }
 
       await strapi.documents('api::purchase.purchase').update({
@@ -268,6 +270,8 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
         updateData.pesapalTrackingId = paymentResult.order_tracking_id;
       } else if (paymentResult.gateway === 'dgateway') {
         updateData.dgatewayReference = paymentResult.reference;
+      } else if (paymentResult.gateway === 'yo') {
+        updateData.yoReference = paymentResult.reference;
       }
 
       for (const pid of purchaseIds) {

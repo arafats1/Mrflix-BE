@@ -2,8 +2,16 @@
 
 const crypto = require('crypto');
 const { Resend } = require('resend');
+const { sendSms } = require('../../../utils/sms');
 
 const resend = new Resend(process.env.RESEND_API_KEY);
+
+function normalizeUgPhone(phone) {
+  if (!phone) return '';
+  let p = String(phone).trim().replace(/[\s()+-]/g, '');
+  if (p.startsWith('0')) p = `256${p.slice(1)}`;
+  return p;
+}
 
 module.exports = {
   /**
@@ -144,6 +152,107 @@ module.exports = {
       });
 
     strapi.log.info(`[Password Reset] Password updated for ${user.email}`);
+
+    return { data: { message: 'Password has been reset successfully.' } };
+  },
+
+  /**
+   * POST /api/password-reset/forgot-phone
+   * Body: { phone }
+   * Sends a 6-digit reset code via SMS.
+   */
+  async forgotPhone(ctx) {
+    const { phone } = ctx.request.body || {};
+    if (!phone) return ctx.badRequest('Phone is required');
+
+    const normalized = normalizeUgPhone(phone);
+    const user = await strapi.db
+      .query('plugin::users-permissions.user')
+      .findOne({ where: { phone: normalized } });
+
+    if (!user) {
+      return { data: { message: 'If that phone exists, a reset code has been sent.' } };
+    }
+
+    const code = crypto.randomInt(100000, 999999).toString();
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+
+    await strapi.db.query('plugin::users-permissions.user').update({
+      where: { id: user.id },
+      data: {
+        resetPasswordToken: JSON.stringify({ code, expiresAt: expiresAt.toISOString() }),
+      },
+    });
+
+    try {
+      await sendSms({
+        to: user.phone,
+        message: `Your Mr.Flix password reset code is ${code}. It expires in 15 minutes.`,
+      });
+      strapi.log.info(`[Password Reset] SMS code sent to ${user.phone}`);
+    } catch (err) {
+      strapi.log.error('[Password Reset] SMS failed:', err.message);
+      return ctx.badRequest('Failed to send SMS. Please try again.');
+    }
+
+    return { data: { message: 'If that phone exists, a reset code has been sent.' } };
+  },
+
+  /**
+   * POST /api/password-reset/reset-phone
+   * Body: { phone, code, newPassword }
+   */
+  async resetPhone(ctx) {
+    const { phone, code, newPassword } = ctx.request.body || {};
+
+    if (!phone || !code || !newPassword) {
+      return ctx.badRequest('Phone, code, and new password are required');
+    }
+    if (newPassword.length < 6) {
+      return ctx.badRequest('Password must be at least 6 characters');
+    }
+
+    const normalized = normalizeUgPhone(phone);
+    const user = await strapi.db
+      .query('plugin::users-permissions.user')
+      .findOne({ where: { phone: normalized } });
+
+    if (!user || !user.resetPasswordToken) {
+      return ctx.badRequest('Invalid or expired reset code');
+    }
+
+    let stored;
+    try {
+      stored = JSON.parse(user.resetPasswordToken);
+    } catch {
+      return ctx.badRequest('Invalid or expired reset code');
+    }
+
+    if (new Date() > new Date(stored.expiresAt)) {
+      await strapi.db
+        .query('plugin::users-permissions.user')
+        .update({ where: { id: user.id }, data: { resetPasswordToken: null } });
+      return ctx.badRequest('Reset code has expired. Please request a new one.');
+    }
+
+    const a = Buffer.from(String(code));
+    const b = Buffer.from(String(stored.code));
+    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+      return ctx.badRequest('Invalid reset code');
+    }
+
+    const bcrypt = require('bcryptjs');
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    await strapi.db.query('plugin::users-permissions.user').update({
+      where: { id: user.id },
+      data: {
+        password: hashedPassword,
+        resetPasswordToken: null,
+      },
+    });
+
+    strapi.log.info(`[Password Reset] Password updated via phone for ${user.phone}`);
 
     return { data: { message: 'Password has been reset successfully.' } };
   },

@@ -9,6 +9,7 @@
 
 const pesapal = require('./pesapal');
 const dgateway = require('./dgateway');
+const yoPayments = require('./yo-payments');
 const { normalizePaymentMethod } = require('./payment-methods');
 
 /**
@@ -40,6 +41,29 @@ async function getActiveGateway(strapi) {
  */
 async function submitPayment(strapi, params) {
   const gateway = await getActiveGateway(strapi);
+
+  if (gateway === 'yo') {
+    const phone = (params.paymentPhone || params.billingAddress?.phone || '').replace(/[^\d]/g, '');
+    if (!phone) {
+      throw new Error('Phone number is required for Yo! Payments');
+    }
+    const account = phone.startsWith('0') ? `256${phone.slice(1)}` : phone;
+
+    const result = await yoPayments.requestDeposit({
+      amount: params.amount,
+      account,
+      narrative: params.description || 'Mr.Flix payment',
+      externalReference: params.merchantReference,
+      instantNotificationUrl: process.env.YO_IPN_URL || undefined,
+      failureNotificationUrl: process.env.YO_FAILURE_URL || undefined,
+    });
+
+    return {
+      gateway: 'yo',
+      reference: result.transactionReference,
+      status: (result.transactionStatus || 'PENDING').toLowerCase(),
+    };
+  }
 
   if (gateway === 'dgateway') {
     let result;
@@ -124,6 +148,24 @@ async function submitPayment(strapi, params) {
  */
 async function checkPaymentStatus(strapi, params) {
   const gateway = params.gateway || await getActiveGateway(strapi);
+
+  if (gateway === 'yo' && (params.yoReference || params.merchantReference)) {
+    const result = await yoPayments.checkStatus({
+      transactionReference: params.yoReference,
+      privateTransactionReference: params.merchantReference,
+    });
+
+    const txStatus = (result.transactionStatus || '').toUpperCase();
+    let normalizedStatus = 'pending';
+    if (txStatus === 'SUCCEEDED') normalizedStatus = 'completed';
+    else if (txStatus === 'FAILED') normalizedStatus = 'failed';
+
+    return {
+      status: normalizedStatus,
+      paymentMethod: 'yo',
+      raw: result,
+    };
+  }
 
   if (gateway === 'dgateway' && params.dgatewayReference) {
     const result = await dgateway.verifyTransaction(params.dgatewayReference);

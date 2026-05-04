@@ -5,6 +5,7 @@ const ALLOWED_PAYMENT_METHODS = new Set([
   'airtel_money',
   'pesapal',
   'dgateway',
+  'yo',
   'admin_granted',
   'free_trial',
   'referral_referred',
@@ -28,6 +29,7 @@ function normalizePaymentMethod(rawMethod, fallbackMethod = '') {
 
   if (compact.includes('pesapal')) return 'pesapal';
   if (compact.includes('dgateway') || compact.includes('iotec')) return 'dgateway';
+  if (compact.includes('yo')) return 'yo';
 
   if (ALLOWED_PAYMENT_METHODS.has(normalizedFallback)) return normalizedFallback;
 

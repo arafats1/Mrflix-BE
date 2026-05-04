@@ -1,7 +1,9 @@
 'use strict';
 
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const utils = require('@strapi/utils');
+const { sendSms } = require('../../utils/sms');
 
 const { ValidationError } = utils.errors;
 
@@ -54,6 +56,16 @@ module.exports = (plugin) => {
   plugin.contentTypes.user.schema.attributes.phone = {
     type: 'string',
     unique: true,
+  };
+
+  plugin.contentTypes.user.schema.attributes.phoneVerified = {
+    type: 'boolean',
+    default: false,
+  };
+
+  plugin.contentTypes.user.schema.attributes.phoneOtpToken = {
+    type: 'string',
+    private: true,
   };
 
   plugin.contentTypes.user.schema.attributes.religion = {
@@ -156,6 +168,7 @@ module.exports = (plugin) => {
       blocked: userWithRole.blocked,
       fullName: userWithRole.fullName,
       phone: userWithRole.phone || null,
+      phoneVerified: !!userWithRole.phoneVerified,
       religion: userWithRole.religion || null,
       isParent: !!userWithRole.isParent,
       hasParentPin: !!userWithRole.parentPinHash,
@@ -311,6 +324,29 @@ module.exports = (plugin) => {
             };
           } catch (err) {
             strapi.log.warn(`[register-extension] failed to persist parent fields: ${err.message}`);
+          }
+        }
+
+        // Send phone-OTP for verification (best-effort, non-blocking failure).
+        if (extras.phone) {
+          try {
+            const otp = crypto.randomInt(100000, 999999).toString();
+            const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
+            await strapi.db.query('plugin::users-permissions.user').update({
+              where: { id: created.id },
+              data: {
+                phoneOtpToken: JSON.stringify({ code: otp, expiresAt: expiresAt.toISOString() }),
+              },
+            });
+
+            await sendSms({
+              to: extras.phone,
+              message: `Welcome to Mr.Flix! Your verification code is ${otp}. It expires in 10 minutes.`,
+            });
+            strapi.log.info(`[register-extension] OTP sent to ${extras.phone}`);
+          } catch (err) {
+            strapi.log.warn(`[register-extension] OTP send failed: ${err.message}`);
           }
         }
       },

@@ -150,6 +150,8 @@ module.exports = createCoreController('api::subscription.subscription', ({ strap
         updateData.pesapalTrackingId = paymentResult.order_tracking_id;
       } else if (paymentResult.gateway === 'dgateway') {
         updateData.dgatewayReference = paymentResult.reference;
+      } else if (paymentResult.gateway === 'yo') {
+        updateData.yoReference = paymentResult.reference;
       }
 
       await strapi.entityService.update('api::subscription.subscription', entry.id, {

@@ -720,7 +720,7 @@ export interface ApiExclusiveSubscriptionExclusiveSubscription
       Schema.Attribute.Private;
     originalAmount: Schema.Attribute.Integer;
     paymentMethod: Schema.Attribute.Enumeration<
-      ['mtn_momo', 'airtel_money', 'pesapal', 'dgateway']
+      ['mtn_momo', 'airtel_money', 'pesapal', 'dgateway', 'yo']
     > &
       Schema.Attribute.Required;
     paymentPhone: Schema.Attribute.String & Schema.Attribute.Required;
@@ -743,6 +743,7 @@ export interface ApiExclusiveSubscriptionExclusiveSubscription
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    yoReference: Schema.Attribute.String;
   };
 }
 
@@ -1100,6 +1101,7 @@ export interface ApiPurchasePurchase extends Struct.CollectionTypeSchema {
         'airtel_money',
         'pesapal',
         'dgateway',
+        'yo',
         'free_trial',
         'referral_referred',
         'referral_referrer',
@@ -1117,6 +1119,7 @@ export interface ApiPurchasePurchase extends Struct.CollectionTypeSchema {
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    yoReference: Schema.Attribute.String;
   };
 }
 
@@ -1301,7 +1304,9 @@ export interface ApiSiteSettingSiteSetting extends Struct.SingleTypeSchema {
       Schema.Attribute.Required &
       Schema.Attribute.DefaultTo<2000>;
     movingText: Schema.Attribute.Text;
-    paymentGateway: Schema.Attribute.Enumeration<['pesapal', 'dgateway']> &
+    paymentGateway: Schema.Attribute.Enumeration<
+      ['pesapal', 'dgateway', 'yo']
+    > &
       Schema.Attribute.DefaultTo<'pesapal'>;
     pesapalIpnId: Schema.Attribute.String;
     publishedAt: Schema.Attribute.DateTime;
@@ -1464,7 +1469,7 @@ export interface ApiStorageSubscriptionStorageSubscription
     > &
       Schema.Attribute.Private;
     paymentMethod: Schema.Attribute.Enumeration<
-      ['mtn_momo', 'airtel_money', 'pesapal', 'dgateway', 'admin_granted']
+      ['mtn_momo', 'airtel_money', 'pesapal', 'dgateway', 'yo', 'admin_granted']
     > &
       Schema.Attribute.Required;
     paymentPhone: Schema.Attribute.String;
@@ -1487,6 +1492,7 @@ export interface ApiStorageSubscriptionStorageSubscription
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    yoReference: Schema.Attribute.String;
   };
 }
 
@@ -1551,7 +1557,7 @@ export interface ApiSubscriptionSubscription
     > &
       Schema.Attribute.Private;
     paymentMethod: Schema.Attribute.Enumeration<
-      ['mtn_momo', 'airtel_money', 'pesapal', 'dgateway']
+      ['mtn_momo', 'airtel_money', 'pesapal', 'dgateway', 'yo']
     > &
       Schema.Attribute.Required;
     paymentPhone: Schema.Attribute.String & Schema.Attribute.Required;
@@ -1571,6 +1577,7 @@ export interface ApiSubscriptionSubscription
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    yoReference: Schema.Attribute.String;
   };
 }
 
@@ -2167,6 +2174,8 @@ export interface PluginUsersPermissionsUser
         minLength: 6;
       }>;
     phone: Schema.Attribute.String & Schema.Attribute.Unique;
+    phoneOtpToken: Schema.Attribute.String & Schema.Attribute.Private;
+    phoneVerified: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
     provider: Schema.Attribute.String;
     publishedAt: Schema.Attribute.DateTime;
     religion: Schema.Attribute.Enumeration<
