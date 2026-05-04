@@ -4,6 +4,14 @@ module.exports = {
   routes: [
     {
       method: 'GET',
+      path: '/site-setting/admin-stats',
+      handler: 'site-setting.adminStats',
+      config: {
+        policies: [],
+      },
+    },
+    {
+      method: 'GET',
       path: '/site-setting',
       handler: 'site-setting.find',
       config: {

@@ -3,6 +3,98 @@
 const { createCoreController } = require('@strapi/strapi').factories;
 
 module.exports = createCoreController('api::site-setting.site-setting', ({ strapi }) => ({
+  async adminStats(ctx) {
+    if (!ctx.state.user) {
+      return ctx.unauthorized('You must be logged in');
+    }
+
+    const isAdmin = ctx.state.user.role?.type === 'admin' || ctx.state.user.role?.name === 'Admin';
+    if (!isAdmin) {
+      return ctx.forbidden('Only admins can view admin stats');
+    }
+
+    const settings = await strapi.entityService.findMany('api::site-setting.site-setting');
+    const revenueStart = settings?.revenueResetDate
+      ? new Date(settings.revenueResetDate)
+      : new Date('2026-03-09T00:00:00.000Z');
+
+    const revenueStartIso = revenueStart.toISOString();
+
+    const [
+      totalMovies,
+      totalSeries,
+      totalPurchases,
+      pendingRequests,
+      totalRequests,
+      totalUsers,
+      activeSubscriptions,
+      totalSubscriptions,
+      activeExclusiveSubscriptions,
+      totalExclusiveSubscriptions,
+      newMessages,
+      purchaseRevenueRows,
+      subscriptionRevenueRows,
+      exclusiveRevenueRows,
+    ] = await Promise.all([
+      strapi.db.query('api::movie.movie').count({ where: { type: 'movie' } }),
+      strapi.db.query('api::movie.movie').count({ where: { type: 'series' } }),
+      strapi.db.query('api::purchase.purchase').count({}),
+      strapi.db.query('api::movie-request.movie-request').count({ where: { status: 'pending' } }),
+      strapi.db.query('api::movie-request.movie-request').count({}),
+      strapi.db.query('plugin::users-permissions.user').count({}),
+      strapi.db.query('api::subscription.subscription').count({ where: { status: 'active' } }),
+      strapi.db.query('api::subscription.subscription').count({}),
+      strapi.db.query('api::exclusive-subscription.exclusive-subscription').count({ where: { status: 'active' } }),
+      strapi.db.query('api::exclusive-subscription.exclusive-subscription').count({}),
+      strapi.db.query('api::contact-message.contact-message').count({ where: { status: 'new' } }),
+      strapi.db.query('api::purchase.purchase').findMany({
+        where: {
+          status: 'completed',
+          createdAt: { $gte: revenueStartIso },
+        },
+        select: ['amount'],
+      }),
+      strapi.db.query('api::subscription.subscription').findMany({
+        where: {
+          status: { $in: ['active', 'expired'] },
+          createdAt: { $gte: revenueStartIso },
+        },
+        select: ['amount'],
+      }),
+      strapi.db.query('api::exclusive-subscription.exclusive-subscription').findMany({
+        where: {
+          status: { $in: ['active', 'expired'] },
+          createdAt: { $gte: revenueStartIso },
+        },
+        select: ['amount'],
+      }),
+    ]);
+
+    const purchaseRevenue = (purchaseRevenueRows || []).reduce((sum, entry) => sum + (entry.amount || 0), 0);
+    const subscriptionRevenue = (subscriptionRevenueRows || []).reduce((sum, entry) => sum + (entry.amount || 0), 0);
+    const exclusiveRevenue = (exclusiveRevenueRows || []).reduce((sum, entry) => sum + (entry.amount || 0), 0);
+
+    return {
+      data: {
+        totalMovies,
+        totalSeries,
+        totalPurchases,
+        pendingRequests,
+        totalRequests,
+        totalRevenue: purchaseRevenue + subscriptionRevenue + exclusiveRevenue,
+        totalUsers,
+        activeSubscriptions,
+        totalSubscriptions,
+        subscriptionRevenue,
+        activeExclusiveSubscriptions,
+        totalExclusiveSubscriptions,
+        exclusiveRevenue,
+        apkDownloadCount: settings?.apkDownloadCount || 0,
+        newMessages,
+      },
+    };
+  },
+
   // Public read — anyone can read pricing
   async find(ctx) {
     const entry = await strapi.entityService.findMany('api::site-setting.site-setting');
