@@ -3,6 +3,22 @@
 const crypto = require('crypto');
 const { sendSms } = require('../../../utils/sms');
 
+function sanitizeUser(user) {
+  if (!user) return null;
+  return {
+    id: user.id,
+    documentId: user.documentId,
+    username: user.username,
+    email: user.email,
+    phone: user.phone || null,
+    phoneVerified: !!user.phoneVerified,
+    confirmed: !!user.confirmed,
+    blocked: !!user.blocked,
+    fullName: user.fullName || null,
+    provider: user.provider,
+  };
+}
+
 function normalizeUgPhone(phone) {
   if (!phone) return '';
   let p = String(phone).trim().replace(/[\s()+-]/g, '');
@@ -102,6 +118,21 @@ module.exports = {
       },
     });
 
-    return { data: { message: 'Phone verified successfully.', phoneVerified: true } };
+    const authenticatedUser = await strapi.db
+      .query('plugin::users-permissions.user')
+      .findOne({ where: { id: user.id }, populate: ['role'] });
+    const jwt = await strapi
+      .plugin('users-permissions')
+      .service('jwt')
+      .issue({ id: user.id });
+
+    return {
+      data: {
+        message: 'Phone verified successfully.',
+        phoneVerified: true,
+        jwt,
+        user: sanitizeUser(authenticatedUser),
+      },
+    };
   },
 };
