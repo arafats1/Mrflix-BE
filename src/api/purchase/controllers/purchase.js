@@ -47,6 +47,21 @@ async function findPurchaseTarget(strapi, { movieId, providerMaterialId }) {
   return null;
 }
 
+async function findOwnedChildProfile(strapi, userId, childProfileId) {
+  if (!childProfileId) return null;
+
+  const numericId = Number(childProfileId);
+  if (!Number.isFinite(numericId)) return null;
+
+  return strapi.db.query('api::child-profile.child-profile').findOne({
+    where: {
+      id: numericId,
+      parent: { id: userId },
+    },
+    select: ['id', 'name'],
+  });
+}
+
 function buildPurchaseInfo(purchase) {
   if (purchase.providerMaterial) {
     const material = purchase.providerMaterial;
@@ -55,6 +70,8 @@ function buildPurchaseInfo(purchase) {
       id: material.documentId || material.id,
       title: material.title,
       type: material.mediaType,
+      childProfileId: purchase.childProfile?.id || null,
+      childProfileName: purchase.childProfile?.name || null,
     };
   }
 
@@ -138,6 +155,7 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
     }
 
     const { movieId, providerMaterialId, paymentMethod, paymentPhone, seasonNumber } = ctx.request.body.data || ctx.request.body;
+    const childProfileId = (ctx.request.body.data || ctx.request.body || {}).childProfileId;
 
     if (!movieId && !providerMaterialId) {
       return ctx.badRequest('Missing required field: movieId or providerMaterialId');
@@ -148,6 +166,14 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
       return ctx.notFound(providerMaterialId ? 'Provider material not found' : 'Movie not found');
     }
 
+    const childProfile = target.kind === 'provider_material' && childProfileId
+      ? await findOwnedChildProfile(strapi, ctx.state.user.id, childProfileId)
+      : null;
+
+    if (target.kind === 'provider_material' && childProfileId && !childProfile) {
+      return ctx.badRequest('Select a valid child profile for this material');
+    }
+
     const filters = {
       buyer: { id: ctx.state.user.id },
       status: 'completed',
@@ -155,6 +181,9 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
 
     if (target.kind === 'provider_material') {
       filters.providerMaterial = { id: target.id };
+      if (childProfile) {
+        filters.childProfile = { id: childProfile.id };
+      }
     } else {
       filters.movie = { id: target.id };
     }
@@ -206,6 +235,7 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
         movie: target.kind === 'movie' ? target.id : null,
         providerMaterial: target.kind === 'provider_material' ? target.id : null,
         buyer: ctx.state.user.id,
+        childProfile: childProfile?.id || null,
         amount,
         paymentMethod: paymentMethod || activeGateway,
         paymentPhone: paymentPhone || '',
@@ -308,6 +338,10 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
 
     for (const item of normalizedItems) {
       const kind = item?.kind === 'provider_material' ? 'provider_material' : 'movie';
+      const childProfile = kind === 'provider_material' && item?.childProfileId
+        ? await findOwnedChildProfile(strapi, ctx.state.user.id, item.childProfileId)
+        : null;
+      if (kind === 'provider_material' && item?.childProfileId && !childProfile) continue;
       const target = await findPurchaseTarget(strapi, {
         movieId: kind === 'movie' ? item?.id : null,
         providerMaterialId: kind === 'provider_material' ? item?.id : null,
@@ -316,7 +350,12 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
 
       const existing = await strapi.documents('api::purchase.purchase').findMany({
         filters: kind === 'provider_material'
-          ? { buyer: { id: ctx.state.user.id }, providerMaterial: { id: target.id }, status: 'completed' }
+          ? {
+              buyer: { id: ctx.state.user.id },
+              providerMaterial: { id: target.id },
+              status: 'completed',
+              ...(childProfile ? { childProfile: { id: childProfile.id } } : {}),
+            }
           : { buyer: { id: ctx.state.user.id }, movie: { id: target.id }, status: 'completed' },
       });
       if (existing && existing.length > 0) continue;
@@ -335,6 +374,7 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
           movie: kind === 'movie' ? target.id : null,
           providerMaterial: kind === 'provider_material' ? target.id : null,
           buyer: ctx.state.user.id,
+          childProfile: childProfile?.id || null,
           amount,
           paymentMethod: paymentMethod || activeGateway,
           paymentPhone: paymentPhone || '',
@@ -430,6 +470,7 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
         buyer: { id: ctx.state.user.id },
       },
       populate: { movie: true, providerMaterial: true },
+      populate: { movie: true, providerMaterial: true, childProfile: true },
     });
 
     if (!purchases || purchases.length === 0) {
@@ -459,6 +500,7 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
           purchases = await strapi.documents('api::purchase.purchase').findMany({
             filters: { transactionId, buyer: { id: ctx.state.user.id } },
             populate: { movie: true, providerMaterial: true },
+            populate: { movie: true, providerMaterial: true, childProfile: true },
           });
         } else if (result.status === 'failed') {
           for (const p of purchases) {
@@ -472,6 +514,7 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
           purchases = await strapi.documents('api::purchase.purchase').findMany({
             filters: { transactionId, buyer: { id: ctx.state.user.id } },
             populate: { movie: true, providerMaterial: true },
+            populate: { movie: true, providerMaterial: true, childProfile: true },
           });
         }
       } catch (err) {

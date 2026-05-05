@@ -27,6 +27,11 @@
       "relation": "manyToOne",
       "target": "plugin::users-permissions.user"
     },
+    "childProfile": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::child-profile.child-profile"
+    },
     "amount": {
       "type": "integer",
       "required": true

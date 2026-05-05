@@ -8,6 +8,16 @@ function normalizeEducationLevels(input = []) {
   return [...new Set(values.filter((level) => EDUCATION_LEVEL_OPTIONS.includes(level)))];
 }
 
+function normalizeSubjectsTaught(input = []) {
+  const rawValues = Array.isArray(input)
+    ? input
+    : typeof input === 'string'
+      ? input.split(',')
+      : [];
+
+  return [...new Set(rawValues.map((value) => String(value || '').trim()).filter(Boolean))];
+}
+
 module.exports = {
   async updateMe(ctx) {
     if (!ctx.state.user) return ctx.unauthorized();
@@ -26,6 +36,9 @@ module.exports = {
     const religion = RELIGION_OPTIONS.includes(body.religion) ? body.religion : null;
     const educationLevels = normalizeEducationLevels(body.educationLevels);
     const educationLevelOther = typeof body.educationLevelOther === 'string' ? body.educationLevelOther.trim() : '';
+    const teacherBackground = typeof body.teacherBackground === 'string' ? body.teacherBackground.trim() : '';
+    const teachingExperience = typeof body.teachingExperience === 'string' ? body.teachingExperience.trim() : '';
+    const subjectsTaught = normalizeSubjectsTaught(body.subjectsTaught);
 
     if (!fullName) return ctx.badRequest('Full name is required');
 
@@ -42,6 +55,9 @@ module.exports = {
       updateData.educationLevels = educationLevels;
       updateData.educationLevel = educationLevels[0] || null;
       updateData.educationLevelOther = educationLevels.includes('Other') ? educationLevelOther : null;
+      updateData.teacherBackground = teacherBackground || null;
+      updateData.teachingExperience = teachingExperience || null;
+      updateData.subjectsTaught = subjectsTaught;
     }
 
     if (currentUser.providerType === 'religious') {
@@ -55,5 +71,57 @@ module.exports = {
     });
 
     ctx.body = { data: updateData };
+  },
+
+  async toggleTeacherSubscription(ctx) {
+    if (!ctx.state.user) return ctx.unauthorized();
+
+    const currentUser = await strapi.db.query('plugin::users-permissions.user').findOne({
+      where: { id: ctx.state.user.id },
+      select: ['id', 'isParent', 'subscribedTeacherIds'],
+    });
+
+    if (!currentUser?.isParent) {
+      return ctx.forbidden('Only parent accounts can subscribe to teachers');
+    }
+
+    const teacherId = Number(ctx.params.id);
+    if (!Number.isFinite(teacherId)) {
+      return ctx.badRequest('Teacher not found');
+    }
+
+    const teacher = await strapi.db.query('plugin::users-permissions.user').findOne({
+      where: {
+        id: teacherId,
+        accountType: 'provider',
+        providerType: 'teacher',
+      },
+      select: ['id'],
+    });
+
+    if (!teacher) {
+      return ctx.notFound('Teacher not found');
+    }
+
+    const currentSubscriptions = Array.isArray(currentUser.subscribedTeacherIds)
+      ? currentUser.subscribedTeacherIds.map((value) => Number(value)).filter(Number.isFinite)
+      : [];
+    const isSubscribed = currentSubscriptions.includes(teacher.id);
+    const nextSubscriptions = isSubscribed
+      ? currentSubscriptions.filter((value) => value !== teacher.id)
+      : [...currentSubscriptions, teacher.id];
+
+    await strapi.db.query('plugin::users-permissions.user').update({
+      where: { id: currentUser.id },
+      data: { subscribedTeacherIds: nextSubscriptions },
+    });
+
+    ctx.body = {
+      data: {
+        teacherId: teacher.id,
+        subscribed: !isSubscribed,
+        subscribedTeacherIds: nextSubscriptions,
+      },
+    };
   },
 };

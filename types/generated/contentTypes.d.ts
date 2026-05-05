@@ -1278,6 +1278,10 @@ export interface ApiPurchasePurchase extends Struct.CollectionTypeSchema {
       'manyToOne',
       'plugin::users-permissions.user'
     >;
+    childProfile: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::child-profile.child-profile'
+    >;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -2416,6 +2420,10 @@ export interface PluginUsersPermissionsUser
       'plugin::users-permissions.role'
     >;
     schoolName: Schema.Attribute.String;
+    subjectsTaught: Schema.Attribute.JSON;
+    subscribedTeacherIds: Schema.Attribute.JSON;
+    teacherBackground: Schema.Attribute.Text;
+    teachingExperience: Schema.Attribute.Text;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;

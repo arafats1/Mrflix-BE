@@ -117,6 +117,22 @@ module.exports = (plugin) => {
     type: 'string',
   };
 
+  plugin.contentTypes.user.schema.attributes.teacherBackground = {
+    type: 'text',
+  };
+
+  plugin.contentTypes.user.schema.attributes.teachingExperience = {
+    type: 'text',
+  };
+
+  plugin.contentTypes.user.schema.attributes.subjectsTaught = {
+    type: 'json',
+  };
+
+  plugin.contentTypes.user.schema.attributes.subscribedTeacherIds = {
+    type: 'json',
+  };
+
   plugin.contentTypes.user.schema.attributes.parentPinHash = {
     type: 'password',
     private: true,
@@ -227,6 +243,12 @@ module.exports = (plugin) => {
           ? [userWithRole.educationLevel]
           : [],
       educationLevelOther: userWithRole.educationLevelOther || null,
+      teacherBackground: userWithRole.teacherBackground || null,
+      teachingExperience: userWithRole.teachingExperience || null,
+      subjectsTaught: Array.isArray(userWithRole.subjectsTaught) ? userWithRole.subjectsTaught : [],
+      subscribedTeacherIds: Array.isArray(userWithRole.subscribedTeacherIds)
+        ? userWithRole.subscribedTeacherIds.map((value) => Number(value)).filter(Number.isFinite)
+        : [],
       hasParentPin: !!userWithRole.parentPinHash,
       parentPinUpdatedAt: userWithRole.parentPinUpdatedAt || null,
       childProfiles: Array.isArray(userWithRole.childProfiles)

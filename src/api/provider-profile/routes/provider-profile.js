@@ -8,5 +8,11 @@ module.exports = {
       handler: 'provider-profile.updateMe',
       config: {},
     },
+    {
+      method: 'POST',
+      path: '/provider-profile/teachers/:id/subscribe',
+      handler: 'provider-profile.toggleTeacherSubscription',
+      config: {},
+    },
   ],
 };

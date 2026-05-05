@@ -400,6 +400,7 @@ module.exports = {
           { action: 'api::provider-material.provider-material.mine' },
           { action: 'api::provider-material.provider-material.summary' },
           { action: 'api::provider-profile.provider-profile.updateMe' },
+          { action: 'api::provider-profile.provider-profile.toggleTeacherSubscription' },
           // Promo codes — viewers can validate a code at checkout
           { action: 'api::promo-code.promo-code.validate' },
           // Purchases
