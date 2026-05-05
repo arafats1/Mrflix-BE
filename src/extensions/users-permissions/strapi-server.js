@@ -258,6 +258,7 @@ module.exports = (plugin) => {
             name: c.name,
             hasPin: !!c.childPinHash,
             dateOfBirth: c.dateOfBirth,
+            religion: c.religion || null,
             avatarUrl: c.avatarUrl,
             dailyWatchMinutes: c.dailyWatchMinutes,
             blockedMovieIds: Array.isArray(c.blockedMovieIds) ? c.blockedMovieIds : [],

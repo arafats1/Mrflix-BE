@@ -20,6 +20,21 @@
       "type": "date",
       "required": true
     },
+    "religion": {
+      "type": "enumeration",
+      "enum": [
+        "Catholic",
+        "Protestant",
+        "Pentecostal",
+        "Adventist",
+        "Orthodox",
+        "Muslim",
+        "Hindu",
+        "Bahai",
+        "Traditional",
+        "Other"
+      ]
+    },
     "avatarUrl": {
       "type": "string"
     },

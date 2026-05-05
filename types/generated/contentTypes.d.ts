@@ -635,6 +635,20 @@ export interface ApiChildProfileChildProfile
       'plugin::users-permissions.user'
     >;
     publishedAt: Schema.Attribute.DateTime;
+    religion: Schema.Attribute.Enumeration<
+      [
+        'Catholic',
+        'Protestant',
+        'Pentecostal',
+        'Adventist',
+        'Orthodox',
+        'Muslim',
+        'Hindu',
+        'Bahai',
+        'Traditional',
+        'Other',
+      ]
+    >;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;

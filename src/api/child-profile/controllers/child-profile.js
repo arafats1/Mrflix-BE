@@ -3,9 +3,10 @@
 const { createCoreController } = require('@strapi/strapi').factories;
 const bcrypt = require('bcryptjs');
 
-const ALLOWED_FIELDS = ['name', 'dateOfBirth', 'avatarUrl', 'dailyWatchMinutes', 'blockedMovieIds', 'allowedMovieIds'];
+const ALLOWED_FIELDS = ['name', 'dateOfBirth', 'religion', 'avatarUrl', 'dailyWatchMinutes', 'blockedMovieIds', 'allowedMovieIds'];
 const MAX_CHILD_PROFILES = 4;
 const PIN_PATTERN = /^\d{4}$/;
+const RELIGIONS = new Set(['Catholic', 'Protestant', 'Pentecostal', 'Adventist', 'Orthodox', 'Muslim', 'Hindu', 'Bahai', 'Traditional', 'Other']);
 
 function normalizePhone(phone) {
   const raw = typeof phone === 'string' ? phone.trim() : '';
@@ -34,6 +35,15 @@ function pickAllowed(input = {}) {
   if (out.dailyWatchMinutes != null) {
     const n = Number(out.dailyWatchMinutes);
     out.dailyWatchMinutes = Number.isFinite(n) ? Math.max(0, Math.min(1440, Math.round(n))) : 60;
+  }
+  if (out.religion != null) {
+    const normalizedReligion = String(out.religion || '').trim();
+    out.religion = normalizedReligion || null;
+    if (out.religion && !RELIGIONS.has(out.religion)) {
+      const err = new Error('Invalid child religion');
+      err.status = 400;
+      throw err;
+    }
   }
   return out;
 }
@@ -72,6 +82,7 @@ function shape(profile) {
     name: profile.name,
     hasPin: !!profile.childPinHash,
     dateOfBirth: profile.dateOfBirth,
+    religion: profile.religion || null,
     avatarUrl: profile.avatarUrl || null,
     dailyWatchMinutes: profile.dailyWatchMinutes ?? 60,
     blockedMovieIds: Array.isArray(profile.blockedMovieIds) ? profile.blockedMovieIds : [],
@@ -179,7 +190,12 @@ module.exports = createCoreController('api::child-profile.child-profile', ({ str
     }
 
     const body = (ctx.request.body && ctx.request.body.data) || ctx.request.body || {};
-    const data = pickAllowed(body);
+    let data;
+    try {
+      data = pickAllowed(body);
+    } catch (err) {
+      return ctx.badRequest(err.message || 'Invalid child profile data');
+    }
     if (!data.name || !data.dateOfBirth) {
       return ctx.badRequest('name and dateOfBirth are required');
     }
@@ -211,7 +227,12 @@ module.exports = createCoreController('api::child-profile.child-profile', ({ str
     if (!profile) return ctx.notFound();
 
     const body = (ctx.request.body && ctx.request.body.data) || ctx.request.body || {};
-    const data = pickAllowed(body);
+    let data;
+    try {
+      data = pickAllowed(body);
+    } catch (err) {
+      return ctx.badRequest(err.message || 'Invalid child profile data');
+    }
     let pinPayload;
     try {
       pinPayload = buildPinPayload(body);
