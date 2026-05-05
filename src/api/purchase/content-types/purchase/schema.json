@@ -17,6 +17,11 @@
       "relation": "manyToOne",
       "target": "api::movie.movie"
     },
+    "providerMaterial": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::provider-material.provider-material"
+    },
     "buyer": {
       "type": "relation",
       "relation": "manyToOne",

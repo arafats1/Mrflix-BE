@@ -5,6 +5,12 @@ const corsOrigins = [
   ...(process.env.CORS_ORIGINS || '').split(',').map((origin) => origin.trim()).filter(Boolean),
 ].filter(Boolean);
 
+const activeStoragePublicUrl = (
+  (process.env.STORAGE_PROVIDER || 'cloudflare').toLowerCase() === 'backblaze'
+    ? process.env.B2_PUBLIC_URL
+    : process.env.CF_PUBLIC_URL
+) || process.env.B2_PUBLIC_URL || process.env.CF_PUBLIC_URL || '';
+
 module.exports = [
   'strapi::logger',
   'strapi::errors',
@@ -20,13 +26,13 @@ module.exports = [
             'data:',
             'blob:',
             'https://image.tmdb.org',
-            process.env.CF_PUBLIC_URL || '',
+            activeStoragePublicUrl,
           ],
           'media-src': [
             "'self'",
             'data:',
             'blob:',
-            process.env.CF_PUBLIC_URL || '',
+            activeStoragePublicUrl,
           ],
           upgradeInsecureRequests: null,
         },

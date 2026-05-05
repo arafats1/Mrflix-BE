@@ -27,6 +27,17 @@ const RELIGION_OPTIONS = [
   'Other',
 ];
 
+const ACCOUNT_TYPE_OPTIONS = ['parent', 'provider'];
+const PROVIDER_TYPE_OPTIONS = ['teacher', 'religious'];
+const EDUCATION_LEVEL_OPTIONS = [
+  'Kindergarten',
+  'Primary',
+  'Secondary',
+  'Technical college',
+  'University',
+  'Other',
+];
+
 function normalizePhone(phone) {
   const raw = typeof phone === 'string' ? phone.trim() : '';
   if (!raw) return '';
@@ -78,6 +89,30 @@ module.exports = (plugin) => {
     default: true,
   };
 
+  plugin.contentTypes.user.schema.attributes.accountType = {
+    type: 'enumeration',
+    enum: ACCOUNT_TYPE_OPTIONS,
+    default: 'parent',
+  };
+
+  plugin.contentTypes.user.schema.attributes.providerType = {
+    type: 'enumeration',
+    enum: PROVIDER_TYPE_OPTIONS,
+  };
+
+  plugin.contentTypes.user.schema.attributes.schoolName = {
+    type: 'string',
+  };
+
+  plugin.contentTypes.user.schema.attributes.educationLevel = {
+    type: 'enumeration',
+    enum: EDUCATION_LEVEL_OPTIONS,
+  };
+
+  plugin.contentTypes.user.schema.attributes.educationLevelOther = {
+    type: 'string',
+  };
+
   plugin.contentTypes.user.schema.attributes.parentPinHash = {
     type: 'password',
     private: true,
@@ -93,6 +128,13 @@ module.exports = (plugin) => {
     relation: 'oneToMany',
     target: 'api::child-profile.child-profile',
     mappedBy: 'parent',
+  };
+
+  plugin.contentTypes.user.schema.attributes.providerMaterials = {
+    type: 'relation',
+    relation: 'oneToMany',
+    target: 'api::provider-material.provider-material',
+    mappedBy: 'provider',
   };
 
   // Override the me controller to populate role.
@@ -171,6 +213,11 @@ module.exports = (plugin) => {
       phoneVerified: !!userWithRole.phoneVerified,
       religion: userWithRole.religion || null,
       isParent: !!userWithRole.isParent,
+      accountType: userWithRole.accountType || 'parent',
+      providerType: userWithRole.providerType || null,
+      schoolName: userWithRole.schoolName || null,
+      educationLevel: userWithRole.educationLevel || null,
+      educationLevelOther: userWithRole.educationLevelOther || null,
       hasParentPin: !!userWithRole.parentPinHash,
       parentPinUpdatedAt: userWithRole.parentPinUpdatedAt || null,
       childProfiles: Array.isArray(userWithRole.childProfiles)
@@ -250,10 +297,38 @@ module.exports = (plugin) => {
       async register(ctx) {
         const body = ctx.request.body || {};
         const normalizedPhone = normalizePhone(body.phone);
-        const isParent = body.isParent === true || body.isParent === 'true';
+        const accountType = ACCOUNT_TYPE_OPTIONS.includes(body.accountType) ? body.accountType : 'parent';
+        const providerType = PROVIDER_TYPE_OPTIONS.includes(body.providerType) ? body.providerType : undefined;
+        const educationLevel = EDUCATION_LEVEL_OPTIONS.includes(body.educationLevel) ? body.educationLevel : undefined;
+        const educationLevelOther = typeof body.educationLevelOther === 'string' ? body.educationLevelOther.trim() : '';
+        const schoolName = typeof body.schoolName === 'string' ? body.schoolName.trim() : '';
+        const religion = RELIGION_OPTIONS.includes(body.religion) ? body.religion : undefined;
+        const isParent = accountType === 'parent'
+          ? body.isParent === true || body.isParent === 'true'
+          : false;
 
-        if (!isParent) {
+        if (accountType === 'parent' && !isParent) {
           throw new ValidationError('You must confirm that you are a parent to register');
+        }
+
+        if (accountType === 'provider' && !providerType) {
+          throw new ValidationError('Select a provider type to register');
+        }
+
+        if (providerType === 'teacher') {
+          if (!schoolName) {
+            throw new ValidationError('School is required for teacher accounts');
+          }
+          if (!educationLevel) {
+            throw new ValidationError('Education level is required for teacher accounts');
+          }
+          if (educationLevel === 'Other' && !educationLevelOther) {
+            throw new ValidationError('Enter the education level when selecting Other');
+          }
+        }
+
+        if (providerType === 'religious' && !religion) {
+          throw new ValidationError('Religion is required for religious providers');
         }
 
         if (!normalizedPhone) {
@@ -263,8 +338,13 @@ module.exports = (plugin) => {
         const extras = {
           fullName: typeof body.fullName === 'string' ? body.fullName.trim() : undefined,
           phone: normalizedPhone || undefined,
-          religion: RELIGION_OPTIONS.includes(body.religion) ? body.religion : undefined,
+          religion,
           isParent,
+          accountType,
+          providerType,
+          schoolName: schoolName || undefined,
+          educationLevel,
+          educationLevelOther: educationLevel === 'Other' ? educationLevelOther : undefined,
         };
 
         if (normalizedPhone) {
@@ -290,7 +370,8 @@ module.exports = (plugin) => {
         const effectiveEmail = submittedEmail || `${normalizedPhone}@phone.movokids.local`;
 
         // Strapi v5's users-permissions register validator rejects unknown keys
-        // (e.g. religion, isParent, phone, fullName) before reaching our wrapper,
+        // (e.g. religion, isParent, accountType, providerType, phone, fullName)
+        // before reaching our wrapper,
         // so we strip them off the request body, let the core handler run with
         // only the canonical { username, email, password }, then patch the new
         // user with our extras afterwards.
@@ -311,6 +392,12 @@ module.exports = (plugin) => {
         if (extras.phone) updateData.phone = extras.phone;
         if (extras.religion) updateData.religion = extras.religion;
         if (extras.isParent) updateData.isParent = true;
+        if (extras.accountType) updateData.accountType = extras.accountType;
+        if (extras.providerType) updateData.providerType = extras.providerType;
+        if (extras.schoolName) updateData.schoolName = extras.schoolName;
+        if (extras.educationLevel) updateData.educationLevel = extras.educationLevel;
+        if (extras.educationLevelOther) updateData.educationLevelOther = extras.educationLevelOther;
+        if (extras.accountType === 'provider') updateData.isParent = false;
 
         if (Object.keys(updateData).length > 0) {
           try {

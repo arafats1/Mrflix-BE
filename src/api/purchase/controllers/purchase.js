@@ -1,8 +1,101 @@
 'use strict';
 
 const { createCoreController } = require('@strapi/strapi').factories;
-const pesapal = require('../../../utils/pesapal');
 const { submitPayment, checkPaymentStatus, getActiveGateway } = require('../../../utils/payment-gateway');
+const { recordProviderMaterialSale } = require('../../../utils/provider-material-sales');
+
+async function findPurchaseTarget(strapi, { movieId, providerMaterialId }) {
+  if (providerMaterialId) {
+    const material = await strapi.documents('api::provider-material.provider-material').findOne({
+      documentId: providerMaterialId,
+      populate: {
+        provider: true,
+        subject: true,
+        course: true,
+      },
+    });
+
+    if (!material) return null;
+
+    return {
+      kind: 'provider_material',
+      id: material.id,
+      documentId: material.documentId,
+      title: material.title,
+      amount: Number(material.priceUGX || 0),
+      material,
+    };
+  }
+
+  if (movieId) {
+    const movie = await strapi.documents('api::movie.movie').findOne({
+      documentId: movieId,
+    });
+
+    if (!movie) return null;
+
+    return {
+      kind: 'movie',
+      id: movie.id,
+      documentId: movie.documentId,
+      title: movie.title,
+      amount: null,
+      movie,
+    };
+  }
+
+  return null;
+}
+
+function buildPurchaseInfo(purchase) {
+  if (purchase.providerMaterial) {
+    const material = purchase.providerMaterial;
+    return {
+      kind: 'provider_material',
+      id: material.documentId || material.id,
+      title: material.title,
+      type: material.mediaType,
+    };
+  }
+
+  if (purchase.movie) {
+    const movie = purchase.movie;
+    return {
+      kind: 'movie',
+      id: movie.documentId || movie.id,
+      title: movie.title,
+      type: movie.type,
+    };
+  }
+
+  return null;
+}
+
+async function markPurchasesCompleted(strapi, purchases, paymentData = {}) {
+  for (const purchase of purchases) {
+    if (purchase.status === 'completed') continue;
+
+    if (purchase.providerMaterial) {
+      await recordProviderMaterialSale(strapi, purchase);
+    }
+
+    await strapi.documents('api::purchase.purchase').update({
+      documentId: purchase.documentId,
+      data: {
+        status: 'completed',
+        ...paymentData,
+      },
+    });
+  }
+}
+
+function getMovieAmount(settings, movie, seasonNumber) {
+  if (movie.type === 'series') {
+    return settings?.seriesPrice ?? 5000;
+  }
+
+  return settings?.moviePrice ?? 2000;
+}
 
 module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => ({
   // Users see their own purchases, admins see all with buyer info
@@ -23,8 +116,8 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
     }
 
     const populate = isAdmin
-      ? { movie: { populate: '*' }, buyer: { populate: '*' } }
-      : { movie: { populate: '*' } };
+      ? { movie: { populate: '*' }, providerMaterial: { populate: '*' }, buyer: { populate: '*' } }
+      : { movie: { populate: '*' }, providerMaterial: { populate: '*' } };
 
     const purchases = await strapi.documents('api::purchase.purchase').findMany({
       filters,
@@ -44,86 +137,84 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
       return ctx.unauthorized('You must be logged in');
     }
 
-    const { movieId, paymentMethod, paymentPhone, seasonNumber, gateway } = ctx.request.body.data || ctx.request.body;
+    const { movieId, providerMaterialId, paymentMethod, paymentPhone, seasonNumber } = ctx.request.body.data || ctx.request.body;
 
-    if (!movieId) {
-      return ctx.badRequest('Missing required field: movieId');
+    if (!movieId && !providerMaterialId) {
+      return ctx.badRequest('Missing required field: movieId or providerMaterialId');
     }
 
-    // Get the movie
-    const movie = await strapi.documents('api::movie.movie').findOne({
-      documentId: movieId,
-    });
-
-    if (!movie) {
-      return ctx.notFound('Movie not found');
+    const target = await findPurchaseTarget(strapi, { movieId, providerMaterialId });
+    if (!target) {
+      return ctx.notFound(providerMaterialId ? 'Provider material not found' : 'Movie not found');
     }
 
-    // Determine filter for existing purchase
     const filters = {
       buyer: { id: ctx.state.user.id },
-      movie: { id: movie.id },
       status: 'completed',
     };
 
-    if (movie.type === 'series' && seasonNumber) {
+    if (target.kind === 'provider_material') {
+      filters.providerMaterial = { id: target.id };
+    } else {
+      filters.movie = { id: target.id };
+    }
+
+    if (target.kind === 'movie' && target.movie.type === 'series' && seasonNumber) {
       filters.seasonNumber = parseInt(seasonNumber);
     }
 
-    // Check if already purchased
     const existing = await strapi.documents('api::purchase.purchase').findMany({
       filters,
     });
 
     if (existing && existing.length > 0) {
-      return ctx.badRequest('You already own this ' + (seasonNumber ? `season ${seasonNumber}` : 'movie'));
+      return ctx.badRequest('You already own this ' + (seasonNumber ? `season ${seasonNumber}` : target.kind === 'provider_material' ? 'material' : 'movie'));
     }
 
-    // Determine the correct price from site settings
     const settings = await strapi.entityService.findMany('api::site-setting.site-setting');
-    const amount = movie.type === 'series'
-      ? (settings?.seriesPrice ?? 5000)
-      : (settings?.moviePrice ?? 2000);
+    const amount = target.kind === 'provider_material'
+      ? target.amount
+      : getMovieAmount(settings, target.movie, seasonNumber);
 
-    // Generate unique merchant reference
+    if (target.kind === 'provider_material' && amount <= 0) {
+      return ctx.badRequest('This material is not available for purchase.');
+    }
+
     const merchantReference = `PUR_${ctx.state.user.id}_${Date.now()}_${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
-
-    // Determine active payment gateway
     const activeGateway = await getActiveGateway(strapi);
-
-    // For Pesapal, ensure IPN is configured
     const ipnId = settings?.pesapalIpnId;
+
     if (activeGateway === 'pesapal' && !ipnId) {
       strapi.log.error('Pesapal IPN ID not configured.');
       return ctx.badRequest('Payment system not configured. Please contact support.');
     }
 
-    // For DGateway, phone number is required
     if (activeGateway === 'dgateway' && !paymentPhone) {
       return ctx.badRequest('Phone number is required for mobile money payment.');
     }
 
     const frontendUrl = process.env.FRONTEND_URL;
     const callbackUrl = `${frontendUrl}/payment/callback`;
-    const description = seasonNumber
-      ? `${movie.title} - Season ${seasonNumber}`
-      : movie.title;
+    const description = target.kind === 'provider_material'
+      ? target.title
+      : seasonNumber
+        ? `${target.movie.title} - Season ${seasonNumber}`
+        : target.movie.title;
 
-    // Create a pending purchase record
     const purchase = await strapi.documents('api::purchase.purchase').create({
       data: {
-        movie: movie.id,
+        movie: target.kind === 'movie' ? target.id : null,
+        providerMaterial: target.kind === 'provider_material' ? target.id : null,
         buyer: ctx.state.user.id,
         amount,
         paymentMethod: paymentMethod || activeGateway,
         paymentPhone: paymentPhone || '',
         transactionId: merchantReference,
         status: 'pending',
-        seasonNumber: (movie.type === 'series' && seasonNumber) ? seasonNumber : null,
+        seasonNumber: (target.kind === 'movie' && target.movie.type === 'series' && seasonNumber) ? seasonNumber : null,
       },
     });
 
-    // Submit order through active gateway
     try {
       const user = ctx.state.user;
       const nameParts = (user.fullName || user.username || '').split(' ');
@@ -142,7 +233,6 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
         },
       });
 
-      // Store tracking IDs based on gateway
       const updateData = {};
       if (paymentResult.gateway === 'pesapal') {
         updateData.pesapalTrackingId = paymentResult.order_tracking_id;
@@ -189,14 +279,19 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
       return ctx.unauthorized('You must be logged in');
     }
 
-    const { movieIds, paymentMethod, paymentPhone } = ctx.request.body.data || ctx.request.body;
+    const { movieIds, items, paymentMethod, paymentPhone } = ctx.request.body.data || ctx.request.body;
+    const normalizedItems = Array.isArray(items)
+      ? items
+      : Array.isArray(movieIds)
+        ? movieIds.map((movieId) => ({ kind: 'movie', id: movieId }))
+        : [];
 
-    if (!movieIds || !Array.isArray(movieIds) || movieIds.length === 0) {
-      return ctx.badRequest('Missing required field: movieIds (array)');
+    if (normalizedItems.length === 0) {
+      return ctx.badRequest('Missing required field: items (array)');
     }
 
     const settings = await strapi.entityService.findMany('api::site-setting.site-setting');
-    const activeGateway = settings?.paymentGateway || 'pesapal';
+    const activeGateway = await getActiveGateway(strapi);
     const ipnId = settings?.pesapalIpnId;
 
     if (activeGateway === 'pesapal' && !ipnId) {
@@ -211,25 +306,34 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
     const titles = [];
     const merchantReference = `CART_${ctx.state.user.id}_${Date.now()}_${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
 
-    for (const movieId of movieIds) {
-      const movie = await strapi.documents('api::movie.movie').findOne({ documentId: movieId });
-      if (!movie) continue;
+    for (const item of normalizedItems) {
+      const kind = item?.kind === 'provider_material' ? 'provider_material' : 'movie';
+      const target = await findPurchaseTarget(strapi, {
+        movieId: kind === 'movie' ? item?.id : null,
+        providerMaterialId: kind === 'provider_material' ? item?.id : null,
+      });
+      if (!target) continue;
 
       const existing = await strapi.documents('api::purchase.purchase').findMany({
-        filters: { buyer: { id: ctx.state.user.id }, movie: { id: movie.id }, status: 'completed' },
+        filters: kind === 'provider_material'
+          ? { buyer: { id: ctx.state.user.id }, providerMaterial: { id: target.id }, status: 'completed' }
+          : { buyer: { id: ctx.state.user.id }, movie: { id: target.id }, status: 'completed' },
       });
       if (existing && existing.length > 0) continue;
 
-      const amount = movie.type === 'series'
-        ? (settings?.seriesPrice ?? 5000)
-        : (settings?.moviePrice ?? 2000);
+      const amount = kind === 'provider_material'
+        ? target.amount
+        : getMovieAmount(settings, target.movie, null);
+
+      if (kind === 'provider_material' && amount <= 0) continue;
 
       totalAmount += amount;
-      titles.push(movie.title);
+      titles.push(target.title);
 
       const purchase = await strapi.documents('api::purchase.purchase').create({
         data: {
-          movie: movie.id,
+          movie: kind === 'movie' ? target.id : null,
+          providerMaterial: kind === 'provider_material' ? target.id : null,
           buyer: ctx.state.user.id,
           amount,
           paymentMethod: paymentMethod || activeGateway,
@@ -242,7 +346,7 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
     }
 
     if (totalAmount === 0) {
-      return ctx.badRequest('No new movies to purchase');
+      return ctx.badRequest('No new items to purchase');
     }
 
     const frontendUrl = process.env.FRONTEND_URL;
@@ -325,7 +429,7 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
         transactionId,
         buyer: { id: ctx.state.user.id },
       },
-      populate: { movie: true },
+      populate: { movie: true, providerMaterial: true },
     });
 
     if (!purchases || purchases.length === 0) {
@@ -348,20 +452,13 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
         strapi.log.info(`[checkStatus] Gateway says: ${result.status}`);
 
         if (result.status === 'completed') {
-          for (const p of purchases) {
-            if (p.status === 'pending') {
-              const data = { status: 'completed' };
-              if (trackingId) data.pesapalTrackingId = trackingId;
-              if (result.paymentMethod) data.paymentMethod = result.paymentMethod;
-              await strapi.documents('api::purchase.purchase').update({
-                documentId: p.documentId,
-                data,
-              });
-            }
-          }
+          const data = {};
+          if (trackingId) data.pesapalTrackingId = trackingId;
+          if (result.paymentMethod) data.paymentMethod = result.paymentMethod;
+          await markPurchasesCompleted(strapi, purchases, data);
           purchases = await strapi.documents('api::purchase.purchase').findMany({
             filters: { transactionId, buyer: { id: ctx.state.user.id } },
-            populate: { movie: true },
+            populate: { movie: true, providerMaterial: true },
           });
         } else if (result.status === 'failed') {
           for (const p of purchases) {
@@ -374,7 +471,7 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
           }
           purchases = await strapi.documents('api::purchase.purchase').findMany({
             filters: { transactionId, buyer: { id: ctx.state.user.id } },
-            populate: { movie: true },
+            populate: { movie: true, providerMaterial: true },
           });
         }
       } catch (err) {
@@ -386,6 +483,7 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
       data: purchases.map(p => ({
         id: p.documentId,
         status: p.status,
+        itemInfo: buildPurchaseInfo(p),
         movieInfo: p.movie ? { id: p.movie.documentId || p.movie.id, title: p.movie.title, type: p.movie.type } : null,
       })),
     };

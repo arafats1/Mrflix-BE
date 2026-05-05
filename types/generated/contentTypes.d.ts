@@ -693,6 +693,112 @@ export interface ApiContactMessageContactMessage
   };
 }
 
+export interface ApiEducationCourseEducationCourse
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'education_courses';
+  info: {
+    description: 'Admin-managed class/course options for provider education uploads';
+    displayName: 'Education Course';
+    pluralName: 'education-courses';
+    singularName: 'education-course';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    description: Schema.Attribute.Text;
+    educationLevel: Schema.Attribute.Enumeration<
+      [
+        'Kindergarten',
+        'Primary',
+        'Secondary',
+        'Technical college',
+        'University',
+        'Other',
+      ]
+    > &
+      Schema.Attribute.Required;
+    educationLevelOther: Schema.Attribute.String;
+    isActive: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<true>;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::education-course.education-course'
+    > &
+      Schema.Attribute.Private;
+    materials: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::provider-material.provider-material'
+    >;
+    publishedAt: Schema.Attribute.DateTime;
+    sortOrder: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    subject: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::education-subject.education-subject'
+    >;
+    title: Schema.Attribute.String & Schema.Attribute.Required;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
+export interface ApiEducationSubjectEducationSubject
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'education_subjects';
+  info: {
+    description: 'Admin-managed subject catalog for provider education content';
+    displayName: 'Education Subject';
+    pluralName: 'education-subjects';
+    singularName: 'education-subject';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    courses: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::education-course.education-course'
+    >;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    description: Schema.Attribute.Text;
+    educationLevel: Schema.Attribute.Enumeration<
+      [
+        'Kindergarten',
+        'Primary',
+        'Secondary',
+        'Technical college',
+        'University',
+        'Other',
+      ]
+    > &
+      Schema.Attribute.Required;
+    educationLevelOther: Schema.Attribute.String;
+    isActive: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<true>;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::education-subject.education-subject'
+    > &
+      Schema.Attribute.Private;
+    materials: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::provider-material.provider-material'
+    >;
+    name: Schema.Attribute.String & Schema.Attribute.Required;
+    publishedAt: Schema.Attribute.DateTime;
+    sortOrder: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface ApiExclusiveSubscriptionExclusiveSubscription
   extends Struct.CollectionTypeSchema {
   collectionName: 'exclusive_subscriptions';
@@ -1066,6 +1172,95 @@ export interface ApiPromoCodePromoCode extends Struct.CollectionTypeSchema {
   };
 }
 
+export interface ApiProviderMaterialProviderMaterial
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'provider_materials';
+  info: {
+    description: 'Teacher and religious provider content uploaded for the education section';
+    displayName: 'Provider Material';
+    pluralName: 'provider-materials';
+    singularName: 'provider-material';
+  };
+  options: {
+    draftAndPublish: true;
+  };
+  attributes: {
+    ageRange: Schema.Attribute.Enumeration<
+      ['ages_0_4', 'ages_5_8', 'ages_9_12', 'ages_13_17', 'all_ages']
+    > &
+      Schema.Attribute.DefaultTo<'all_ages'>;
+    attachment: Schema.Attribute.Media<'files' | 'videos' | 'audios'>;
+    classLabels: Schema.Attribute.JSON & Schema.Attribute.DefaultTo<[]>;
+    contentCategory: Schema.Attribute.Enumeration<['education', 'religion']> &
+      Schema.Attribute.Required;
+    course: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::education-course.education-course'
+    >;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    description: Schema.Attribute.Text;
+    educationLevel: Schema.Attribute.Enumeration<
+      [
+        'Kindergarten',
+        'Primary',
+        'Secondary',
+        'Technical college',
+        'University',
+        'Other',
+      ]
+    >;
+    educationLevelOther: Schema.Attribute.String;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::provider-material.provider-material'
+    > &
+      Schema.Attribute.Private;
+    mediaType: Schema.Attribute.Enumeration<['pdf', 'video', 'audio']> &
+      Schema.Attribute.Required;
+    priceUGX: Schema.Attribute.Integer &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<0>;
+    provider: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+    providerType: Schema.Attribute.Enumeration<['teacher', 'religious']> &
+      Schema.Attribute.Required;
+    publishedAt: Schema.Attribute.DateTime;
+    religion: Schema.Attribute.Enumeration<
+      [
+        'Catholic',
+        'Protestant',
+        'Pentecostal',
+        'Adventist',
+        'Orthodox',
+        'Muslim',
+        'Hindu',
+        'Bahai',
+        'Traditional',
+        'Other',
+      ]
+    >;
+    schoolName: Schema.Attribute.String;
+    status: Schema.Attribute.Enumeration<['draft', 'published', 'rejected']> &
+      Schema.Attribute.DefaultTo<'draft'>;
+    subject: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::education-subject.education-subject'
+    >;
+    thumbnail: Schema.Attribute.Media<'images'>;
+    title: Schema.Attribute.String & Schema.Attribute.Required;
+    totalRevenueUGX: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    totalSales: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface ApiPurchasePurchase extends Struct.CollectionTypeSchema {
   collectionName: 'purchases';
   info: {
@@ -1110,6 +1305,10 @@ export interface ApiPurchasePurchase extends Struct.CollectionTypeSchema {
       Schema.Attribute.Required;
     paymentPhone: Schema.Attribute.String;
     pesapalTrackingId: Schema.Attribute.String;
+    providerMaterial: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::provider-material.provider-material'
+    >;
     publishedAt: Schema.Attribute.DateTime;
     seasonNumber: Schema.Attribute.Integer;
     status: Schema.Attribute.Enumeration<['pending', 'completed', 'failed']> &
@@ -2142,6 +2341,8 @@ export interface PluginUsersPermissionsUser
     timestamps: true;
   };
   attributes: {
+    accountType: Schema.Attribute.Enumeration<['parent', 'provider']> &
+      Schema.Attribute.DefaultTo<'parent'>;
     blocked: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
     childProfiles: Schema.Attribute.Relation<
       'oneToMany',
@@ -2152,6 +2353,17 @@ export interface PluginUsersPermissionsUser
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    educationLevel: Schema.Attribute.Enumeration<
+      [
+        'Kindergarten',
+        'Primary',
+        'Secondary',
+        'Technical college',
+        'University',
+        'Other',
+      ]
+    >;
+    educationLevelOther: Schema.Attribute.String;
     email: Schema.Attribute.Email &
       Schema.Attribute.Required &
       Schema.Attribute.SetMinMaxLength<{
@@ -2177,6 +2389,11 @@ export interface PluginUsersPermissionsUser
     phoneOtpToken: Schema.Attribute.String & Schema.Attribute.Private;
     phoneVerified: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
     provider: Schema.Attribute.String;
+    providerMaterials: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::provider-material.provider-material'
+    >;
+    providerType: Schema.Attribute.Enumeration<['teacher', 'religious']>;
     publishedAt: Schema.Attribute.DateTime;
     religion: Schema.Attribute.Enumeration<
       [
@@ -2197,6 +2414,7 @@ export interface PluginUsersPermissionsUser
       'manyToOne',
       'plugin::users-permissions.role'
     >;
+    schoolName: Schema.Attribute.String;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -2225,12 +2443,15 @@ declare module '@strapi/strapi' {
       'api::chat-log.chat-log': ApiChatLogChatLog;
       'api::child-profile.child-profile': ApiChildProfileChildProfile;
       'api::contact-message.contact-message': ApiContactMessageContactMessage;
+      'api::education-course.education-course': ApiEducationCourseEducationCourse;
+      'api::education-subject.education-subject': ApiEducationSubjectEducationSubject;
       'api::exclusive-subscription.exclusive-subscription': ApiExclusiveSubscriptionExclusiveSubscription;
       'api::free-trial-watch.free-trial-watch': ApiFreeTrialWatchFreeTrialWatch;
       'api::movie-request.movie-request': ApiMovieRequestMovieRequest;
       'api::movie.movie': ApiMovieMovie;
       'api::music.music': ApiMusicMusic;
       'api::promo-code.promo-code': ApiPromoCodePromoCode;
+      'api::provider-material.provider-material': ApiProviderMaterialProviderMaterial;
       'api::purchase.purchase': ApiPurchasePurchase;
       'api::referral.referral': ApiReferralReferral;
       'api::search-history.search-history': ApiSearchHistorySearchHistory;

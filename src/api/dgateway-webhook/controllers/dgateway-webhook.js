@@ -1,6 +1,7 @@
 'use strict';
 
 const { normalizePaymentMethod } = require('../../../utils/payment-methods');
+const { recordProviderMaterialSale } = require('../../../utils/provider-material-sales');
 
 const crypto = require('crypto');
 const dgateway = require('../../../utils/dgateway');
@@ -180,9 +181,13 @@ async function activateByReference(reference, paymentMethod) {
   // Purchases
   const purchases = await strapi.db.query('api::purchase.purchase').findMany({
     where: { dgatewayReference: reference },
+    populate: ['providerMaterial'],
   });
   for (const p of purchases) {
     if (p.status !== 'completed') {
+      if (p.providerMaterial) {
+        await recordProviderMaterialSale(strapi, p);
+      }
       await strapi.db.query('api::purchase.purchase').update({
         where: { id: p.id },
         data: {

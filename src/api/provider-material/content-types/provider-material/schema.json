@@ -1,0 +1,125 @@
+{
+  "kind": "collectionType",
+  "collectionName": "provider_materials",
+  "info": {
+    "singularName": "provider-material",
+    "pluralName": "provider-materials",
+    "displayName": "Provider Material",
+    "description": "Teacher and religious provider content uploaded for the education section"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "title": {
+      "type": "string",
+      "required": true
+    },
+    "description": {
+      "type": "text"
+    },
+    "providerType": {
+      "type": "enumeration",
+      "enum": ["teacher", "religious"],
+      "required": true
+    },
+    "contentCategory": {
+      "type": "enumeration",
+      "enum": ["education", "religion"],
+      "required": true
+    },
+    "schoolName": {
+      "type": "string"
+    },
+    "educationLevel": {
+      "type": "enumeration",
+      "enum": [
+        "Kindergarten",
+        "Primary",
+        "Secondary",
+        "Technical college",
+        "University",
+        "Other"
+      ]
+    },
+    "educationLevelOther": {
+      "type": "string"
+    },
+    "classLabels": {
+      "type": "json",
+      "default": []
+    },
+    "religion": {
+      "type": "enumeration",
+      "enum": [
+        "Catholic",
+        "Protestant",
+        "Pentecostal",
+        "Adventist",
+        "Orthodox",
+        "Muslim",
+        "Hindu",
+        "Bahai",
+        "Traditional",
+        "Other"
+      ]
+    },
+    "ageRange": {
+      "type": "enumeration",
+      "enum": ["ages_0_4", "ages_5_8", "ages_9_12", "ages_13_17", "all_ages"],
+      "default": "all_ages"
+    },
+    "priceUGX": {
+      "type": "integer",
+      "default": 0,
+      "required": true
+    },
+    "mediaType": {
+      "type": "enumeration",
+      "enum": ["pdf", "video", "audio"],
+      "required": true
+    },
+    "attachment": {
+      "type": "media",
+      "multiple": false,
+      "allowedTypes": ["files", "videos", "audios"]
+    },
+    "thumbnail": {
+      "type": "media",
+      "multiple": false,
+      "allowedTypes": ["images"]
+    },
+    "status": {
+      "type": "enumeration",
+      "enum": ["draft", "published", "rejected"],
+      "default": "draft"
+    },
+    "totalSales": {
+      "type": "integer",
+      "default": 0
+    },
+    "totalRevenueUGX": {
+      "type": "integer",
+      "default": 0
+    },
+    "provider": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user",
+      "inversedBy": "providerMaterials"
+    },
+    "subject": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::education-subject.education-subject",
+      "inversedBy": "materials"
+    },
+    "course": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::education-course.education-course",
+      "inversedBy": "materials"
+    }
+  }
+}

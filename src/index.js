@@ -205,11 +205,12 @@ module.exports = {
   async bootstrap({ strapi }) {
     try {
       const users = await strapi.db.query('plugin::users-permissions.user').findMany({
-        select: ['id', 'isParent'],
+        select: ['id', 'isParent', 'accountType'],
         limit: 50000,
       });
 
       const usersToBackfill = users.filter((user) => user.isParent !== true);
+      const usersMissingAccountType = users.filter((user) => !user.accountType);
 
       if (usersToBackfill.length > 0) {
         await Promise.all(
@@ -222,6 +223,19 @@ module.exports = {
         );
 
         strapi.log.info(`[bootstrap] Backfilled isParent=true for ${usersToBackfill.length} existing users`);
+      }
+
+      if (usersMissingAccountType.length > 0) {
+        await Promise.all(
+          usersMissingAccountType.map((user) =>
+            strapi.db.query('plugin::users-permissions.user').update({
+              where: { id: user.id },
+              data: { accountType: 'parent' },
+            })
+          )
+        );
+
+        strapi.log.info(`[bootstrap] Backfilled accountType=parent for ${usersMissingAccountType.length} existing users`);
       }
     } catch (err) {
       strapi.log.warn(`[bootstrap] Failed to backfill parent accounts: ${err.message}`);
@@ -318,6 +332,18 @@ module.exports = {
           // Movies - public can find and findOne
           { action: 'api::movie.movie.find' },
           { action: 'api::movie.movie.findOne' },
+          { action: 'api::education-subject.education-subject.find' },
+          { action: 'api::education-subject.education-subject.findOne' },
+          { action: 'api::education-subject.education-subject.create' },
+          { action: 'api::education-subject.education-subject.update' },
+          { action: 'api::education-subject.education-subject.delete' },
+          { action: 'api::education-course.education-course.find' },
+          { action: 'api::education-course.education-course.findOne' },
+          { action: 'api::education-course.education-course.create' },
+          { action: 'api::education-course.education-course.update' },
+          { action: 'api::education-course.education-course.delete' },
+          { action: 'api::provider-material.provider-material.find' },
+          { action: 'api::provider-material.provider-material.findOne' },
           // Music - public can browse the catalog (gating happens client-side
           // by isExclusive + age + religion)
           { action: 'api::music.music.find' },
@@ -362,6 +388,17 @@ module.exports = {
           // Movies
           { action: 'api::movie.movie.find' },
           { action: 'api::movie.movie.findOne' },
+          { action: 'api::education-subject.education-subject.find' },
+          { action: 'api::education-subject.education-subject.findOne' },
+          { action: 'api::education-course.education-course.find' },
+          { action: 'api::education-course.education-course.findOne' },
+          { action: 'api::provider-material.provider-material.find' },
+          { action: 'api::provider-material.provider-material.findOne' },
+          { action: 'api::provider-material.provider-material.create' },
+          { action: 'api::provider-material.provider-material.update' },
+          { action: 'api::provider-material.provider-material.delete' },
+          { action: 'api::provider-material.provider-material.mine' },
+          { action: 'api::provider-material.provider-material.summary' },
           // Promo codes — viewers can validate a code at checkout
           { action: 'api::promo-code.promo-code.validate' },
           // Purchases

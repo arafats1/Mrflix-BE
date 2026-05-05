@@ -2,6 +2,7 @@
 
 const pesapal = require('../../../utils/pesapal');
 const { normalizePaymentMethod } = require('../../../utils/payment-methods');
+const { recordProviderMaterialSale } = require('../../../utils/provider-material-sales');
 
 module.exports = {
   /**
@@ -171,13 +172,15 @@ module.exports = {
       const status = await pesapal.getTransactionStatus(orderTrackingId);
       const paymentStatus = (status.payment_status_description || '').toLowerCase();
       const ref = status.merchant_reference || '';
+      let actualPaymentMethod = null;
 
       // Determine the purchase type and gather context for the frontend
       let purchaseType = 'unknown';
       let movieInfo = null;
+      let itemInfo = null;
 
       if (paymentStatus === 'completed') {
-        const actualPaymentMethod = normalizePaymentMethod(status.payment_method, 'pesapal');
+        actualPaymentMethod = normalizePaymentMethod(status.payment_method, 'pesapal');
 
         if (ref.startsWith('SUB_')) {
           purchaseType = 'subscription';
@@ -205,10 +208,13 @@ module.exports = {
           purchaseType = 'purchase';
           const purchases = await strapi.db.query('api::purchase.purchase').findMany({
             where: { transactionId: ref },
-            populate: ['movie'],
+            populate: ['movie', 'providerMaterial'],
           });
           for (const p of purchases) {
             if (p.status !== 'completed') {
+              if (p.providerMaterial) {
+                await recordProviderMaterialSale(strapi, p);
+              }
               await strapi.db.query('api::purchase.purchase').update({
                 where: { id: p.id },
                 data: { status: 'completed', pesapalTrackingId: orderTrackingId, ...(actualPaymentMethod ? { paymentMethod: actualPaymentMethod } : {}) },
@@ -219,6 +225,10 @@ module.exports = {
           if (purchases.length === 1 && purchases[0].movie) {
             const m = purchases[0].movie;
             movieInfo = { id: m.documentId || m.id, title: m.title, type: m.type };
+            itemInfo = { kind: 'movie', id: m.documentId || m.id, title: m.title, type: m.type };
+          } else if (purchases.length === 1 && purchases[0].providerMaterial) {
+            const material = purchases[0].providerMaterial;
+            itemInfo = { kind: 'provider_material', id: material.documentId || material.id, title: material.title, type: material.mediaType };
           } else if (purchases.length > 1) {
             purchaseType = 'bulk_purchase';
           }
@@ -241,6 +251,7 @@ module.exports = {
           rawPaymentMethod: status.payment_method || '',
           purchaseType,
           movieInfo,
+          itemInfo,
         },
       };
     } catch (err) {

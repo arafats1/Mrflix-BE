@@ -2,6 +2,7 @@
 
 const yoPayments = require('../../../utils/yo-payments');
 const { normalizePaymentMethod } = require('../../../utils/payment-methods');
+const { recordProviderMaterialSale } = require('../../../utils/provider-material-sales');
 
 /**
  * Activate purchases / subscriptions tagged with the given Yo! reference.
@@ -21,9 +22,13 @@ async function activateByReference(reference, paymentMethod = 'yo') {
 
   const purchases = await strapi.db.query('api::purchase.purchase').findMany({
     where: { yoReference: reference },
+    populate: ['providerMaterial'],
   });
   for (const p of purchases) {
     if (p.status !== 'completed') {
+      if (p.providerMaterial) {
+        await recordProviderMaterialSale(strapi, p);
+      }
       await strapi.db.query('api::purchase.purchase').update({
         where: { id: p.id },
         data: { status: 'completed', paymentMethod },

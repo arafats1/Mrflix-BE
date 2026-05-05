@@ -1,0 +1,58 @@
+{
+  "kind": "collectionType",
+  "collectionName": "education_courses",
+  "info": {
+    "singularName": "education-course",
+    "pluralName": "education-courses",
+    "displayName": "Education Course",
+    "description": "Admin-managed class/course options for provider education uploads"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "title": {
+      "type": "string",
+      "required": true
+    },
+    "educationLevel": {
+      "type": "enumeration",
+      "enum": [
+        "Kindergarten",
+        "Primary",
+        "Secondary",
+        "Technical college",
+        "University",
+        "Other"
+      ],
+      "required": true
+    },
+    "educationLevelOther": {
+      "type": "string"
+    },
+    "description": {
+      "type": "text"
+    },
+    "sortOrder": {
+      "type": "integer",
+      "default": 0
+    },
+    "isActive": {
+      "type": "boolean",
+      "default": true
+    },
+    "subject": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::education-subject.education-subject",
+      "inversedBy": "courses"
+    },
+    "materials": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::provider-material.provider-material",
+      "mappedBy": "course"
+    }
+  }
+}

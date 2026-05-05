@@ -1,0 +1,58 @@
+{
+  "kind": "collectionType",
+  "collectionName": "education_subjects",
+  "info": {
+    "singularName": "education-subject",
+    "pluralName": "education-subjects",
+    "displayName": "Education Subject",
+    "description": "Admin-managed subject catalog for provider education content"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "name": {
+      "type": "string",
+      "required": true
+    },
+    "educationLevel": {
+      "type": "enumeration",
+      "enum": [
+        "Kindergarten",
+        "Primary",
+        "Secondary",
+        "Technical college",
+        "University",
+        "Other"
+      ],
+      "required": true
+    },
+    "educationLevelOther": {
+      "type": "string"
+    },
+    "description": {
+      "type": "text"
+    },
+    "sortOrder": {
+      "type": "integer",
+      "default": 0
+    },
+    "isActive": {
+      "type": "boolean",
+      "default": true
+    },
+    "courses": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::education-course.education-course",
+      "mappedBy": "subject"
+    },
+    "materials": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::provider-material.provider-material",
+      "mappedBy": "subject"
+    }
+  }
+}
