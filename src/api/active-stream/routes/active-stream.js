@@ -48,6 +48,24 @@ module.exports = {
       },
     },
     {
+      method: 'GET',
+      path: '/active-streams/continue-watching',
+      handler: 'active-stream.continueWatching',
+      config: {
+        policies: [],
+        middlewares: [],
+      },
+    },
+    {
+      method: 'POST',
+      path: '/active-streams/dismiss',
+      handler: 'active-stream.dismiss',
+      config: {
+        policies: [],
+        middlewares: [],
+      },
+    },
+    {
       method: 'POST',
       path: '/active-streams/clear-history',
       handler: 'active-stream.clearHistory',

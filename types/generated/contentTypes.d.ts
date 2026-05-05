@@ -518,6 +518,14 @@ export interface ApiActiveStreamActiveStream
     movie: Schema.Attribute.Relation<'manyToOne', 'api::movie.movie'>;
     platform: Schema.Attribute.Enumeration<['web', 'tv', 'mobile']> &
       Schema.Attribute.DefaultTo<'web'>;
+    positionSeconds: Schema.Attribute.Integer &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0;
+        },
+        number
+      > &
+      Schema.Attribute.DefaultTo<0>;
     progress: Schema.Attribute.Integer &
       Schema.Attribute.SetMinMax<
         {
