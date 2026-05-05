@@ -218,7 +218,7 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
       return ctx.badRequest('Payment system not configured. Please contact support.');
     }
 
-    if (activeGateway === 'dgateway' && !paymentPhone) {
+    if ((activeGateway === 'dgateway' || activeGateway === 'yo') && !paymentPhone) {
       return ctx.badRequest('Phone number is required for mobile money payment.');
     }
 
@@ -327,7 +327,7 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
     if (activeGateway === 'pesapal' && !ipnId) {
       return ctx.badRequest('Payment system not configured. Please contact support.');
     }
-    if (activeGateway === 'dgateway' && !paymentPhone) {
+    if ((activeGateway === 'dgateway' || activeGateway === 'yo') && !paymentPhone) {
       return ctx.badRequest('Phone number is required for mobile money payment.');
     }
 
@@ -469,7 +469,6 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
         transactionId,
         buyer: { id: ctx.state.user.id },
       },
-      populate: { movie: true, providerMaterial: true },
       populate: { movie: true, providerMaterial: true, childProfile: true },
     });
 
@@ -482,13 +481,16 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
     const hasPending = purchases.some(p => p.status === 'pending');
     const trackingId = purchases[0].pesapalTrackingId;
     const dgRef = purchases[0].dgatewayReference;
-    strapi.log.info(`[checkStatus] txn=${transactionId} found=${purchases.length} hasPending=${hasPending} pesapalId=${trackingId || 'none'} dgRef=${dgRef || 'none'}`);
-    if (hasPending && (trackingId || dgRef)) {
+    const yoRef = purchases[0].yoReference;
+    strapi.log.info(`[checkStatus] txn=${transactionId} found=${purchases.length} hasPending=${hasPending} pesapalId=${trackingId || 'none'} dgRef=${dgRef || 'none'} yoRef=${yoRef || 'none'}`);
+    if (hasPending && (trackingId || dgRef || yoRef)) {
       try {
         const result = await checkPaymentStatus(strapi, {
           pesapalTrackingId: trackingId,
           dgatewayReference: dgRef,
-          gateway: dgRef ? 'dgateway' : 'pesapal',
+          yoReference: yoRef,
+          merchantReference: transactionId,
+          gateway: yoRef ? 'yo' : dgRef ? 'dgateway' : 'pesapal',
         });
         strapi.log.info(`[checkStatus] Gateway says: ${result.status}`);
 
@@ -499,7 +501,6 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
           await markPurchasesCompleted(strapi, purchases, data);
           purchases = await strapi.documents('api::purchase.purchase').findMany({
             filters: { transactionId, buyer: { id: ctx.state.user.id } },
-            populate: { movie: true, providerMaterial: true },
             populate: { movie: true, providerMaterial: true, childProfile: true },
           });
         } else if (result.status === 'failed') {
@@ -513,7 +514,6 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
           }
           purchases = await strapi.documents('api::purchase.purchase').findMany({
             filters: { transactionId, buyer: { id: ctx.state.user.id } },
-            populate: { movie: true, providerMaterial: true },
             populate: { movie: true, providerMaterial: true, childProfile: true },
           });
         }

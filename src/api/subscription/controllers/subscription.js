@@ -83,7 +83,7 @@ module.exports = createCoreController('api::subscription.subscription', ({ strap
       strapi.log.error('Pesapal IPN ID not configured.');
       return ctx.badRequest('Payment system not configured. Please contact support.');
     }
-    if (activeGateway === 'dgateway' && !paymentPhone) {
+    if ((activeGateway === 'dgateway' || activeGateway === 'yo') && !paymentPhone) {
       return ctx.badRequest('Phone number is required for mobile money payment.');
     }
 
