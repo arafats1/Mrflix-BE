@@ -9,6 +9,8 @@
     "deploy": "strapi deploy",
     "dev": "strapi develop",
     "develop": "strapi develop",
+    "generate:720p": "node scripts/generate-720p-variants.js",
+    "migrate:bunny-stream": "node scripts/migrate-bunny-stream.js",
     "start": "strapi start",
     "strapi": "strapi",
     "upgrade": "npx @strapi/upgrade latest",

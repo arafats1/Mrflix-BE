@@ -1,0 +1,13 @@
+{
+  "eu3phom4w3h48sj0pgvvcsvs:main": {
+    "movieId": "eu3phom4w3h48sj0pgvvcsvs",
+    "field": "bunnyVideoId",
+    "sourceField": "videoUrl",
+    "sourceUrl": "https://pub-17313c942f034b4f834e33a97f7b9b4a.r2.dev/videos/1772312836211_2aa13b4047b38374.mp4",
+    "bunnyTitle": "Greenland 2: Migration",
+    "videoId": "7471de6c-9445-4907-b64b-19739d901df3",
+    "status": "failed",
+    "updatedAt": "2026-05-05T18:10:02.251Z",
+    "lastError": "Bunny upload failed (400): {\"success\":false,\"message\":\"The video has already been uploaded.\",\"statusCode\":400}"
+  }
+}
