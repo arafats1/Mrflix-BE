@@ -46,34 +46,46 @@ async function sendSms({ to, message }) {
   const normalized = recipients.map(normalizePhoneE164).filter(Boolean);
   if (normalized.length === 0) throw new Error('No valid recipients');
 
-  const params = new URLSearchParams();
-  params.append('username', API_USERNAME);
-  params.append('to', normalized.join(','));
-  params.append('message', message);
-  if (SENDER_ID) params.append('from', SENDER_ID);
+  async function dispatch(includeSenderId) {
+    const params = new URLSearchParams();
+    params.append('username', API_USERNAME);
+    params.append('to', normalized.join(','));
+    params.append('message', message);
+    if (includeSenderId && SENDER_ID) params.append('from', SENDER_ID);
 
-  const res = await fetch(API_URL, {
-    method: 'POST',
-    headers: {
-      apiKey: API_KEY,
-      Accept: 'application/json',
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: params.toString(),
-  });
+    const res = await fetch(API_URL, {
+      method: 'POST',
+      headers: {
+        apiKey: API_KEY,
+        Accept: 'application/json',
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: params.toString(),
+    });
 
-  const text = await res.text();
-  let data = null;
-  try { data = JSON.parse(text); } catch { /* ignore */ }
+    const text = await res.text();
+    let data = null;
+    try { data = JSON.parse(text); } catch { /* ignore */ }
 
-  if (!res.ok) {
-    const err = new Error(data?.SMSMessageData?.Message || `Africa's Talking SMS failed (${res.status})`);
-    err.status = res.status;
-    err.raw = text;
-    throw err;
+    const providerMessage = data?.SMSMessageData?.Message || '';
+    if (!res.ok || /InvalidSenderId/i.test(providerMessage)) {
+      const err = new Error(providerMessage || `Africa's Talking SMS failed (${res.status})`);
+      err.status = res.status;
+      err.raw = text;
+      throw err;
+    }
+
+    return data || { raw: text };
   }
 
-  return data || { raw: text };
+  try {
+    return await dispatch(true);
+  } catch (err) {
+    if (SENDER_ID && /InvalidSenderId/i.test(err.message || '')) {
+      return dispatch(false);
+    }
+    throw err;
+  }
 }
 
 module.exports = {

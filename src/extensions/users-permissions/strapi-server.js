@@ -469,7 +469,7 @@ module.exports = (plugin) => {
 
             await sendSms({
               to: extras.phone,
-              message: `Welcome to Mr.Flix! Your verification code is ${otp}. It expires in 10 minutes.`,
+              message: `Welcome to Movo kids! Your verification code is ${otp}. It expires in 10 minutes.`,
             });
             strapi.log.info(`[register-extension] OTP sent to ${extras.phone}`);
           } catch (err) {
