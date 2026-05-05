@@ -2364,6 +2364,7 @@ export interface PluginUsersPermissionsUser
       ]
     >;
     educationLevelOther: Schema.Attribute.String;
+    educationLevels: Schema.Attribute.JSON;
     email: Schema.Attribute.Email &
       Schema.Attribute.Required &
       Schema.Attribute.SetMinMaxLength<{

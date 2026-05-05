@@ -399,6 +399,7 @@ module.exports = {
           { action: 'api::provider-material.provider-material.delete' },
           { action: 'api::provider-material.provider-material.mine' },
           { action: 'api::provider-material.provider-material.summary' },
+          { action: 'api::provider-profile.provider-profile.updateMe' },
           // Promo codes — viewers can validate a code at checkout
           { action: 'api::promo-code.promo-code.validate' },
           // Purchases

@@ -109,6 +109,10 @@ module.exports = (plugin) => {
     enum: EDUCATION_LEVEL_OPTIONS,
   };
 
+  plugin.contentTypes.user.schema.attributes.educationLevels = {
+    type: 'json',
+  };
+
   plugin.contentTypes.user.schema.attributes.educationLevelOther = {
     type: 'string',
   };
@@ -217,6 +221,11 @@ module.exports = (plugin) => {
       providerType: userWithRole.providerType || null,
       schoolName: userWithRole.schoolName || null,
       educationLevel: userWithRole.educationLevel || null,
+      educationLevels: Array.isArray(userWithRole.educationLevels)
+        ? userWithRole.educationLevels.filter((level) => EDUCATION_LEVEL_OPTIONS.includes(level))
+        : userWithRole.educationLevel
+          ? [userWithRole.educationLevel]
+          : [],
       educationLevelOther: userWithRole.educationLevelOther || null,
       hasParentPin: !!userWithRole.parentPinHash,
       parentPinUpdatedAt: userWithRole.parentPinUpdatedAt || null,
@@ -299,7 +308,13 @@ module.exports = (plugin) => {
         const normalizedPhone = normalizePhone(body.phone);
         const accountType = ACCOUNT_TYPE_OPTIONS.includes(body.accountType) ? body.accountType : 'parent';
         const providerType = PROVIDER_TYPE_OPTIONS.includes(body.providerType) ? body.providerType : undefined;
-        const educationLevel = EDUCATION_LEVEL_OPTIONS.includes(body.educationLevel) ? body.educationLevel : undefined;
+        const requestedEducationLevels = Array.isArray(body.educationLevels)
+          ? body.educationLevels
+          : body.educationLevel
+            ? [body.educationLevel]
+            : [];
+        const educationLevels = [...new Set(requestedEducationLevels.filter((level) => EDUCATION_LEVEL_OPTIONS.includes(level)))];
+        const educationLevel = educationLevels[0];
         const educationLevelOther = typeof body.educationLevelOther === 'string' ? body.educationLevelOther.trim() : '';
         const schoolName = typeof body.schoolName === 'string' ? body.schoolName.trim() : '';
         const religion = RELIGION_OPTIONS.includes(body.religion) ? body.religion : undefined;
@@ -319,10 +334,10 @@ module.exports = (plugin) => {
           if (!schoolName) {
             throw new ValidationError('School is required for teacher accounts');
           }
-          if (!educationLevel) {
-            throw new ValidationError('Education level is required for teacher accounts');
+          if (educationLevels.length === 0) {
+            throw new ValidationError('Select at least one education level for teacher accounts');
           }
-          if (educationLevel === 'Other' && !educationLevelOther) {
+          if (educationLevels.includes('Other') && !educationLevelOther) {
             throw new ValidationError('Enter the education level when selecting Other');
           }
         }
@@ -344,7 +359,8 @@ module.exports = (plugin) => {
           providerType,
           schoolName: schoolName || undefined,
           educationLevel,
-          educationLevelOther: educationLevel === 'Other' ? educationLevelOther : undefined,
+          educationLevels: educationLevels.length > 0 ? educationLevels : undefined,
+          educationLevelOther: educationLevels.includes('Other') ? educationLevelOther : undefined,
         };
 
         if (normalizedPhone) {
@@ -396,6 +412,7 @@ module.exports = (plugin) => {
         if (extras.providerType) updateData.providerType = extras.providerType;
         if (extras.schoolName) updateData.schoolName = extras.schoolName;
         if (extras.educationLevel) updateData.educationLevel = extras.educationLevel;
+        if (extras.educationLevels) updateData.educationLevels = extras.educationLevels;
         if (extras.educationLevelOther) updateData.educationLevelOther = extras.educationLevelOther;
         if (extras.accountType === 'provider') updateData.isParent = false;
 
