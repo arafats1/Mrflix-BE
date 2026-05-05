@@ -6,7 +6,7 @@ const corsOrigins = [
 ].filter(Boolean);
 
 const activeStoragePublicUrl = (
-  (process.env.STORAGE_PROVIDER || 'cloudflare').toLowerCase() === 'backblaze'
+  (process.env.STORAGE_PROVIDER || 'backblaze').toLowerCase() === 'backblaze'
     ? process.env.B2_PUBLIC_URL
     : process.env.CF_PUBLIC_URL
 ) || process.env.B2_PUBLIC_URL || process.env.CF_PUBLIC_URL || '';

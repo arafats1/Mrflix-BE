@@ -39,7 +39,7 @@ async function requireUploadUser(ctx) {
 // Storage provider: "backblaze" or "cloudflare"
 // Controlled by STORAGE_PROVIDER env var
 // ──────────────────────────────────────────
-const PROVIDER = (process.env.STORAGE_PROVIDER || 'cloudflare').toLowerCase();
+const PROVIDER = (process.env.STORAGE_PROVIDER || 'backblaze').toLowerCase();
 
 // ── Cloudflare R2 config ──
 // function getCloudflarS3Client() {
@@ -111,14 +111,23 @@ module.exports = {
 
     const { fileName, contentType, folder } = ctx.request.body;
 
-    // Non-admin users can only upload to 'stories' folder
-    if (folder !== 'stories') {
+    // Non-admin users: providers can upload to provider-materials, others to stories
+    if (folder !== 'stories' && folder !== 'provider-materials') {
       const userWithRole = await strapi.query('plugin::users-permissions.user').findOne({
         where: { id: authUser.id },
         populate: ['role'],
       });
       if (userWithRole?.role?.type !== 'admin' && userWithRole?.role?.name !== 'Admin') {
         return ctx.forbidden('Admin access required');
+      }
+    }
+    if (folder === 'provider-materials' && authUser.accountType !== 'provider') {
+      const userWithRole = await strapi.query('plugin::users-permissions.user').findOne({
+        where: { id: authUser.id },
+        populate: ['role'],
+      });
+      if (userWithRole?.role?.type !== 'admin' && userWithRole?.role?.name !== 'Admin') {
+        return ctx.forbidden('Provider access required');
       }
     }
     if (!fileName || !contentType) {
@@ -155,14 +164,23 @@ module.exports = {
 
     const { fileName, contentType, folder } = ctx.request.body;
 
-    // Non-admin users can only upload to 'stories' folder
-    if (folder !== 'stories') {
+    // Non-admin users: providers can upload to provider-materials, others to stories
+    if (folder !== 'stories' && folder !== 'provider-materials') {
       const userWithRole = await strapi.query('plugin::users-permissions.user').findOne({
         where: { id: authUser.id },
         populate: ['role'],
       });
       if (userWithRole?.role?.type !== 'admin' && userWithRole?.role?.name !== 'Admin') {
         return ctx.forbidden('Admin access required');
+      }
+    }
+    if (folder === 'provider-materials' && authUser.accountType !== 'provider') {
+      const userWithRole = await strapi.query('plugin::users-permissions.user').findOne({
+        where: { id: authUser.id },
+        populate: ['role'],
+      });
+      if (userWithRole?.role?.type !== 'admin' && userWithRole?.role?.name !== 'Admin') {
+        return ctx.forbidden('Provider access required');
       }
     }
     if (!fileName || !contentType) {

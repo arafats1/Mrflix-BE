@@ -12,6 +12,34 @@ function normalizeClassLabels(value) {
   return value.map((item) => String(item || '').trim()).filter(Boolean);
 }
 
+function pickMediaId(value) {
+  if (value === null) return null;
+  if (value === undefined) return undefined;
+  if (typeof value === 'number') return value;
+  if (typeof value === 'string' && value.trim()) return Number.parseInt(value, 10) || undefined;
+  if (typeof value === 'object' && value !== null) {
+    if (typeof value.id === 'number') return value.id;
+    if (typeof value.data?.id === 'number') return value.data.id;
+  }
+  return undefined;
+}
+
+function inferPrimaryMediaType({ pdfPresent, audioPresent, videoPresent, fallbackMediaType }) {
+  if (pdfPresent) return 'pdf';
+  if (videoPresent) return 'video';
+  if (audioPresent) return 'audio';
+  if (MEDIA_TYPE_OPTIONS.includes(fallbackMediaType)) return fallbackMediaType;
+  return null;
+}
+
+function pickUrl(value) {
+  if (value === null) return null;
+  if (value === undefined) return undefined;
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed || null;
+}
+
 async function getFullUser(strapi, userId) {
   return strapi.db.query('plugin::users-permissions.user').findOne({
     where: { id: userId },
@@ -23,7 +51,6 @@ function sanitizeMaterialInput(body = {}, provider) {
   const providerType = provider?.providerType;
   const title = String(body.title || '').trim();
   const description = String(body.description || '').trim();
-  const mediaType = MEDIA_TYPE_OPTIONS.includes(body.mediaType) ? body.mediaType : null;
   const priceUGX = Math.max(0, Number.parseInt(body.priceUGX, 10) || 0);
   const classLabels = normalizeClassLabels(body.classLabels);
   const educationLevel = EDUCATION_LEVEL_OPTIONS.includes(body.educationLevel) ? body.educationLevel : provider?.educationLevel || null;
@@ -33,7 +60,49 @@ function sanitizeMaterialInput(body = {}, provider) {
   const ageRange = AGE_RANGE_OPTIONS.includes(body.ageRange) ? body.ageRange : 'all_ages';
   const subject = body.subject || null;
   const course = body.course || null;
-  const attachment = body.attachment || null;
+  const legacyAttachment = pickMediaId(body.attachment);
+  const fallbackMediaType = MEDIA_TYPE_OPTIONS.includes(body.mediaType) ? body.mediaType : null;
+  const pdfAttachmentInput = pickMediaId(body.pdfAttachment);
+  const audioAttachmentInput = pickMediaId(body.audioAttachment);
+  const videoAttachmentInput = pickMediaId(body.videoAttachment);
+  const pdfAttachment = pdfAttachmentInput !== undefined
+    ? pdfAttachmentInput
+    : fallbackMediaType === 'pdf'
+      ? legacyAttachment
+      : undefined;
+  const audioAttachment = audioAttachmentInput !== undefined
+    ? audioAttachmentInput
+    : fallbackMediaType === 'audio'
+      ? legacyAttachment
+      : undefined;
+  const videoAttachment = videoAttachmentInput !== undefined
+    ? videoAttachmentInput
+    : fallbackMediaType === 'video'
+      ? legacyAttachment
+      : undefined;
+
+  // Backblaze direct-upload URL fields (preferred)
+  const pdfUrl = pickUrl(body.pdfUrl);
+  const audioUrl = pickUrl(body.audioUrl);
+  const videoUrl = pickUrl(body.videoUrl);
+  const thumbnailUrl = pickUrl(body.thumbnailUrl);
+  const pdfKey = pickUrl(body.pdfKey);
+  const audioKey = pickUrl(body.audioKey);
+  const videoKey = pickUrl(body.videoKey);
+  const thumbnailKey = pickUrl(body.thumbnailKey);
+
+  const pdfPresent = !!(pdfUrl || pdfAttachment);
+  const audioPresent = !!(audioUrl || audioAttachment);
+  const videoPresent = !!(videoUrl || videoAttachment);
+
+  const mediaType = inferPrimaryMediaType({ pdfPresent, audioPresent, videoPresent, fallbackMediaType });
+  const attachment = mediaType === 'pdf'
+    ? pdfAttachment
+    : mediaType === 'audio'
+      ? audioAttachment
+      : mediaType === 'video'
+        ? videoAttachment
+        : null;
   const thumbnail = body.thumbnail || null;
   const status = ['draft', 'published', 'rejected'].includes(body.status) ? body.status : 'draft';
 
@@ -43,12 +112,12 @@ function sanitizeMaterialInput(body = {}, provider) {
     throw err;
   }
   if (!mediaType) {
-    const err = new Error('Select a material type');
+    const err = new Error('Upload at least one material file');
     err.status = 400;
     throw err;
   }
-  if (!attachment) {
-    const err = new Error('Upload the material file');
+  if (!attachment && !pdfUrl && !audioUrl && !videoUrl) {
+    const err = new Error('Upload at least one material file');
     err.status = 400;
     throw err;
   }
@@ -96,7 +165,18 @@ function sanitizeMaterialInput(body = {}, provider) {
     priceUGX,
     mediaType,
     attachment,
+    pdfAttachment: pdfAttachment || null,
+    audioAttachment: audioAttachment || null,
+    videoAttachment: videoAttachment || null,
     thumbnail: thumbnail || null,
+    pdfUrl: pdfUrl || null,
+    audioUrl: audioUrl || null,
+    videoUrl: videoUrl || null,
+    thumbnailUrl: thumbnailUrl || null,
+    pdfKey: pdfKey || null,
+    audioKey: audioKey || null,
+    videoKey: videoKey || null,
+    thumbnailKey: thumbnailKey || null,
     status,
     provider: provider.id,
     subject: subject || null,
@@ -117,6 +197,9 @@ module.exports = createCoreController('api::provider-material.provider-material'
         subject: true,
         course: true,
         attachment: true,
+        pdfAttachment: true,
+        audioAttachment: true,
+        videoAttachment: true,
         thumbnail: true,
       },
       sort: ['createdAt:desc'],
@@ -133,6 +216,9 @@ module.exports = createCoreController('api::provider-material.provider-material'
         subject: true,
         course: true,
         attachment: true,
+        pdfAttachment: true,
+        audioAttachment: true,
+        videoAttachment: true,
         thumbnail: true,
       },
     });
@@ -155,6 +241,9 @@ module.exports = createCoreController('api::provider-material.provider-material'
         subject: true,
         course: true,
         attachment: true,
+        pdfAttachment: true,
+        audioAttachment: true,
+        videoAttachment: true,
         thumbnail: true,
       },
       sort: ['createdAt:desc'],
@@ -208,6 +297,9 @@ module.exports = createCoreController('api::provider-material.provider-material'
           subject: true,
           course: true,
           attachment: true,
+          pdfAttachment: true,
+          audioAttachment: true,
+          videoAttachment: true,
           thumbnail: true,
         },
       });
@@ -241,6 +333,9 @@ module.exports = createCoreController('api::provider-material.provider-material'
           subject: true,
           course: true,
           attachment: true,
+          pdfAttachment: true,
+          audioAttachment: true,
+          videoAttachment: true,
           thumbnail: true,
         },
       });

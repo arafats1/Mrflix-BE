@@ -1190,6 +1190,9 @@ export interface ApiProviderMaterialProviderMaterial
     > &
       Schema.Attribute.DefaultTo<'all_ages'>;
     attachment: Schema.Attribute.Media<'files' | 'videos' | 'audios'>;
+    audioAttachment: Schema.Attribute.Media<'audios'>;
+    audioKey: Schema.Attribute.String;
+    audioUrl: Schema.Attribute.String;
     classLabels: Schema.Attribute.JSON & Schema.Attribute.DefaultTo<[]>;
     contentCategory: Schema.Attribute.Enumeration<['education', 'religion']> &
       Schema.Attribute.Required;
@@ -1220,6 +1223,9 @@ export interface ApiProviderMaterialProviderMaterial
       Schema.Attribute.Private;
     mediaType: Schema.Attribute.Enumeration<['pdf', 'video', 'audio']> &
       Schema.Attribute.Required;
+    pdfAttachment: Schema.Attribute.Media<'files'>;
+    pdfKey: Schema.Attribute.String;
+    pdfUrl: Schema.Attribute.String;
     priceUGX: Schema.Attribute.Integer &
       Schema.Attribute.Required &
       Schema.Attribute.DefaultTo<0>;
@@ -1252,12 +1258,17 @@ export interface ApiProviderMaterialProviderMaterial
       'api::education-subject.education-subject'
     >;
     thumbnail: Schema.Attribute.Media<'images'>;
+    thumbnailKey: Schema.Attribute.String;
+    thumbnailUrl: Schema.Attribute.String;
     title: Schema.Attribute.String & Schema.Attribute.Required;
     totalRevenueUGX: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
     totalSales: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    videoAttachment: Schema.Attribute.Media<'videos'>;
+    videoKey: Schema.Attribute.String;
+    videoUrl: Schema.Attribute.String;
   };
 }
 

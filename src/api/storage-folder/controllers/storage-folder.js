@@ -4,7 +4,7 @@ const { S3Client, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const { getAccessibleSpace, getRequestedSpaceOwnerId } = require('../../../utils/mrkeyp-space');
 
 function getStorage() {
-  const PROVIDER = (process.env.STORAGE_PROVIDER || 'cloudflare').toLowerCase();
+  const PROVIDER = (process.env.STORAGE_PROVIDER || 'backblaze').toLowerCase();
   if (PROVIDER === 'backblaze') {
     return {
       s3: new S3Client({

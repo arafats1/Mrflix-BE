@@ -1,5 +1,5 @@
 module.exports = ({ env }) => {
-  const storageProvider = env('STORAGE_PROVIDER', 'cloudflare').toLowerCase();
+  const storageProvider = env('STORAGE_PROVIDER', 'backblaze').toLowerCase();
   const isBackblaze = storageProvider === 'backblaze';
 
   const accessKeyId = isBackblaze ? env('B2_ACCESS_KEY_ID') : env('CF_ACCESS_KEY_ID');
@@ -18,7 +18,7 @@ module.exports = ({ env }) => {
               accessKeyId,
               secretAccessKey,
             },
-            region: 'auto',
+            region: isBackblaze ? env('B2_REGION', 'us-east-005') : 'auto',
             endpoint,
             params: {
               Bucket: bucket,

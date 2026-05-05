@@ -85,10 +85,49 @@
       "multiple": false,
       "allowedTypes": ["files", "videos", "audios"]
     },
+    "pdfAttachment": {
+      "type": "media",
+      "multiple": false,
+      "allowedTypes": ["files"]
+    },
+    "audioAttachment": {
+      "type": "media",
+      "multiple": false,
+      "allowedTypes": ["audios"]
+    },
+    "videoAttachment": {
+      "type": "media",
+      "multiple": false,
+      "allowedTypes": ["videos"]
+    },
     "thumbnail": {
       "type": "media",
       "multiple": false,
       "allowedTypes": ["images"]
+    },
+    "pdfUrl": {
+      "type": "string"
+    },
+    "audioUrl": {
+      "type": "string"
+    },
+    "videoUrl": {
+      "type": "string"
+    },
+    "thumbnailUrl": {
+      "type": "string"
+    },
+    "pdfKey": {
+      "type": "string"
+    },
+    "audioKey": {
+      "type": "string"
+    },
+    "videoKey": {
+      "type": "string"
+    },
+    "thumbnailKey": {
+      "type": "string"
     },
     "status": {
       "type": "enumeration",
