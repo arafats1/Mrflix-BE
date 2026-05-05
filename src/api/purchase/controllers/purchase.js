@@ -133,8 +133,8 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
     }
 
     const populate = isAdmin
-      ? { movie: { populate: '*' }, providerMaterial: { populate: '*' }, buyer: { populate: '*' } }
-      : { movie: { populate: '*' }, providerMaterial: { populate: '*' } };
+      ? { movie: { populate: '*' }, providerMaterial: { populate: '*' }, buyer: { populate: '*' }, childProfile: true }
+      : { movie: { populate: '*' }, providerMaterial: { populate: '*' }, childProfile: true };
 
     const purchases = await strapi.documents('api::purchase.purchase').findMany({
       filters,
