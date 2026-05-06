@@ -68,6 +68,10 @@
     },
     "yoReference": {
       "type": "string"
+    },
+    "savingsDepositApplied": {
+      "type": "boolean",
+      "default": false
     }
   }
 }

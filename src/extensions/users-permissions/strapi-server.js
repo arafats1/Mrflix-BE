@@ -263,6 +263,10 @@ module.exports = (plugin) => {
             dailyWatchMinutes: c.dailyWatchMinutes,
             blockedMovieIds: Array.isArray(c.blockedMovieIds) ? c.blockedMovieIds : [],
             allowedMovieIds: Array.isArray(c.allowedMovieIds) ? c.allowedMovieIds : [],
+            savingsGoals: Array.isArray(c.savingsGoals) ? c.savingsGoals : [],
+            totalSavingsUGX: Number(c.totalSavingsUGX || 0),
+            unallocatedSavingsUGX: Number(c.unallocatedSavingsUGX || 0),
+            savingsLifetimeDepositedUGX: Number(c.savingsLifetimeDepositedUGX || 0),
           }))
         : [],
       isKeypUser: !!userWithRole.isKeypUser,

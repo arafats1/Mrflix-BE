@@ -58,6 +58,25 @@
       "type": "json",
       "default": []
     },
+    "savingsGoals": {
+      "type": "json",
+      "default": []
+    },
+    "totalSavingsUGX": {
+      "type": "integer",
+      "default": 0,
+      "min": 0
+    },
+    "unallocatedSavingsUGX": {
+      "type": "integer",
+      "default": 0,
+      "min": 0
+    },
+    "savingsLifetimeDepositedUGX": {
+      "type": "integer",
+      "default": 0,
+      "min": 0
+    },
     "parent": {
       "type": "relation",
       "relation": "manyToOne",

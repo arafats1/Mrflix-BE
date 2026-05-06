@@ -2,6 +2,13 @@
 
 const { createCoreController } = require('@strapi/strapi').factories;
 const bcrypt = require('bcryptjs');
+const {
+  normalizeSavingsGoals,
+  buildSavingsSnapshot,
+  clampMoney,
+  SAVINGS_TRANSACTION_PREFIX,
+} = require('../../../utils/savings');
+const { submitPayment, getActiveGateway } = require('../../../utils/payment-gateway');
 
 const ALLOWED_FIELDS = ['name', 'dateOfBirth', 'religion', 'avatarUrl', 'dailyWatchMinutes', 'blockedMovieIds', 'allowedMovieIds'];
 const MAX_CHILD_PROFILES = 4;
@@ -76,6 +83,7 @@ function buildPinPayload(input = {}) {
 
 function shape(profile) {
   if (!profile) return null;
+  const savings = buildSavingsSnapshot(profile);
   return {
     id: profile.id,
     documentId: profile.documentId,
@@ -87,6 +95,10 @@ function shape(profile) {
     dailyWatchMinutes: profile.dailyWatchMinutes ?? 60,
     blockedMovieIds: Array.isArray(profile.blockedMovieIds) ? profile.blockedMovieIds : [],
     allowedMovieIds: Array.isArray(profile.allowedMovieIds) ? profile.allowedMovieIds : [],
+    savingsGoals: savings.goals,
+    totalSavingsUGX: savings.totalSavingsUGX,
+    unallocatedSavingsUGX: savings.unallocatedSavingsUGX,
+    savingsLifetimeDepositedUGX: savings.savingsLifetimeDepositedUGX,
     createdAt: profile.createdAt,
     updatedAt: profile.updatedAt,
   };
@@ -166,10 +178,18 @@ module.exports = createCoreController('api::child-profile.child-profile', ({ str
     const user = ctx.state.user;
     if (!user) return ctx.unauthorized();
 
-    const list = await strapi.db.query('api::child-profile.child-profile').findMany({
-      where: { parent: { id: user.id } },
-      orderBy: { createdAt: 'asc' },
+    strapi.log.info(`[mine] Fetching profiles for user.id=${user.id}`);
+    
+    // In Strapi v5, use the document service (documents().findMany) which properly
+    // selects and serializes JSON columns for collection types. The db.query path
+    // strips custom JSON columns without explicit mapping.
+    const list = await strapi.documents('api::child-profile.child-profile').findMany({
+      filters: { parent: { id: user.id } },
+      sort: 'createdAt:asc',
+      populate: '*',
     });
+    
+    strapi.log.info(`[mine] Found ${list.length} profiles. First profile goals count: ${Array.isArray(list[0]?.savingsGoals) ? list[0].savingsGoals.length : typeof list[0]?.savingsGoals}`);
 
     ctx.body = { data: list.map(shape) };
   },
@@ -339,6 +359,162 @@ module.exports = createCoreController('api::child-profile.child-profile', ({ str
     }
 
     ctx.body = { data: { verified: true, id: profile.documentId || profile.id } };
+  },
+
+  async updateSavingsGoals(ctx) {
+    strapi.log.warn(`[savings-goals] HANDLER ENTERED params=${JSON.stringify(ctx.params)} bodyKeys=${Object.keys(ctx.request.body || {}).join(',')}`);
+    const user = ctx.state.user;
+    if (!user) {
+      strapi.log.warn('[savings-goals] no user — unauthorized');
+      return ctx.unauthorized();
+    }
+
+    const profile = await findOwnedProfile(user.id, ctx.params.id);
+    if (!profile) {
+      strapi.log.warn(`[savings-goals] profile not found for user=${user.id} id=${ctx.params.id}`);
+      return ctx.notFound();
+    }
+
+    const body = (ctx.request.body && ctx.request.body.data) || ctx.request.body || {};
+    strapi.log.info(`[savings-goals] body received: ${JSON.stringify(body).slice(0, 500)}`);
+
+    let goals;
+    try {
+      goals = normalizeSavingsGoals(body.goals);
+    } catch (err) {
+      strapi.log.error(`[savings-goals] normalize threw: ${err.message}`);
+      return ctx.badRequest(err.message || 'Invalid savings goals');
+    }
+
+    strapi.log.info(`[savings-goals] PATCH profile.id=${profile.id} documentId=${profile.documentId} goals_in=${goals.length}`);
+
+    // In Strapi v5, always use strapi.documents() for content types, not entityService
+    // or db.query, as documents() properly maps JSON fields.
+    const updated = await strapi.documents('api::child-profile.child-profile').update({
+      documentId: profile.documentId,
+      data: { savingsGoals: goals },
+      populate: '*', // Make sure we get back the fully populated object
+    });
+
+    const verifyCount = Array.isArray(updated?.savingsGoals) ? updated.savingsGoals.length : typeof updated?.savingsGoals;
+    strapi.log.info(`[savings-goals] document update success! goals_out=${verifyCount}`);
+
+    ctx.body = { data: shape(updated) };
+  },
+
+  /**
+   * POST /child-profiles/:id/savings-deposit-initiate
+   * Initiates a real mobile-money payment for a parent to deposit money
+   * into a child's piggy bank. The amount is only credited once payment
+   * confirmation is received via the gateway IPN/webhook (or polled status).
+   *
+   * Mirrors the flow used by /purchases for movies — creating a pending
+   * purchase row with a SAV_ transactionId so the existing webhook handlers
+   * (pesapal-webhook, dgateway-webhook, yo-webhook) and the purchase
+   * lifecycle apply the deposit on completion.
+   */
+  async initiateSavingsDeposit(ctx) {
+    const user = ctx.state.user;
+    if (!user) return ctx.unauthorized();
+
+    const profile = await findOwnedProfile(user.id, ctx.params.id);
+    if (!profile) return ctx.notFound();
+
+    const body = (ctx.request.body && ctx.request.body.data) || ctx.request.body || {};
+    const amount = clampMoney(body.amountUGX);
+    if (amount <= 0) {
+      return ctx.badRequest('Deposit amount must be greater than zero');
+    }
+
+    const settings = await strapi.entityService.findMany('api::site-setting.site-setting');
+    const activeGateway = await getActiveGateway(strapi);
+    const ipnId = settings?.pesapalIpnId;
+
+    if (activeGateway === 'pesapal' && !ipnId) {
+      strapi.log.error('Pesapal IPN ID not configured.');
+      return ctx.badRequest('Payment system not configured. Please contact support.');
+    }
+
+    const paymentPhone = String(body.paymentPhone || '').trim();
+    if ((activeGateway === 'dgateway' || activeGateway === 'yo') && !paymentPhone) {
+      return ctx.badRequest('Phone number is required for mobile money payment.');
+    }
+
+    const merchantReference = `${SAVINGS_TRANSACTION_PREFIX}${user.id}_${profile.id}_${Date.now()}_${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+    const frontendUrl = process.env.FRONTEND_URL;
+    const callbackUrl = `${frontendUrl}/payment/callback`;
+    const description = `Piggy bank deposit for ${profile.name}`;
+
+    const purchase = await strapi.documents('api::purchase.purchase').create({
+      data: {
+        movie: null,
+        providerMaterial: null,
+        buyer: user.id,
+        childProfile: profile.id,
+        amount,
+        paymentMethod: body.paymentMethod || activeGateway,
+        paymentPhone: paymentPhone || '',
+        transactionId: merchantReference,
+        status: 'pending',
+        savingsDepositApplied: false,
+      },
+    });
+
+    try {
+      const nameParts = (user.fullName || user.username || '').split(' ');
+      const paymentResult = await submitPayment(strapi, {
+        merchantReference,
+        amount,
+        description: `Mr.Flix - ${description}`,
+        callbackUrl,
+        ipnId,
+        paymentPhone: paymentPhone || '',
+        billingAddress: {
+          email: user.email || '',
+          phone: paymentPhone || '',
+          firstName: nameParts[0] || '',
+          lastName: nameParts.slice(1).join(' ') || '',
+        },
+      });
+
+      const updateData = {};
+      if (paymentResult.gateway === 'pesapal') {
+        updateData.pesapalTrackingId = paymentResult.order_tracking_id;
+      } else if (paymentResult.gateway === 'dgateway') {
+        updateData.dgatewayReference = paymentResult.reference;
+      } else if (paymentResult.gateway === 'yo') {
+        updateData.yoReference = paymentResult.reference;
+      }
+
+      if (Object.keys(updateData).length > 0) {
+        await strapi.documents('api::purchase.purchase').update({
+          documentId: purchase.documentId,
+          data: updateData,
+        });
+      }
+
+      ctx.body = {
+        data: {
+          purchaseId: purchase.documentId,
+          transactionId: merchantReference,
+          gateway: paymentResult.gateway,
+          amountUGX: amount,
+          childProfileId: profile.id,
+          redirect_url: paymentResult.redirect_url || null,
+          order_tracking_id: paymentResult.order_tracking_id || null,
+          reference: paymentResult.reference || null,
+          paymentStatus: paymentResult.status || null,
+        },
+      };
+      return undefined;
+    } catch (err) {
+      strapi.log.error('Savings deposit payment initiation failed:', err);
+      await strapi.documents('api::purchase.purchase').update({
+        documentId: purchase.documentId,
+        data: { status: 'failed' },
+      });
+      return ctx.badRequest('Payment initiation failed. Please try again.');
+    }
   },
 
   async login(ctx) {

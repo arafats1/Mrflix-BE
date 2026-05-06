@@ -50,5 +50,17 @@ module.exports = {
       handler: 'child-profile.verifyPin',
       config: { auth: { scope: [] } },
     },
+    {
+      method: 'PATCH',
+      path: '/child-profiles/:id/savings-goals',
+      handler: 'child-profile.updateSavingsGoals',
+      config: { auth: { scope: [] } },
+    },
+    {
+      method: 'POST',
+      path: '/child-profiles/:id/savings-deposit-initiate',
+      handler: 'child-profile.initiateSavingsDeposit',
+      config: { auth: { scope: [] } },
+    },
   ],
 };

@@ -728,6 +728,31 @@ export interface ApiChildProfileChildProfile
         'Other',
       ]
     >;
+    savingsGoals: Schema.Attribute.JSON & Schema.Attribute.DefaultTo<[]>;
+    savingsLifetimeDepositedUGX: Schema.Attribute.Integer &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0;
+        },
+        number
+      > &
+      Schema.Attribute.DefaultTo<0>;
+    totalSavingsUGX: Schema.Attribute.Integer &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0;
+        },
+        number
+      > &
+      Schema.Attribute.DefaultTo<0>;
+    unallocatedSavingsUGX: Schema.Attribute.Integer &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0;
+        },
+        number
+      > &
+      Schema.Attribute.DefaultTo<0>;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -1418,6 +1443,8 @@ export interface ApiPurchasePurchase extends Struct.CollectionTypeSchema {
       'api::provider-material.provider-material'
     >;
     publishedAt: Schema.Attribute.DateTime;
+    savingsDepositApplied: Schema.Attribute.Boolean &
+      Schema.Attribute.DefaultTo<false>;
     seasonNumber: Schema.Attribute.Integer;
     status: Schema.Attribute.Enumeration<['pending', 'completed', 'failed']> &
       Schema.Attribute.Required &
