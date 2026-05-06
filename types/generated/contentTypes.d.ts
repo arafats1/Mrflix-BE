@@ -560,6 +560,77 @@ export interface ApiActiveStreamActiveStream
   };
 }
 
+export interface ApiBookBook extends Struct.CollectionTypeSchema {
+  collectionName: 'books';
+  info: {
+    description: 'Books library \u2014 adult and children PDFs and audiobooks';
+    displayName: 'Book';
+    pluralName: 'books';
+    singularName: 'book';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    audienceType: Schema.Attribute.Enumeration<['adult', 'children']> &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<'adult'>;
+    audioUrl: Schema.Attribute.String;
+    author: Schema.Attribute.String;
+    category: Schema.Attribute.String;
+    childAgeGroup: Schema.Attribute.Enumeration<
+      ['ages_0_4', 'ages_5_8', 'ages_9_12', 'ages_13_17']
+    >;
+    classLabel: Schema.Attribute.String;
+    comments: Schema.Attribute.JSON & Schema.Attribute.DefaultTo<[]>;
+    coverTone: Schema.Attribute.String & Schema.Attribute.DefaultTo<'ember'>;
+    coverUrl: Schema.Attribute.String;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    description: Schema.Attribute.Text;
+    durationMinutes: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    educationLevel: Schema.Attribute.Enumeration<
+      [
+        'early_years',
+        'primary',
+        'ordinary_level',
+        'advanced_level',
+        'tertiary',
+        'general',
+      ]
+    > &
+      Schema.Attribute.DefaultTo<'general'>;
+    format: Schema.Attribute.Enumeration<['pdf', 'audio', 'mixed']> &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<'pdf'>;
+    isFeatured: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
+    isPublished: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<true>;
+    likedBy: Schema.Attribute.JSON & Schema.Attribute.DefaultTo<[]>;
+    likesCount: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<'oneToMany', 'api::book.book'> &
+      Schema.Attribute.Private;
+    minAge: Schema.Attribute.Integer &
+      Schema.Attribute.SetMinMax<
+        {
+          max: 21;
+          min: 0;
+        },
+        number
+      > &
+      Schema.Attribute.DefaultTo<0>;
+    pageCount: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    pdfUrl: Schema.Attribute.String;
+    publishedAt: Schema.Attribute.DateTime;
+    subject: Schema.Attribute.String;
+    title: Schema.Attribute.String & Schema.Attribute.Required;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface ApiChatLogChatLog extends Struct.CollectionTypeSchema {
   collectionName: 'chat_logs';
   info: {
@@ -2482,6 +2553,7 @@ declare module '@strapi/strapi' {
       'admin::user': AdminUser;
       'api::account-invitation.account-invitation': ApiAccountInvitationAccountInvitation;
       'api::active-stream.active-stream': ApiActiveStreamActiveStream;
+      'api::book.book': ApiBookBook;
       'api::chat-log.chat-log': ApiChatLogChatLog;
       'api::child-profile.child-profile': ApiChildProfileChildProfile;
       'api::contact-message.contact-message': ApiContactMessageContactMessage;

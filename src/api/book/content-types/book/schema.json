@@ -1,0 +1,115 @@
+{
+  "kind": "collectionType",
+  "collectionName": "books",
+  "info": {
+    "singularName": "book",
+    "pluralName": "books",
+    "displayName": "Book",
+    "description": "Books library — adult and children PDFs and audiobooks"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "title": {
+      "type": "string",
+      "required": true
+    },
+    "author": {
+      "type": "string"
+    },
+    "description": {
+      "type": "text"
+    },
+    "category": {
+      "type": "string"
+    },
+    "format": {
+      "type": "enumeration",
+      "enum": ["pdf", "audio", "mixed"],
+      "default": "pdf",
+      "required": true
+    },
+    "audienceType": {
+      "type": "enumeration",
+      "enum": ["adult", "children"],
+      "default": "adult",
+      "required": true
+    },
+    "coverTone": {
+      "type": "string",
+      "default": "ember"
+    },
+    "coverUrl": {
+      "type": "string"
+    },
+    "pdfUrl": {
+      "type": "string"
+    },
+    "audioUrl": {
+      "type": "string"
+    },
+    "pageCount": {
+      "type": "integer",
+      "default": 0
+    },
+    "durationMinutes": {
+      "type": "integer",
+      "default": 0
+    },
+    "educationLevel": {
+      "type": "enumeration",
+      "enum": [
+        "early_years",
+        "primary",
+        "ordinary_level",
+        "advanced_level",
+        "tertiary",
+        "general"
+      ],
+      "default": "general"
+    },
+    "subject": {
+      "type": "string"
+    },
+    "classLabel": {
+      "type": "string"
+    },
+    "childAgeGroup": {
+      "type": "enumeration",
+      "enum": [
+        "ages_0_4",
+        "ages_5_8",
+        "ages_9_12",
+        "ages_13_17"
+      ]
+    },
+    "minAge": {
+      "type": "integer",
+      "default": 0,
+      "min": 0,
+      "max": 21
+    },
+    "isFeatured": {
+      "type": "boolean",
+      "default": false
+    },
+    "isPublished": {
+      "type": "boolean",
+      "default": true
+    },
+    "likesCount": {
+      "type": "integer",
+      "default": 0
+    },
+    "comments": {
+      "type": "json",
+      "default": []
+    },
+    "likedBy": {
+      "type": "json",
+      "default": []
+    }
+  }
+}
