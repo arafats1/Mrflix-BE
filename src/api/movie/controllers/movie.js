@@ -6,6 +6,7 @@ const https = require('node:https');
 const ADULT_SEARCH_TERMS = /(^|\b)(adult|18\+|18\s*plus|mature|sex|erotic|explicit)(\b|$)/i;
 const TMDB_BASE = 'https://api.themoviedb.org/3';
 const DEFAULT_MOVIE_SERVER_BASE_URL = 'https://41.191.79.53:8085/MOVIES/';
+const DEFAULT_MOVIE_SERVER_TIMEOUT_MS = 45000;
 const MOVIE_SERVER_VIDEO_EXT_RE = /\.(mp4|mkv|mov|avi|webm|m4v)$/i;
 const MOVIE_SERVER_ANCHOR_RE = /<a\s+href=(["'])(.*?)\1[^>]*>(.*?)<\/a>/gis;
 
@@ -30,10 +31,14 @@ function ensureTrailingSlash(value = '') {
 
 function getMovieServerConfig() {
   const baseUrl = (process.env.MOVIE_SERVER_BASE_URL || DEFAULT_MOVIE_SERVER_BASE_URL).trim();
+  const parsedTimeout = Number.parseInt(process.env.MOVIE_SERVER_REQUEST_TIMEOUT_MS || '', 10);
   return {
     baseUrl: ensureTrailingSlash(baseUrl),
     username: (process.env.MOVIE_SERVER_USERNAME || '').trim(),
     password: process.env.MOVIE_SERVER_PASSWORD || '',
+    timeoutMs: Number.isFinite(parsedTimeout) && parsedTimeout > 0
+      ? parsedTimeout
+      : DEFAULT_MOVIE_SERVER_TIMEOUT_MS,
   };
 }
 
@@ -92,6 +97,8 @@ async function fetchMovieServerIndexHtml(targetUrl, username, password) {
     throw new Error('Movie server credentials are not configured');
   }
 
+  const { timeoutMs } = getMovieServerConfig();
+
   return new Promise((resolve, reject) => {
     const parsed = new URL(targetUrl);
     const auth = Buffer.from(`${username}:${password}`).toString('base64');
@@ -120,8 +127,8 @@ async function fetchMovieServerIndexHtml(targetUrl, username, password) {
       }
     );
 
-    req.setTimeout(15000, () => {
-      req.destroy(new Error('Movie server request timed out'));
+    req.setTimeout(timeoutMs, () => {
+      req.destroy(new Error(`Movie server request timed out after ${timeoutMs}ms`));
     });
     req.on('error', reject);
     req.end();
