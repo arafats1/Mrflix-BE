@@ -1,9 +1,185 @@
 'use strict';
 
 const { createCoreController } = require('@strapi/strapi').factories;
+const https = require('node:https');
 
 const ADULT_SEARCH_TERMS = /(^|\b)(adult|18\+|18\s*plus|mature|sex|erotic|explicit)(\b|$)/i;
 const TMDB_BASE = 'https://api.themoviedb.org/3';
+const DEFAULT_MOVIE_SERVER_BASE_URL = 'https://41.191.79.53:8085/MOVIES/';
+const MOVIE_SERVER_VIDEO_EXT_RE = /\.(mp4|mkv|mov|avi|webm|m4v)$/i;
+const MOVIE_SERVER_ANCHOR_RE = /<a\s+href=(["'])(.*?)\1[^>]*>(.*?)<\/a>/gis;
+
+function decodeHtmlEntities(value = '') {
+  return value
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&#x2F;/gi, '/');
+}
+
+function stripTags(value = '') {
+  return value.replace(/<[^>]*>/g, '');
+}
+
+function ensureTrailingSlash(value = '') {
+  if (!value) return '/';
+  return value.endsWith('/') ? value : `${value}/`;
+}
+
+function getMovieServerConfig() {
+  const baseUrl = (process.env.MOVIE_SERVER_BASE_URL || DEFAULT_MOVIE_SERVER_BASE_URL).trim();
+  return {
+    baseUrl: ensureTrailingSlash(baseUrl),
+    username: (process.env.MOVIE_SERVER_USERNAME || '').trim(),
+    password: process.env.MOVIE_SERVER_PASSWORD || '',
+  };
+}
+
+function getMovieServerBasePath() {
+  const { baseUrl } = getMovieServerConfig();
+  return ensureTrailingSlash(new URL(baseUrl).pathname || '/');
+}
+
+function normalizeMovieServerPath(requestedPath) {
+  const basePath = getMovieServerBasePath();
+  if (!requestedPath) return basePath;
+
+  let candidate = String(requestedPath).trim();
+  if (!candidate) return basePath;
+  if (!candidate.startsWith('/')) candidate = `${basePath}${candidate}`;
+
+  const normalized = ensureTrailingSlash(new URL(candidate, 'https://movie-server.local').pathname);
+  return normalized.startsWith(basePath) ? normalized : basePath;
+}
+
+function getMovieServerParentPath(currentPath) {
+  const basePath = getMovieServerBasePath();
+  if (currentPath === basePath) return null;
+
+  const segments = currentPath.slice(basePath.length).split('/').filter(Boolean);
+  if (!segments.length) return null;
+  if (segments.length === 1) return basePath;
+  return `${basePath}${segments.slice(0, -1).join('/')}/`;
+}
+
+function buildMovieServerBreadcrumbs(currentPath) {
+  const basePath = getMovieServerBasePath();
+  const baseSegments = basePath.split('/').filter(Boolean);
+  const breadcrumbs = [
+    {
+      name: decodeURIComponent(baseSegments[baseSegments.length - 1] || 'Root'),
+      path: basePath,
+    },
+  ];
+
+  let cursor = basePath;
+  const segments = currentPath.slice(basePath.length).split('/').filter(Boolean);
+  for (const segment of segments) {
+    cursor = `${cursor}${segment}/`;
+    breadcrumbs.push({
+      name: decodeURIComponent(segment),
+      path: cursor,
+    });
+  }
+
+  return breadcrumbs;
+}
+
+async function fetchMovieServerIndexHtml(targetUrl, username, password) {
+  if (!username || !password) {
+    throw new Error('Movie server credentials are not configured');
+  }
+
+  return new Promise((resolve, reject) => {
+    const parsed = new URL(targetUrl);
+    const auth = Buffer.from(`${username}:${password}`).toString('base64');
+    const req = https.request(
+      {
+        protocol: parsed.protocol,
+        hostname: parsed.hostname,
+        port: parsed.port || 443,
+        path: `${parsed.pathname}${parsed.search}`,
+        method: 'GET',
+        headers: {
+          Authorization: `Basic ${auth}`,
+          Accept: 'text/html,application/xhtml+xml',
+        },
+        rejectUnauthorized: false,
+      },
+      (res) => {
+        let body = '';
+        res.setEncoding('utf8');
+        res.on('data', (chunk) => {
+          body += chunk;
+        });
+        res.on('end', () => {
+          resolve({ statusCode: res.statusCode || 500, body });
+        });
+      }
+    );
+
+    req.setTimeout(15000, () => {
+      req.destroy(new Error('Movie server request timed out'));
+    });
+    req.on('error', reject);
+    req.end();
+  });
+}
+
+function parseMovieServerIndex(html, currentUrl, currentPath) {
+  const basePath = getMovieServerBasePath();
+  const directories = [];
+  const files = [];
+  const seenDirectories = new Set();
+  const seenFiles = new Set();
+
+  for (const match of html.matchAll(MOVIE_SERVER_ANCHOR_RE)) {
+    const href = match[2]?.trim();
+    if (!href || href === '../' || href.startsWith('#') || href.startsWith('?')) continue;
+
+    let resolved;
+    try {
+      resolved = new URL(href, currentUrl);
+    } catch {
+      continue;
+    }
+
+    const pathname = resolved.pathname || '';
+    if (!pathname.startsWith(basePath)) continue;
+
+    const labelText = decodeHtmlEntities(stripTags(match[3] || '')).trim().replace(/\/$/, '');
+    const fallbackName = decodeURIComponent(pathname.split('/').filter(Boolean).pop() || '');
+    const name = labelText || fallbackName;
+    if (!name || name === '..' || name.startsWith('.')) continue;
+
+    if (pathname.endsWith('/')) {
+      const directoryPath = ensureTrailingSlash(pathname);
+      if (directoryPath === currentPath || seenDirectories.has(directoryPath)) continue;
+      seenDirectories.add(directoryPath);
+      directories.push({ name, path: directoryPath });
+      continue;
+    }
+
+    if (!MOVIE_SERVER_VIDEO_EXT_RE.test(pathname) || seenFiles.has(pathname)) continue;
+    seenFiles.add(pathname);
+
+    const lastDot = name.lastIndexOf('.');
+    files.push({
+      name,
+      path: pathname,
+      url: resolved.toString(),
+      extension: (lastDot >= 0 ? name.slice(lastDot + 1) : '').toLowerCase(),
+      folder: decodeURIComponent(currentPath.slice(basePath.length).replace(/\/$/, '')),
+    });
+  }
+
+  directories.sort((left, right) => left.name.localeCompare(right.name, undefined, { numeric: true }));
+  files.sort((left, right) => left.name.localeCompare(right.name, undefined, { numeric: true }));
+
+  return { directories, files };
+}
 
 function getBaseUrl(ctx) {
   const envUrl = (process.env.PUBLIC_URL || '').trim();
@@ -593,6 +769,57 @@ module.exports = createCoreController('api::movie.movie', ({ strapi }) => ({
   // yet — i.e. tmdbId is null AND posterUrl is empty AND isAvailable=false.
   // This endpoint exists so the bulk upload page doesn't have to fight
   // with the public /movies listing's role/permission/draft-publish logic.
+  async serverBrowser(ctx) {
+    const requester = ctx.state?.user;
+    if (!requester) return ctx.unauthorized('Login required');
+
+    let roleType = requester.role?.type || requester.role?.name;
+    if (!roleType) {
+      try {
+        const fresh = await strapi.entityService.findOne(
+          'plugin::users-permissions.user',
+          requester.id,
+          { populate: ['role'] }
+        );
+        roleType = fresh?.role?.type || fresh?.role?.name;
+      } catch {}
+    }
+    const isAdmin = roleType === 'admin' || roleType === 'Admin';
+    if (!isAdmin) return ctx.forbidden('Admin only');
+
+    const { baseUrl, username, password } = getMovieServerConfig();
+    if (!baseUrl || !username || !password) {
+      return ctx.internalServerError('Movie server is not configured');
+    }
+
+    const currentPath = normalizeMovieServerPath(ctx.query?.path);
+    const targetUrl = new URL(currentPath, baseUrl).toString();
+
+    try {
+      const response = await fetchMovieServerIndexHtml(targetUrl, username, password);
+      if (response.statusCode >= 400) {
+        strapi.log.error(`Movie server browser failed with HTTP ${response.statusCode} for ${targetUrl}`);
+        return ctx.internalServerError('Could not read the movie server directory listing');
+      }
+
+      const { directories, files } = parseMovieServerIndex(response.body, targetUrl, currentPath);
+
+      return {
+        data: {
+          basePath: getMovieServerBasePath(),
+          currentPath,
+          parentPath: getMovieServerParentPath(currentPath),
+          breadcrumbs: buildMovieServerBreadcrumbs(currentPath),
+          directories,
+          files,
+        },
+      };
+    } catch (error) {
+      strapi.log.error('Movie server browser failed:', error);
+      return ctx.internalServerError(error?.message || 'Could not browse the movie server');
+    }
+  },
+
   async bulkDrafts(ctx) {
     const requester = ctx.state?.user;
     if (!requester) return ctx.unauthorized('Login required');

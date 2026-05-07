@@ -41,6 +41,15 @@ module.exports = {
       },
     },
     {
+      method: 'GET',
+      path: '/movies/server-browser',
+      handler: 'movie.serverBrowser',
+      config: {
+        // Auth required; the controller enforces admin-only access.
+        policies: [],
+      },
+    },
+    {
       method: 'POST',
       path: '/movies/bunny/create-upload',
       handler: 'movie.bunnyCreateUpload',
