@@ -779,6 +779,7 @@ export interface ApiContactMessageContactMessage
         'bug_report',
         'payment_issue',
         'content_request',
+        'book_request',
         'other',
       ]
     > &

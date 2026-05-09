@@ -30,7 +30,7 @@
     },
     "category": {
       "type": "enumeration",
-      "enum": ["general", "suggestion", "bug_report", "payment_issue", "content_request", "other"],
+      "enum": ["general", "suggestion", "bug_report", "payment_issue", "content_request", "book_request", "other"],
       "default": "general",
       "required": true
     },
