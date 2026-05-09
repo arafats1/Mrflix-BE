@@ -1417,6 +1417,7 @@ export interface ApiPurchasePurchase extends Struct.CollectionTypeSchema {
       Schema.Attribute.Private;
     dgatewayReference: Schema.Attribute.String;
     downloadCount: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    expiresAt: Schema.Attribute.DateTime;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
       'oneToMany',

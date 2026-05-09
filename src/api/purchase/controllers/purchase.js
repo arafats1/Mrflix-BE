@@ -96,12 +96,21 @@ async function markPurchasesCompleted(strapi, purchases, paymentData = {}) {
       await recordProviderMaterialSale(strapi, purchase);
     }
 
+    const updateData = {
+      status: 'completed',
+      ...paymentData,
+    };
+
+    // Movies (not series) expire after 24 hours
+    if (purchase.movie && purchase.movie.type === 'movie' && !purchase.expiresAt) {
+      const expirationDate = new Date();
+      expirationDate.setHours(expirationDate.getHours() + 24);
+      updateData.expiresAt = expirationDate;
+    }
+
     await strapi.documents('api::purchase.purchase').update({
       documentId: purchase.documentId,
-      data: {
-        status: 'completed',
-        ...paymentData,
-      },
+      data: updateData,
     });
   }
 }
@@ -196,7 +205,10 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
       filters,
     });
 
-    if (existing && existing.length > 0) {
+    const now = new Date();
+    const validPurchases = existing.filter(p => !p.expiresAt || new Date(p.expiresAt) > now);
+
+    if (validPurchases.length > 0) {
       return ctx.badRequest('You already own this ' + (seasonNumber ? `season ${seasonNumber}` : target.kind === 'provider_material' ? 'material' : 'movie'));
     }
 

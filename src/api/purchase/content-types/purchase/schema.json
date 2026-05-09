@@ -72,6 +72,9 @@
     "savingsDepositApplied": {
       "type": "boolean",
       "default": false
+    },
+    "expiresAt": {
+      "type": "datetime"
     }
   }
 }
