@@ -23,7 +23,11 @@ function normalizeSavingsGoals(input) {
       const savedAmountUGX = clampMoney(goal?.savedAmountUGX);
       const allocationPercent = Math.max(0, Math.min(100, Math.round(Number(goal?.allocationPercent || 0))));
       const rawId = String(goal?.id || '').trim();
-      const id = SAVINGS_GOAL_ID_PATTERN.test(rawId) ? rawId : createGoalId();
+      
+      // In Strapi 5, we might receive the database ID or documentId.
+      // We want to preserve IDs that look like our generated goal IDs or database IDs.
+      const id = (SAVINGS_GOAL_ID_PATTERN.test(rawId) || /^\d+$/.test(rawId) || rawId.length > 5) ? rawId : createGoalId();
+      
       if (!name || targetAmountUGX <= 0) return null;
       const cappedSaved = Math.min(savedAmountUGX, targetAmountUGX);
       const progressPercent = targetAmountUGX > 0 ? Math.min(100, Math.round((cappedSaved / targetAmountUGX) * 100)) : 0;
@@ -96,25 +100,62 @@ function applyDepositToSavings(profile, amountUGX) {
 }
 
 function allocateUnallocatedSavings(profile, goalsInput) {
+  // If goalsInput is the list of goals from the request, we should use that
+  // as the base, but we must ensure we don't accidentally wipe out 
+  // savedAmountUGX if it wasn't provided in the input (it should be, but let's be safe).
+  
+  // Normalize the input goals first
+  const normalizedInput = normalizeSavingsGoals(goalsInput);
+
+  // Calculate how much was already allocated in the EXISTING profile
+  const existingGoals = Array.isArray(profile?.savingsGoals) ? profile.savingsGoals : [];
+  
+  // The client-provided goals might missing savedAmountUGX for existing goals, or have old values.
+  // We MUST map the existing saved amounts back to the goals matched by ID.
+  const syncedGoalsInput = normalizedInput.map(goal => {
+    const existing = existingGoals.find(eg => eg.id === goal.id);
+    return {
+      ...goal,
+      savedAmountUGX: existing ? clampMoney(existing.savedAmountUGX) : clampMoney(goal.savedAmountUGX)
+    };
+  });
+
   const snapshot = buildSavingsSnapshot({
     ...profile,
-    savingsGoals: goalsInput,
+    savingsGoals: syncedGoalsInput,
   });
-  let unallocatedSavingsUGX = snapshot.unallocatedSavingsUGX;
+
+  // Recalculate unallocated balance based on the NEW goal set.
+  // totalSavingsUGX = unallocated + sum(savedAmountUGX)
+  // So, new unallocated = totalSavingsUGX - sum(synced savedAmountUGX)
+  const newAllocatedTotal = snapshot.goals.reduce((sum, g) => sum + g.savedAmountUGX, 0);
+  let unallocatedSavingsUGX = Math.max(0, snapshot.totalSavingsUGX - newAllocatedTotal);
+
+  const baseUnallocatedSavingsUGX = unallocatedSavingsUGX;
+  const goals = snapshot.goals.map((goal) => ({
+    ...goal,
+    updatedAt: new Date().toISOString(),
+    // Ensure we re-calculate progress percent because savedAmountUGX might have changed
+    progressPercent: goal.targetAmountUGX > 0 ? Math.min(100, Math.round((goal.savedAmountUGX / goal.targetAmountUGX) * 100)) : 0,
+    isCompleted: goal.savedAmountUGX >= goal.targetAmountUGX
+  }));
+
   if (unallocatedSavingsUGX <= 0) {
     return {
       totalSavingsUGX: snapshot.totalSavingsUGX,
-      unallocatedSavingsUGX,
+      unallocatedSavingsUGX: 0,
       savingsLifetimeDepositedUGX: snapshot.savingsLifetimeDepositedUGX,
-      savingsGoals: snapshot.goals,
+      savingsGoals: goals,
     };
   }
 
-  const baseUnallocatedSavingsUGX = unallocatedSavingsUGX;
-  const goals = snapshot.goals.map((goal) => ({ ...goal }));
-
+  // First pass: try to apply full allocation percentages regardless of existing amounts
+  // This handles the "added a goal after depositing" scenario
   for (const goal of goals) {
     if (goal.isCompleted || goal.allocationPercent <= 0 || unallocatedSavingsUGX <= 0) continue;
+    
+    // Calculate how much THIS goal SHOULD HAVE from the CURRENT unallocated pool
+    // based on its allocation percentage.
     const remaining = Math.max(0, goal.targetAmountUGX - goal.savedAmountUGX);
     if (remaining <= 0) continue;
 

@@ -379,10 +379,8 @@ module.exports = createCoreController('api::child-profile.child-profile', ({ str
     }
 
     const nextSavings = allocateUnallocatedSavings(profile, goals);
-    const updated = await strapi.documents('api::child-profile.child-profile').update({
-      documentId: profile.documentId,
+    const updated = await strapi.entityService.update('api::child-profile.child-profile', profile.id, {
       data: nextSavings,
-      populate: '*',
     });
 
     ctx.body = { data: shape(updated) };
