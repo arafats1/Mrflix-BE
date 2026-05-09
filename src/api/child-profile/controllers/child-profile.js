@@ -6,6 +6,7 @@ const {
   normalizeSavingsGoals,
   buildSavingsSnapshot,
   clampMoney,
+  allocateUnallocatedSavings,
   SAVINGS_TRANSACTION_PREFIX,
 } = require('../../../utils/savings');
 const { submitPayment, getActiveGateway } = require('../../../utils/payment-gateway');
@@ -362,42 +363,27 @@ module.exports = createCoreController('api::child-profile.child-profile', ({ str
   },
 
   async updateSavingsGoals(ctx) {
-    strapi.log.warn(`[savings-goals] HANDLER ENTERED params=${JSON.stringify(ctx.params)} bodyKeys=${Object.keys(ctx.request.body || {}).join(',')}`);
     const user = ctx.state.user;
-    if (!user) {
-      strapi.log.warn('[savings-goals] no user — unauthorized');
-      return ctx.unauthorized();
-    }
+    if (!user) return ctx.unauthorized();
 
     const profile = await findOwnedProfile(user.id, ctx.params.id);
-    if (!profile) {
-      strapi.log.warn(`[savings-goals] profile not found for user=${user.id} id=${ctx.params.id}`);
-      return ctx.notFound();
-    }
+    if (!profile) return ctx.notFound();
 
     const body = (ctx.request.body && ctx.request.body.data) || ctx.request.body || {};
-    strapi.log.info(`[savings-goals] body received: ${JSON.stringify(body).slice(0, 500)}`);
 
     let goals;
     try {
       goals = normalizeSavingsGoals(body.goals);
     } catch (err) {
-      strapi.log.error(`[savings-goals] normalize threw: ${err.message}`);
       return ctx.badRequest(err.message || 'Invalid savings goals');
     }
 
-    strapi.log.info(`[savings-goals] PATCH profile.id=${profile.id} documentId=${profile.documentId} goals_in=${goals.length}`);
-
-    // In Strapi v5, always use strapi.documents() for content types, not entityService
-    // or db.query, as documents() properly maps JSON fields.
+    const nextSavings = allocateUnallocatedSavings(profile, goals);
     const updated = await strapi.documents('api::child-profile.child-profile').update({
       documentId: profile.documentId,
-      data: { savingsGoals: goals },
-      populate: '*', // Make sure we get back the fully populated object
+      data: nextSavings,
+      populate: '*',
     });
-
-    const verifyCount = Array.isArray(updated?.savingsGoals) ? updated.savingsGoals.length : typeof updated?.savingsGoals;
-    strapi.log.info(`[savings-goals] document update success! goals_out=${verifyCount}`);
 
     ctx.body = { data: shape(updated) };
   },

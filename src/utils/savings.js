@@ -95,6 +95,50 @@ function applyDepositToSavings(profile, amountUGX) {
   };
 }
 
+function allocateUnallocatedSavings(profile, goalsInput) {
+  const snapshot = buildSavingsSnapshot({
+    ...profile,
+    savingsGoals: goalsInput,
+  });
+  let unallocatedSavingsUGX = snapshot.unallocatedSavingsUGX;
+  if (unallocatedSavingsUGX <= 0) {
+    return {
+      totalSavingsUGX: snapshot.totalSavingsUGX,
+      unallocatedSavingsUGX,
+      savingsLifetimeDepositedUGX: snapshot.savingsLifetimeDepositedUGX,
+      savingsGoals: snapshot.goals,
+    };
+  }
+
+  const baseUnallocatedSavingsUGX = unallocatedSavingsUGX;
+  const goals = snapshot.goals.map((goal) => ({ ...goal }));
+
+  for (const goal of goals) {
+    if (goal.isCompleted || goal.allocationPercent <= 0 || unallocatedSavingsUGX <= 0) continue;
+    const remaining = Math.max(0, goal.targetAmountUGX - goal.savedAmountUGX);
+    if (remaining <= 0) continue;
+
+    const intendedAllocation = Math.floor((baseUnallocatedSavingsUGX * goal.allocationPercent) / 100);
+    if (intendedAllocation <= 0) continue;
+
+    const applied = Math.min(remaining, intendedAllocation, unallocatedSavingsUGX);
+    if (applied <= 0) continue;
+
+    goal.savedAmountUGX += applied;
+    goal.progressPercent = Math.min(100, Math.round((goal.savedAmountUGX / goal.targetAmountUGX) * 100));
+    goal.isCompleted = goal.savedAmountUGX >= goal.targetAmountUGX;
+    goal.updatedAt = new Date().toISOString();
+    unallocatedSavingsUGX = Math.max(0, unallocatedSavingsUGX - applied);
+  }
+
+  return {
+    totalSavingsUGX: snapshot.totalSavingsUGX,
+    unallocatedSavingsUGX,
+    savingsLifetimeDepositedUGX: snapshot.savingsLifetimeDepositedUGX,
+    savingsGoals: goals,
+  };
+}
+
 /**
  * Apply a completed savings deposit purchase to its child profile.
  * Idempotent: sets `savingsDepositApplied=true` after applying so it
@@ -138,5 +182,6 @@ module.exports = {
   normalizeSavingsGoals,
   buildSavingsSnapshot,
   applyDepositToSavings,
+  allocateUnallocatedSavings,
   applySavingsDepositPurchase,
 };

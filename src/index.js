@@ -495,6 +495,11 @@ module.exports = {
           { action: 'api::exclusive-subscription.exclusive-subscription.create' },
           { action: 'api::exclusive-subscription.exclusive-subscription.checkStatus' },
           { action: 'api::exclusive-subscription.exclusive-subscription.getXXXContent' },
+          // Referrals
+          { action: 'api::referral.referral.myCode' },
+          { action: 'api::referral.referral.myCredits' },
+          { action: 'api::referral.referral.apply' },
+          { action: 'api::referral.referral.useCredit' },
         ];
 
         for (const perm of authPermissions) {
