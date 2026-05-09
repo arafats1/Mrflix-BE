@@ -428,7 +428,7 @@ module.exports = createCoreController('api::child-profile.child-profile', ({ str
 
     const merchantReference = `${SAVINGS_TRANSACTION_PREFIX}${user.id}_${profile.id}_${Date.now()}_${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
     const frontendUrl = process.env.FRONTEND_URL;
-    const callbackUrl = `${frontendUrl}/payment/callback`;
+    const callbackUrl = `${frontendUrl}/payment/callback?purchaseType=savings`;
     const description = `Piggy bank deposit for ${profile.name}`;
 
     const purchase = await strapi.documents('api::purchase.purchase').create({
