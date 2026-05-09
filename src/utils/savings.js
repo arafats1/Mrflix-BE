@@ -113,7 +113,7 @@ function allocateUnallocatedSavings(profile, goalsInput) {
   // The client-provided goals might missing savedAmountUGX for existing goals, or have old values.
   // We MUST map the existing saved amounts back to the goals matched by ID.
   const syncedGoalsInput = normalizedInput.map(goal => {
-    const existing = existingGoals.find(eg => eg.id === goal.id);
+    const existing = existingGoals.find(eg => String(eg.id) === String(goal.id));
     return {
       ...goal,
       savedAmountUGX: existing ? clampMoney(existing.savedAmountUGX) : clampMoney(goal.savedAmountUGX)
@@ -128,11 +128,11 @@ function allocateUnallocatedSavings(profile, goalsInput) {
   // Recalculate unallocated balance based on the NEW goal set.
   // totalSavingsUGX = unallocated + sum(savedAmountUGX)
   // So, new unallocated = totalSavingsUGX - sum(synced savedAmountUGX)
-  const newAllocatedTotal = snapshot.goals.reduce((sum, g) => sum + g.savedAmountUGX, 0);
+  const newAllocatedTotal = syncedGoalsInput.reduce((sum, g) => sum + g.savedAmountUGX, 0);
   let unallocatedSavingsUGX = Math.max(0, snapshot.totalSavingsUGX - newAllocatedTotal);
 
   const baseUnallocatedSavingsUGX = unallocatedSavingsUGX;
-  const goals = snapshot.goals.map((goal) => ({
+  const goals = syncedGoalsInput.map((goal) => ({
     ...goal,
     updatedAt: new Date().toISOString(),
     // Ensure we re-calculate progress percent because savedAmountUGX might have changed
