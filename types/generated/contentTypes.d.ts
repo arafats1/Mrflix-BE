@@ -1481,6 +1481,8 @@ export interface ApiPurchasePurchase extends Struct.CollectionTypeSchema {
         'pesapal',
         'dgateway',
         'yo',
+        'pay_on_delivery',
+        'manual_supplier_payment',
         'free_trial',
         'referral_referred',
         'referral_referrer',

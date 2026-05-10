@@ -14,6 +14,14 @@ module.exports = {
     },
     {
       method: 'GET',
+      path: '/purchases/seller-orders',
+      handler: 'api::purchase.purchase.sellerOrders',
+      config: {
+        auth: false,
+      },
+    },
+    {
+      method: 'GET',
       path: '/purchases/:id',
       handler: 'api::purchase.purchase.findOne',
     },

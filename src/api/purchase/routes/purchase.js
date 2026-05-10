@@ -22,6 +22,12 @@ module.exports = {
     },
     {
       method: 'GET',
+      path: '/purchases/seller-orders',
+      handler: 'purchase.sellerOrders',
+      config: { auth: false },
+    },
+    {
+      method: 'GET',
       path: '/purchases/status/:transactionId',
       handler: 'purchase.checkStatus',
       config: { policies: [] },

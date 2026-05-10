@@ -116,6 +116,43 @@ function buildPurchaseInfo(purchase) {
   return null;
 }
 
+function formatBuyerContact(user) {
+  if (!user) return '';
+
+  const phone = typeof user.phone === 'string' ? user.phone.trim() : '';
+  if (phone) return phone;
+
+  const email = typeof user.email === 'string' ? user.email.trim() : '';
+  return email.endsWith('@phone.movokids.local') ? '' : email;
+}
+
+async function resolveRequestUser(strapi, ctx) {
+  if (ctx.state.user?.id) {
+    return strapi.query('plugin::users-permissions.user').findOne({
+      where: { id: ctx.state.user.id },
+      populate: ['role'],
+    });
+  }
+
+  const authHeader = ctx.request.header?.authorization || ctx.request.headers?.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    try {
+      const token = authHeader.substring(7);
+      const { id } = await strapi.plugins['users-permissions'].services.jwt.verify(token);
+      if (id) {
+        return strapi.query('plugin::users-permissions.user').findOne({
+          where: { id },
+          populate: ['role'],
+        });
+      }
+    } catch (_) {
+      return null;
+    }
+  }
+
+  return null;
+}
+
 async function markPurchasesCompleted(strapi, purchases, paymentData = {}) {
   for (const purchase of purchases) {
     if (purchase.status === 'completed') continue;
@@ -193,6 +230,62 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
     return { data: purchases, meta: { pagination: { total: purchases.length } } };
   },
 
+  async sellerOrders(ctx) {
+    const requestUser = await resolveRequestUser(strapi, ctx);
+    if (!requestUser) {
+      return ctx.unauthorized('You must be logged in');
+    }
+
+    const sellerProducts = await strapi.documents('api::product.product').findMany({
+      filters: {
+        seller: { id: requestUser.id },
+      },
+      fields: ['id'],
+      status: 'published',
+    });
+
+    const sellerProductIds = Array.from(new Set((sellerProducts || []).map((product) => product.id).filter(Boolean)));
+
+    if (sellerProductIds.length === 0) {
+      return {
+        data: [],
+        meta: { pagination: { total: 0 } },
+      };
+    }
+
+    const purchases = await strapi.documents('api::purchase.purchase').findMany({
+      filters: {
+        product: {
+          id: {
+            $in: sellerProductIds,
+          },
+        },
+      },
+      populate: {
+        product: {
+          populate: {
+            seller: true,
+          },
+        },
+        buyer: true,
+      },
+      sort: { createdAt: 'desc' },
+    });
+
+    return {
+      data: purchases.map((purchase) => ({
+        ...purchase,
+        buyer: purchase.buyer
+          ? {
+              ...purchase.buyer,
+              displayContact: formatBuyerContact(purchase.buyer),
+            }
+          : null,
+      })),
+      meta: { pagination: { total: purchases.length } },
+    };
+  },
+
   /**
    * Create a purchase — initiates Pesapal payment.
    * Returns a redirect_url the frontend should open.
@@ -233,35 +326,35 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
       return ctx.badRequest('Select a valid child profile for this material');
     }
 
-    const filters = {
-      buyer: { id: ctx.state.user.id },
-      status: 'completed',
-    };
+    if (target.kind !== 'product') {
+      const filters = {
+        buyer: { id: ctx.state.user.id },
+        status: 'completed',
+      };
 
-    if (target.kind === 'provider_material') {
-      filters.providerMaterial = { id: target.id };
-      if (childProfile) {
-        filters.childProfile = { id: childProfile.id };
+      if (target.kind === 'provider_material') {
+        filters.providerMaterial = { id: target.id };
+        if (childProfile) {
+          filters.childProfile = { id: childProfile.id };
+        }
+      } else {
+        filters.movie = { id: target.id };
       }
-    } else if (target.kind === 'product') {
-      filters.product = { id: target.id };
-    } else {
-      filters.movie = { id: target.id };
-    }
 
-    if (target.kind === 'movie' && target.movie.type === 'series' && seasonNumber) {
-      filters.seasonNumber = parseInt(seasonNumber);
-    }
+      if (target.kind === 'movie' && target.movie.type === 'series' && seasonNumber) {
+        filters.seasonNumber = parseInt(seasonNumber);
+      }
 
-    const existing = await strapi.documents('api::purchase.purchase').findMany({
-      filters,
-    });
+      const existing = await strapi.documents('api::purchase.purchase').findMany({
+        filters,
+      });
 
-    const now = new Date();
-    const validPurchases = existing.filter(p => !p.expiresAt || new Date(p.expiresAt) > now);
+      const now = new Date();
+      const validPurchases = existing.filter(p => !p.expiresAt || new Date(p.expiresAt) > now);
 
-    if (validPurchases.length > 0) {
-      return ctx.badRequest('You already own this ' + (seasonNumber ? `season ${seasonNumber}` : target.kind === 'provider_material' ? 'material' : 'movie'));
+      if (validPurchases.length > 0) {
+        return ctx.badRequest('You already own this ' + (seasonNumber ? `season ${seasonNumber}` : target.kind === 'provider_material' ? 'material' : 'movie'));
+      }
     }
 
     const settings = await strapi.entityService.findMany('api::site-setting.site-setting');
@@ -274,25 +367,32 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
     }
 
     const merchantReference = `PUR_${ctx.state.user.id}_${Date.now()}_${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
-    const activeGateway = await getActiveGateway(strapi);
-    const ipnId = settings?.pesapalIpnId;
-
-    if (activeGateway === 'pesapal' && !ipnId) {
-      strapi.log.error('Pesapal IPN ID not configured.');
-      return ctx.badRequest('Payment system not configured. Please contact support.');
-    }
-
-    if ((activeGateway === 'dgateway' || activeGateway === 'yo') && !paymentPhone) {
-      return ctx.badRequest('Phone number is required for mobile money payment.');
-    }
-
-    const frontendUrl = process.env.FRONTEND_URL;
-    const callbackUrl = `${frontendUrl}/payment/callback`;
     const description = target.kind === 'provider_material' || target.kind === 'product'
       ? target.title
       : seasonNumber
         ? `${target.movie.title} - Season ${seasonNumber}`
         : target.movie.title;
+    const manualSupplierPayment = target.kind === 'product' && paymentMethod === 'manual_supplier_payment';
+    const payOnDeliveryOrder = target.kind === 'product' && (paymentMethod === 'pay_on_delivery' || isPayOnDelivery);
+    const requiresGateway = !manualSupplierPayment && !payOnDeliveryOrder;
+    let activeGateway = null;
+
+    if (requiresGateway) {
+      activeGateway = await getActiveGateway(strapi);
+      const ipnId = settings?.pesapalIpnId;
+
+      if (activeGateway === 'pesapal' && !ipnId) {
+        strapi.log.error('Pesapal IPN ID not configured.');
+        return ctx.badRequest('Payment system not configured. Please contact support.');
+      }
+
+      if ((activeGateway === 'dgateway' || activeGateway === 'yo') && !paymentPhone) {
+        return ctx.badRequest('Phone number is required for mobile money payment.');
+      }
+    }
+
+    const frontendUrl = process.env.FRONTEND_URL;
+    const callbackUrl = `${frontendUrl}/payment/callback`;
 
     const purchaseData = {
       movie: target.kind === 'movie' ? target.id : null,
@@ -301,12 +401,12 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
       buyer: ctx.state.user.id,
       childProfile: childProfile?.id || null,
       amount,
-      paymentMethod: isPayOnDelivery ? 'pay_on_delivery' : (paymentMethod || activeGateway),
+      paymentMethod: manualSupplierPayment ? 'manual_supplier_payment' : payOnDeliveryOrder ? 'pay_on_delivery' : (paymentMethod || activeGateway),
       paymentPhone: paymentPhone || '',
       transactionId: merchantReference,
       status: 'pending',
       seasonNumber: (target.kind === 'movie' && target.movie.type === 'series' && seasonNumber) ? seasonNumber : null,
-      isPayOnDelivery: !!isPayOnDelivery,
+      isPayOnDelivery: !!payOnDeliveryOrder,
       deliveryAddress: deliveryAddress || '',
       deliveryPhone: deliveryPhone || '',
       contactName: contactName || '',
@@ -316,13 +416,14 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
       data: purchaseData,
     });
 
-    if (isPayOnDelivery) {
+    if (manualSupplierPayment || payOnDeliveryOrder) {
       return {
         data: {
           purchaseId: purchase.documentId,
           transactionId: merchantReference,
           status: 'pending',
-          isPayOnDelivery: true,
+          isPayOnDelivery: !!payOnDeliveryOrder,
+          isManualSupplierPayment: !!manualSupplierPayment,
         },
       };
     }
@@ -330,6 +431,7 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
     try {
       const user = ctx.state.user;
       const nameParts = (user.fullName || user.username || '').split(' ');
+      const ipnId = settings?.pesapalIpnId;
       const paymentResult = await submitPayment(strapi, {
         merchantReference,
         amount,
