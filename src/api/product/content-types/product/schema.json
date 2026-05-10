@@ -1,0 +1,59 @@
+{
+  "kind": "collectionType",
+  "collectionName": "products",
+  "info": {
+    "singularName": "product",
+    "pluralName": "products",
+    "displayName": "Product",
+    "description": "Physical products for sale"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "name": {
+      "type": "string",
+      "required": true
+    },
+    "description": {
+      "type": "text",
+      "required": true
+    },
+    "priceUGX": {
+      "type": "integer",
+      "required": true
+    },
+    "images": {
+      "type": "json",
+      "required": true
+    },
+    "featuredImage": {
+      "type": "string",
+      "required": true
+    },
+    "ageRange": {
+      "type": "string"
+    },
+    "seller": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user"
+    },
+    "status": {
+      "type": "enumeration",
+      "enum": [
+        "active",
+        "out_of_stock",
+        "discontinued"
+      ],
+      "default": "active"
+    },
+    "paymentPhone": {
+      "type": "string"
+    },
+    "paymentCode": {
+      "type": "string"
+    }
+  }
+}

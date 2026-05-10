@@ -69,6 +69,24 @@
     "yoReference": {
       "type": "string"
     },
+    "product": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::product.product"
+    },
+    "isPayOnDelivery": {
+      "type": "boolean",
+      "default": false
+    },
+    "deliveryAddress": {
+      "type": "text"
+    },
+    "deliveryPhone": {
+      "type": "string"
+    },
+    "contactName": {
+      "type": "string"
+    },
     "savingsDepositApplied": {
       "type": "boolean",
       "default": false

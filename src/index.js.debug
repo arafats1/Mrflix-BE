@@ -1,0 +1,16 @@
+
+module.exports = {
+  async bootstrap({ strapi }) {
+    console.log('--- PRODUCT SELLER CHECK ---');
+    const products = await strapi.entityService.findMany('api::product.product', {
+      populate: ['seller'],
+    });
+    console.log('All Products:', JSON.stringify(products.map(p => ({
+      id: p.id,
+      name: p.name,
+      sellerId: p.seller?.id,
+      documentId: p.documentId
+    })), null, 2));
+    console.log('--- END PRODUCT SELLER CHECK ---');
+  },
+};

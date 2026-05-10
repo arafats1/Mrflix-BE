@@ -2,6 +2,7 @@
 
 const EDUCATION_LEVEL_OPTIONS = ['Kindergarten', 'Primary', 'Secondary', 'Technical college', 'University', 'Other'];
 const RELIGION_OPTIONS = ['Catholic', 'Protestant', 'Pentecostal', 'Adventist', 'Orthodox', 'Muslim', 'Hindu', 'Bahai', 'Traditional', 'Other'];
+const PROVIDER_TYPE_OPTIONS = ['teacher', 'religious', 'seller', 'musician', 'creative_artist', 'comedian'];
 
 function normalizeEducationLevels(input = []) {
   const values = Array.isArray(input) ? input : [];
@@ -39,6 +40,8 @@ module.exports = {
     const teacherBackground = typeof body.teacherBackground === 'string' ? body.teacherBackground.trim() : '';
     const teachingExperience = typeof body.teachingExperience === 'string' ? body.teachingExperience.trim() : '';
     const subjectsTaught = normalizeSubjectsTaught(body.subjectsTaught);
+    const paymentPhone = typeof body.paymentPhone === 'string' ? body.paymentPhone.trim() : '';
+    const paymentCode = typeof body.paymentCode === 'string' ? body.paymentCode.trim() : '';
 
     if (!fullName) return ctx.badRequest('Full name is required');
 
@@ -63,6 +66,11 @@ module.exports = {
     if (currentUser.providerType === 'religious') {
       if (!religion) return ctx.badRequest('Religion is required for religious providers');
       updateData.religion = religion;
+    }
+
+    if (currentUser.providerType === 'seller') {
+      updateData.paymentPhone = paymentPhone || null;
+      updateData.paymentCode = paymentCode || null;
     }
 
     await strapi.db.query('plugin::users-permissions.user').update({

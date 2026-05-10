@@ -111,25 +111,31 @@ module.exports = {
 
     const { fileName, contentType, folder } = ctx.request.body;
 
-    // Non-admin users: providers can upload to provider-materials, others to stories
-    if (folder !== 'stories' && folder !== 'provider-materials') {
+    // Allow folders: stories, provider-materials, product-images
+    // product-images requires provider/seller account
+    const allowedFolders = ['stories', 'provider-materials', 'product-images'];
+    
+    if (!allowedFolders.includes(folder)) {
       const userWithRole = await strapi.query('plugin::users-permissions.user').findOne({
         where: { id: authUser.id },
         populate: ['role'],
       });
       if (userWithRole?.role?.type !== 'admin' && userWithRole?.role?.name !== 'Admin') {
-        return ctx.forbidden('Admin access required');
+        return ctx.forbidden('Admin access required for this folder');
       }
     }
-    if (folder === 'provider-materials' && authUser.accountType !== 'provider') {
+    
+    // product-images and provider-materials require provider/seller account
+    if ((folder === 'product-images' || folder === 'provider-materials') && authUser.accountType !== 'provider') {
       const userWithRole = await strapi.query('plugin::users-permissions.user').findOne({
         where: { id: authUser.id },
         populate: ['role'],
       });
       if (userWithRole?.role?.type !== 'admin' && userWithRole?.role?.name !== 'Admin') {
-        return ctx.forbidden('Provider access required');
+        return ctx.forbidden('Provider/Seller access required for this folder');
       }
     }
+    
     if (!fileName || !contentType) {
       return ctx.badRequest('fileName and contentType are required');
     }
@@ -164,25 +170,31 @@ module.exports = {
 
     const { fileName, contentType, folder } = ctx.request.body;
 
-    // Non-admin users: providers can upload to provider-materials, others to stories
-    if (folder !== 'stories' && folder !== 'provider-materials') {
+    // Allow folders: stories, provider-materials, product-images
+    // product-images requires provider/seller account
+    const allowedFolders = ['stories', 'provider-materials', 'product-images'];
+    
+    if (!allowedFolders.includes(folder)) {
       const userWithRole = await strapi.query('plugin::users-permissions.user').findOne({
         where: { id: authUser.id },
         populate: ['role'],
       });
       if (userWithRole?.role?.type !== 'admin' && userWithRole?.role?.name !== 'Admin') {
-        return ctx.forbidden('Admin access required');
+        return ctx.forbidden('Admin access required for this folder');
       }
     }
-    if (folder === 'provider-materials' && authUser.accountType !== 'provider') {
+    
+    // product-images and provider-materials require provider/seller account
+    if ((folder === 'product-images' || folder === 'provider-materials') && authUser.accountType !== 'provider') {
       const userWithRole = await strapi.query('plugin::users-permissions.user').findOne({
         where: { id: authUser.id },
         populate: ['role'],
       });
       if (userWithRole?.role?.type !== 'admin' && userWithRole?.role?.name !== 'Admin') {
-        return ctx.forbidden('Provider access required');
+        return ctx.forbidden('Provider/Seller access required for this folder');
       }
     }
+    
     if (!fileName || !contentType) {
       return ctx.badRequest('fileName and contentType are required');
     }

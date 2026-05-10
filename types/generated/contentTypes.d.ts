@@ -1235,6 +1235,50 @@ export interface ApiMusicMusic extends Struct.CollectionTypeSchema {
   };
 }
 
+export interface ApiProductProduct extends Struct.CollectionTypeSchema {
+  collectionName: 'products';
+  info: {
+    description: 'Physical products for sale';
+    displayName: 'Product';
+    pluralName: 'products';
+    singularName: 'product';
+  };
+  options: {
+    draftAndPublish: true;
+  };
+  attributes: {
+    ageRange: Schema.Attribute.String;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    description: Schema.Attribute.Text & Schema.Attribute.Required;
+    featuredImage: Schema.Attribute.String & Schema.Attribute.Required;
+    images: Schema.Attribute.JSON & Schema.Attribute.Required;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::product.product'
+    > &
+      Schema.Attribute.Private;
+    name: Schema.Attribute.String & Schema.Attribute.Required;
+    paymentCode: Schema.Attribute.String;
+    paymentPhone: Schema.Attribute.String;
+    priceUGX: Schema.Attribute.Integer & Schema.Attribute.Required;
+    publishedAt: Schema.Attribute.DateTime;
+    seller: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+    status: Schema.Attribute.Enumeration<
+      ['active', 'out_of_stock', 'discontinued']
+    > &
+      Schema.Attribute.DefaultTo<'active'>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface ApiPromoCodePromoCode extends Struct.CollectionTypeSchema {
   collectionName: 'promo_codes';
   info: {
@@ -1412,12 +1456,17 @@ export interface ApiPurchasePurchase extends Struct.CollectionTypeSchema {
       'manyToOne',
       'api::child-profile.child-profile'
     >;
+    contactName: Schema.Attribute.String;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    deliveryAddress: Schema.Attribute.Text;
+    deliveryPhone: Schema.Attribute.String;
     dgatewayReference: Schema.Attribute.String;
     downloadCount: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
     expiresAt: Schema.Attribute.DateTime;
+    isPayOnDelivery: Schema.Attribute.Boolean &
+      Schema.Attribute.DefaultTo<false>;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
       'oneToMany',
@@ -1440,6 +1489,7 @@ export interface ApiPurchasePurchase extends Struct.CollectionTypeSchema {
       Schema.Attribute.Required;
     paymentPhone: Schema.Attribute.String;
     pesapalTrackingId: Schema.Attribute.String;
+    product: Schema.Attribute.Relation<'manyToOne', 'api::product.product'>;
     providerMaterial: Schema.Attribute.Relation<
       'manyToOne',
       'api::provider-material.provider-material'
@@ -2523,6 +2573,8 @@ export interface PluginUsersPermissionsUser
       Schema.Attribute.SetMinMaxLength<{
         minLength: 6;
       }>;
+    paymentCode: Schema.Attribute.String;
+    paymentPhone: Schema.Attribute.String;
     phone: Schema.Attribute.String & Schema.Attribute.Unique;
     phoneOtpToken: Schema.Attribute.String & Schema.Attribute.Private;
     phoneVerified: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
@@ -2531,7 +2583,16 @@ export interface PluginUsersPermissionsUser
       'oneToMany',
       'api::provider-material.provider-material'
     >;
-    providerType: Schema.Attribute.Enumeration<['teacher', 'religious']>;
+    providerType: Schema.Attribute.Enumeration<
+      [
+        'teacher',
+        'religious',
+        'seller',
+        'musician',
+        'creative_artist',
+        'comedian',
+      ]
+    >;
     publishedAt: Schema.Attribute.DateTime;
     religion: Schema.Attribute.Enumeration<
       [
@@ -2593,6 +2654,7 @@ declare module '@strapi/strapi' {
       'api::movie-request.movie-request': ApiMovieRequestMovieRequest;
       'api::movie.movie': ApiMovieMovie;
       'api::music.music': ApiMusicMusic;
+      'api::product.product': ApiProductProduct;
       'api::promo-code.promo-code': ApiPromoCodePromoCode;
       'api::provider-material.provider-material': ApiProviderMaterialProviderMaterial;
       'api::purchase.purchase': ApiPurchasePurchase;

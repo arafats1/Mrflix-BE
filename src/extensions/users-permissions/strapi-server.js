@@ -28,7 +28,7 @@ const RELIGION_OPTIONS = [
 ];
 
 const ACCOUNT_TYPE_OPTIONS = ['parent', 'provider'];
-const PROVIDER_TYPE_OPTIONS = ['teacher', 'religious'];
+const PROVIDER_TYPE_OPTIONS = ['teacher', 'religious', 'seller', 'musician', 'creative_artist', 'comedian'];
 const EDUCATION_LEVEL_OPTIONS = [
   'Kindergarten',
   'Primary',
@@ -101,6 +101,14 @@ module.exports = (plugin) => {
   };
 
   plugin.contentTypes.user.schema.attributes.schoolName = {
+    type: 'string',
+  };
+
+  plugin.contentTypes.user.schema.attributes.paymentPhone = {
+    type: 'string',
+  };
+
+  plugin.contentTypes.user.schema.attributes.paymentCode = {
     type: 'string',
   };
 
@@ -236,6 +244,8 @@ module.exports = (plugin) => {
       accountType: userWithRole.accountType || 'parent',
       providerType: userWithRole.providerType || null,
       schoolName: userWithRole.schoolName || null,
+      paymentPhone: userWithRole.paymentPhone || null,
+      paymentCode: userWithRole.paymentCode || null,
       educationLevel: userWithRole.educationLevel || null,
       educationLevels: Array.isArray(userWithRole.educationLevels)
         ? userWithRole.educationLevels.filter((level) => EDUCATION_LEVEL_OPTIONS.includes(level))
