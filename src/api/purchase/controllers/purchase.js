@@ -236,31 +236,7 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
       return ctx.unauthorized('You must be logged in');
     }
 
-    const sellerProducts = await strapi.documents('api::product.product').findMany({
-      filters: {
-        seller: { id: requestUser.id },
-      },
-      fields: ['id'],
-      status: 'published',
-    });
-
-    const sellerProductIds = Array.from(new Set((sellerProducts || []).map((product) => product.id).filter(Boolean)));
-
-    if (sellerProductIds.length === 0) {
-      return {
-        data: [],
-        meta: { pagination: { total: 0 } },
-      };
-    }
-
     const purchases = await strapi.documents('api::purchase.purchase').findMany({
-      filters: {
-        product: {
-          id: {
-            $in: sellerProductIds,
-          },
-        },
-      },
       populate: {
         product: {
           populate: {
@@ -272,8 +248,12 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
       sort: { createdAt: 'desc' },
     });
 
+    const sellerPurchases = (purchases || []).filter((purchase) => {
+      return purchase?.product?.seller?.id === requestUser.id;
+    });
+
     return {
-      data: purchases.map((purchase) => ({
+      data: sellerPurchases.map((purchase) => ({
         ...purchase,
         buyer: purchase.buyer
           ? {
@@ -282,7 +262,7 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
             }
           : null,
       })),
-      meta: { pagination: { total: purchases.length } },
+      meta: { pagination: { total: sellerPurchases.length } },
     };
   },
 
