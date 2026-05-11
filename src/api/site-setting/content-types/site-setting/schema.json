@@ -112,6 +112,10 @@
       "type": "integer",
       "default": 500
     },
+    "bookSubscriptionPrice": {
+      "type": "integer",
+      "default": 10000
+    },
     "bookDownloadPrice": {
       "type": "integer",
       "default": 5000

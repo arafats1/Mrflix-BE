@@ -1498,7 +1498,9 @@ export interface ApiPurchasePurchase extends Struct.CollectionTypeSchema {
       'api::provider-material.provider-material'
     >;
     publishedAt: Schema.Attribute.DateTime;
-    purchaseType: Schema.Attribute.Enumeration<['read', 'download']>;
+    purchaseType: Schema.Attribute.Enumeration<
+      ['read', 'download', 'book_subscription']
+    >;
     savingsDepositApplied: Schema.Attribute.Boolean &
       Schema.Attribute.DefaultTo<false>;
     seasonNumber: Schema.Attribute.Integer;
@@ -1664,6 +1666,8 @@ export interface ApiSiteSettingSiteSetting extends Struct.SingleTypeSchema {
     bookDownloadPrice: Schema.Attribute.Integer &
       Schema.Attribute.DefaultTo<5000>;
     bookReadPrice: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<500>;
+    bookSubscriptionPrice: Schema.Attribute.Integer &
+      Schema.Attribute.DefaultTo<10000>;
     contentMode: Schema.Attribute.Enumeration<['english', 'luganda', 'both']> &
       Schema.Attribute.DefaultTo<'both'>;
     createdAt: Schema.Attribute.DateTime;

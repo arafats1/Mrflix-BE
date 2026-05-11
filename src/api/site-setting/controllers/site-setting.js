@@ -102,9 +102,10 @@ module.exports = createCoreController('api::site-setting.site-setting', ({ strap
     if (!entry) {
       return {
         data: {
-          moviePrice: 2000,
-          seriesPrice: 5000,
-          subscriptionPrice: 20000,
+          moviePrice: 0,
+          seriesPrice: 0,
+          subscriptionPrice: 10000,
+          bookSubscriptionPrice: 10000,
           subscriptionEnabled: true,
           storageFreeTierGB: 1,
           storagePricePerMonth: 7000,
@@ -113,7 +114,12 @@ module.exports = createCoreController('api::site-setting.site-setting', ({ strap
         },
       };
     }
-    return { data: entry };
+    return {
+      data: {
+        ...entry,
+        bookSubscriptionPrice: entry.bookSubscriptionPrice ?? 10000,
+      },
+    };
   },
 
   // Admin-only update

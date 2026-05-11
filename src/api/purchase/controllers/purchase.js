@@ -219,7 +219,46 @@ function getBookAmount(settings, purchaseType) {
   if (purchaseType === 'download') {
     return settings?.bookDownloadPrice ?? 5000;
   }
+  if (purchaseType === 'book_subscription') {
+    return settings?.bookSubscriptionPrice ?? 10000;
+  }
   return settings?.bookReadPrice ?? 500;
+}
+
+function resolveTimedBookExpiry(purchase, settings, now = new Date()) {
+  if (!purchase) return null;
+  if (purchase.expiresAt) {
+    const explicitExpiry = new Date(purchase.expiresAt);
+    return Number.isNaN(explicitExpiry.getTime()) ? null : explicitExpiry;
+  }
+
+  const createdAt = new Date(purchase.createdAt || now);
+  if (Number.isNaN(createdAt.getTime())) return null;
+
+  const purchaseType = String(purchase.purchaseType || 'read');
+  if (purchaseType === 'download') {
+    return null;
+  }
+  if (purchaseType === 'book_subscription') {
+    const days = Number(settings?.bookSubscriptionDays) > 0 ? Number(settings.bookSubscriptionDays) : 30;
+    return new Date(createdAt.getTime() + days * 24 * 60 * 60 * 1000);
+  }
+
+  const hours = Number(settings?.bookRentalHours) > 0 ? Number(settings.bookRentalHours) : 24;
+  return new Date(createdAt.getTime() + hours * 60 * 60 * 1000);
+}
+
+function createBookExpiryIso(settings, purchaseType, now = new Date()) {
+  if (purchaseType === 'download') return null;
+
+  const base = new Date(now);
+  if (purchaseType === 'book_subscription') {
+    const days = Number(settings?.bookSubscriptionDays) > 0 ? Number(settings.bookSubscriptionDays) : 30;
+    return new Date(base.getTime() + days * 24 * 60 * 60 * 1000).toISOString();
+  }
+
+  const hours = Number(settings?.bookRentalHours) > 0 ? Number(settings.bookRentalHours) : 24;
+  return new Date(base.getTime() + hours * 60 * 60 * 1000).toISOString();
 }
 
 module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => ({
@@ -336,8 +375,8 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
       return ctx.notFound(productId ? 'Product not found' : providerMaterialId ? 'Provider material not found' : bookId ? 'Book not found' : 'Movie not found');
     }
 
-    if (target.kind === 'book' && !['read', 'download'].includes(purchaseType)) {
-      return ctx.badRequest('Missing or invalid purchaseType for book (read or download)');
+    if (target.kind === 'book' && !['read', 'download', 'book_subscription'].includes(purchaseType)) {
+      return ctx.badRequest('Missing or invalid purchaseType for book (read, download or book_subscription)');
     }
 
     const childProfile = target.kind === 'provider_material' && childProfileId
@@ -362,9 +401,11 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
       } else if (target.kind === 'book') {
         filters.book = { id: target.id };
         // If they already have download access, they have everything.
-        // If they only have read, they can still buy download.
+        // If they only have timed access, they can still buy download.
         if (purchaseType === 'read') {
           filters.purchaseType = { $in: ['read', 'download'] };
+        } else if (purchaseType === 'book_subscription') {
+          filters.purchaseType = 'book_subscription';
         } else {
           filters.purchaseType = 'download';
         }
@@ -381,7 +422,18 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
       });
 
       const now = new Date();
-      const validPurchases = existing.filter(p => !p.expiresAt || new Date(p.expiresAt) > now);
+      const validPurchases = existing.filter((purchase) => {
+        if (target.kind !== 'book') {
+          return !purchase.expiresAt || new Date(purchase.expiresAt) > now;
+        }
+
+        if (String(purchase.purchaseType || '') === 'download') {
+          return true;
+        }
+
+        const expiry = resolveTimedBookExpiry(purchase, settings, now);
+        return !!expiry && expiry > now;
+      });
 
       if (validPurchases.length > 0) {
         return ctx.badRequest('You already own this ' + (seasonNumber ? `season ${seasonNumber}` : target.kind === 'provider_material' ? 'material' : target.kind === 'book' ? 'book' : 'movie'));
@@ -441,6 +493,7 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
       seasonNumber: (target.kind === 'movie' && target.movie.type === 'series' && seasonNumber) ? seasonNumber : null,
       book: target.kind === 'book' ? target.id : null,
       purchaseType: target.kind === 'book' ? purchaseType : null,
+      expiresAt: target.kind === 'book' ? createBookExpiryIso(settings, purchaseType) : null,
       isPayOnDelivery: !!payOnDeliveryOrder,
       deliveryAddress: deliveryAddress || '',
       deliveryPhone: deliveryPhone || '',

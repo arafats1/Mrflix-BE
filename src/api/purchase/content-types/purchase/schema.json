@@ -94,7 +94,7 @@
     },
     "purchaseType": {
       "type": "enumeration",
-      "enum": ["read", "download"]
+      "enum": ["read", "download", "book_subscription"]
     },
     "savingsDepositApplied": {
       "type": "boolean",
