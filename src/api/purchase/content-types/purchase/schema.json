@@ -87,6 +87,15 @@
     "contactName": {
       "type": "string"
     },
+    "book": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::book.book"
+    },
+    "purchaseType": {
+      "type": "enumeration",
+      "enum": ["read", "download"]
+    },
     "savingsDepositApplied": {
       "type": "boolean",
       "default": false

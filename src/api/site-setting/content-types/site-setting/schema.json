@@ -108,6 +108,14 @@
       "type": "boolean",
       "default": true
     },
+    "bookReadPrice": {
+      "type": "integer",
+      "default": 500
+    },
+    "bookDownloadPrice": {
+      "type": "integer",
+      "default": 5000
+    },
     "paymentGateway": {
       "type": "enumeration",
       "enum": ["pesapal", "dgateway", "yo"],

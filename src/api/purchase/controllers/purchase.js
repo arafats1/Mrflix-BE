@@ -4,7 +4,24 @@ const { createCoreController } = require('@strapi/strapi').factories;
 const { submitPayment, checkPaymentStatus, getActiveGateway } = require('../../../utils/payment-gateway');
 const { recordProviderMaterialSale } = require('../../../utils/provider-material-sales');
 
-async function findPurchaseTarget(strapi, { movieId, providerMaterialId, productId }) {
+async function findPurchaseTarget(strapi, { movieId, providerMaterialId, productId, bookId }) {
+  if (bookId) {
+    const book = await strapi.documents('api::book.book').findOne({
+      documentId: bookId,
+    });
+
+    if (!book) return null;
+
+    return {
+      kind: 'book',
+      id: book.id,
+      documentId: book.documentId,
+      title: book.title,
+      amount: null,
+      book,
+    };
+  }
+
   if (productId) {
     const product = await strapi.documents('api::product.product').findOne({
       documentId: productId,
@@ -113,6 +130,16 @@ function buildPurchaseInfo(purchase) {
     };
   }
 
+  if (purchase.book) {
+    const book = purchase.book;
+    return {
+      kind: 'book',
+      id: book.documentId || book.id,
+      title: book.title,
+      purchaseType: purchase.purchaseType,
+    };
+  }
+
   return null;
 }
 
@@ -188,6 +215,13 @@ function getMovieAmount(settings, movie, seasonNumber) {
   return settings?.moviePrice ?? 2000;
 }
 
+function getBookAmount(settings, purchaseType) {
+  if (purchaseType === 'download') {
+    return settings?.bookDownloadPrice ?? 5000;
+  }
+  return settings?.bookReadPrice ?? 500;
+}
+
 module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => ({
   // Users see their own purchases, admins see all with buyer info
   async find(ctx) {
@@ -209,6 +243,7 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
     const populate = isAdmin
       ? {
         movie: { populate: '*' },
+        book: { populate: '*' },
         providerMaterial: { populate: '*' },
         product: { populate: '*' },
         buyer: { populate: '*' },
@@ -216,6 +251,7 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
       }
       : {
         movie: { populate: '*' },
+        book: { populate: '*' },
         providerMaterial: { populate: '*' },
         product: { populate: '*' },
         childProfile: true,
@@ -279,6 +315,8 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
       movieId,
       providerMaterialId,
       productId,
+      bookId,
+      purchaseType,
       paymentMethod,
       paymentPhone,
       seasonNumber,
@@ -289,13 +327,17 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
     } = ctx.request.body.data || ctx.request.body;
     const childProfileId = (ctx.request.body.data || ctx.request.body || {}).childProfileId;
 
-    if (!movieId && !providerMaterialId && !productId) {
-      return ctx.badRequest('Missing required field: movieId, providerMaterialId or productId');
+    if (!movieId && !providerMaterialId && !productId && !bookId) {
+      return ctx.badRequest('Missing required field: movieId, providerMaterialId, productId or bookId');
     }
 
-    const target = await findPurchaseTarget(strapi, { movieId, providerMaterialId, productId });
+    const target = await findPurchaseTarget(strapi, { movieId, providerMaterialId, productId, bookId });
     if (!target) {
-      return ctx.notFound(productId ? 'Product not found' : providerMaterialId ? 'Provider material not found' : 'Movie not found');
+      return ctx.notFound(productId ? 'Product not found' : providerMaterialId ? 'Provider material not found' : bookId ? 'Book not found' : 'Movie not found');
+    }
+
+    if (target.kind === 'book' && !['read', 'download'].includes(purchaseType)) {
+      return ctx.badRequest('Missing or invalid purchaseType for book (read or download)');
     }
 
     const childProfile = target.kind === 'provider_material' && childProfileId
@@ -317,6 +359,15 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
         if (childProfile) {
           filters.childProfile = { id: childProfile.id };
         }
+      } else if (target.kind === 'book') {
+        filters.book = { id: target.id };
+        // If they already have download access, they have everything.
+        // If they only have read, they can still buy download.
+        if (purchaseType === 'read') {
+          filters.purchaseType = { $in: ['read', 'download'] };
+        } else {
+          filters.purchaseType = 'download';
+        }
       } else {
         filters.movie = { id: target.id };
       }
@@ -333,21 +384,23 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
       const validPurchases = existing.filter(p => !p.expiresAt || new Date(p.expiresAt) > now);
 
       if (validPurchases.length > 0) {
-        return ctx.badRequest('You already own this ' + (seasonNumber ? `season ${seasonNumber}` : target.kind === 'provider_material' ? 'material' : 'movie'));
+        return ctx.badRequest('You already own this ' + (seasonNumber ? `season ${seasonNumber}` : target.kind === 'provider_material' ? 'material' : target.kind === 'book' ? 'book' : 'movie'));
       }
     }
 
     const settings = await strapi.entityService.findMany('api::site-setting.site-setting');
     const amount = target.kind === 'provider_material' || target.kind === 'product'
       ? target.amount
-      : getMovieAmount(settings, target.movie, seasonNumber);
+      : target.kind === 'book'
+        ? getBookAmount(settings, purchaseType)
+        : getMovieAmount(settings, target.movie, seasonNumber);
 
     if ((target.kind === 'provider_material' || target.kind === 'product') && amount <= 0) {
       return ctx.badRequest('This item is not available for purchase.');
     }
 
     const merchantReference = `PUR_${ctx.state.user.id}_${Date.now()}_${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
-    const description = target.kind === 'provider_material' || target.kind === 'product'
+    const description = target.kind === 'provider_material' || target.kind === 'product' || target.kind === 'book'
       ? target.title
       : seasonNumber
         ? `${target.movie.title} - Season ${seasonNumber}`
@@ -386,6 +439,8 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
       transactionId: merchantReference,
       status: 'pending',
       seasonNumber: (target.kind === 'movie' && target.movie.type === 'series' && seasonNumber) ? seasonNumber : null,
+      book: target.kind === 'book' ? target.id : null,
+      purchaseType: target.kind === 'book' ? purchaseType : null,
       isPayOnDelivery: !!payOnDeliveryOrder,
       deliveryAddress: deliveryAddress || '',
       deliveryPhone: deliveryPhone || '',
