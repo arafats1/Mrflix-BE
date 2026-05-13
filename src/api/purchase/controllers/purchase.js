@@ -417,6 +417,7 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
       purchaseType,
       paymentMethod,
       paymentPhone,
+      customerTransactionId,
       seasonNumber,
       isPayOnDelivery,
       deliveryAddress,
@@ -521,6 +522,10 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
     const requiresGateway = !manualSupplierPayment && !payOnDeliveryOrder;
     let activeGateway = null;
 
+    if (manualSupplierPayment && !String(customerTransactionId || '').trim()) {
+      return ctx.badRequest('Transaction ID is required after paying the supplier.');
+    }
+
     if (requiresGateway) {
       activeGateway = await getActiveGateway(strapi);
       const ipnId = settings?.pesapalIpnId;
@@ -548,6 +553,7 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
       paymentMethod: manualSupplierPayment ? 'manual_supplier_payment' : payOnDeliveryOrder ? 'pay_on_delivery' : (paymentMethod || activeGateway),
       paymentPhone: paymentPhone || '',
       transactionId: merchantReference,
+      customerTransactionId: manualSupplierPayment ? String(customerTransactionId || '').trim() : '',
       status: 'pending',
       deliveryStatus: target.kind === 'product' ? 'pending_delivery' : null,
       seasonNumber: (target.kind === 'movie' && target.movie.type === 'series' && seasonNumber) ? seasonNumber : null,

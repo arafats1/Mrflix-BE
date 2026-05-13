@@ -39,6 +39,14 @@
     "ageRange": {
       "type": "string"
     },
+    "audience": {
+      "type": "enumeration",
+      "enum": [
+        "children",
+        "adults"
+      ],
+      "default": "children"
+    },
     "stockQuantity": {
       "type": "integer",
       "required": true,

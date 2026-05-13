@@ -47,6 +47,9 @@
     "transactionId": {
       "type": "string"
     },
+    "customerTransactionId": {
+      "type": "string"
+    },
     "status": {
       "type": "enumeration",
       "enum": ["pending", "completed", "failed"],

@@ -1291,6 +1291,8 @@ export interface ApiProductProduct extends Struct.CollectionTypeSchema {
   };
   attributes: {
     ageRange: Schema.Attribute.String;
+    audience: Schema.Attribute.Enumeration<['children', 'adults']> &
+      Schema.Attribute.DefaultTo<'children'>;
     category: Schema.Attribute.String & Schema.Attribute.Required;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
@@ -1514,6 +1516,7 @@ export interface ApiPurchasePurchase extends Struct.CollectionTypeSchema {
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    customerTransactionId: Schema.Attribute.String;
     deliveryAddress: Schema.Attribute.Text;
     deliveryPhone: Schema.Attribute.String;
     deliveryStatus: Schema.Attribute.Enumeration<

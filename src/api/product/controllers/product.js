@@ -88,6 +88,7 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
         images: Array.isArray(input.images) ? input.images : [],
         featuredImage: input.featuredImage,
         ageRange: input.ageRange,
+        audience: input.audience || 'children',
         stockQuantity: input.stockQuantity,
         paymentPhone: input.paymentPhone,
         paymentCode: input.paymentCode,
