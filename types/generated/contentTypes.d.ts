@@ -1297,7 +1297,16 @@ export interface ApiProductProduct extends Struct.CollectionTypeSchema {
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    deliveryAreas: Schema.Attribute.JSON;
     description: Schema.Attribute.Text & Schema.Attribute.Required;
+    discountPercent: Schema.Attribute.Integer &
+      Schema.Attribute.SetMinMax<
+        {
+          max: 95;
+          min: 0;
+        },
+        number
+      >;
     featuredImage: Schema.Attribute.String & Schema.Attribute.Required;
     images: Schema.Attribute.JSON & Schema.Attribute.Required;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
@@ -2640,6 +2649,7 @@ export interface PluginUsersPermissionsUser
       'plugin::users-permissions.user'
     > &
       Schema.Attribute.Private;
+    location: Schema.Attribute.String;
     parentPinHash: Schema.Attribute.Password & Schema.Attribute.Private;
     parentPinUpdatedAt: Schema.Attribute.DateTime;
     password: Schema.Attribute.Password &

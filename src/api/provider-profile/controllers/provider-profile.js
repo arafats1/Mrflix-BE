@@ -34,6 +34,7 @@ module.exports = {
     const body = ctx.request.body?.data || ctx.request.body || {};
     const fullName = typeof body.fullName === 'string' ? body.fullName.trim() : '';
     const schoolName = typeof body.schoolName === 'string' ? body.schoolName.trim() : '';
+    const location = typeof body.location === 'string' ? body.location.trim() : '';
     const religion = RELIGION_OPTIONS.includes(body.religion) ? body.religion : null;
     const educationLevels = normalizeEducationLevels(body.educationLevels);
     const educationLevelOther = typeof body.educationLevelOther === 'string' ? body.educationLevelOther.trim() : '';
@@ -69,6 +70,7 @@ module.exports = {
     }
 
     if (currentUser.providerType === 'seller') {
+      updateData.location = location || currentUser.location || 'Kampala';
       updateData.paymentPhone = paymentPhone || null;
       updateData.paymentCode = paymentCode || null;
     }

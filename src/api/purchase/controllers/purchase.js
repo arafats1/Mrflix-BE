@@ -4,6 +4,18 @@ const { createCoreController } = require('@strapi/strapi').factories;
 const { submitPayment, checkPaymentStatus, getActiveGateway } = require('../../../utils/payment-gateway');
 const { recordProviderMaterialSale } = require('../../../utils/provider-material-sales');
 
+function getDiscountedProductAmount(product) {
+  const basePrice = Number(product?.priceUGX || 0);
+  const discountPercent = Math.min(100, Math.max(0, Number(product?.discountPercent || 0)));
+
+  if (discountPercent <= 0) {
+    return basePrice;
+  }
+
+  const savings = Math.round(basePrice * (discountPercent / 100));
+  return Math.max(basePrice - savings, 0);
+}
+
 async function findPurchaseTarget(strapi, { movieId, providerMaterialId, productId, bookId }) {
   if (bookId) {
     const book = await strapi.documents('api::book.book').findOne({
@@ -34,7 +46,7 @@ async function findPurchaseTarget(strapi, { movieId, providerMaterialId, product
       id: product.id,
       documentId: product.documentId,
       title: product.name,
-      amount: Number(product.priceUGX || 0),
+      amount: getDiscountedProductAmount(product),
       product,
     };
   }

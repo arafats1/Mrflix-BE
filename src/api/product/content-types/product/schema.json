@@ -72,6 +72,14 @@
     },
     "paymentCode": {
       "type": "string"
+    },
+    "discountPercent": {
+      "type": "integer",
+      "max": 95,
+      "min": 0
+    },
+    "deliveryAreas": {
+      "type": "json"
     }
   }
 }

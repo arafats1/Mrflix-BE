@@ -104,6 +104,10 @@ module.exports = (plugin) => {
     type: 'string',
   };
 
+  plugin.contentTypes.user.schema.attributes.location = {
+    type: 'string',
+  };
+
   plugin.contentTypes.user.schema.attributes.paymentPhone = {
     type: 'string',
   };
@@ -253,6 +257,7 @@ module.exports = (plugin) => {
       accountType: userWithRole.accountType || 'parent',
       providerType: userWithRole.providerType || null,
       schoolName: userWithRole.schoolName || null,
+      location: userWithRole.location || null,
       paymentPhone: userWithRole.paymentPhone || null,
       paymentCode: userWithRole.paymentCode || null,
       educationLevel: userWithRole.educationLevel || null,
@@ -364,6 +369,7 @@ module.exports = (plugin) => {
         const educationLevels = [...new Set(requestedEducationLevels.filter((level) => EDUCATION_LEVEL_OPTIONS.includes(level)))];
         const educationLevel = educationLevels[0];
         const educationLevelOther = typeof body.educationLevelOther === 'string' ? body.educationLevelOther.trim() : '';
+        const location = typeof body.location === 'string' ? body.location.trim() : '';
         const schoolName = typeof body.schoolName === 'string' ? body.schoolName.trim() : '';
         const religion = RELIGION_OPTIONS.includes(body.religion) ? body.religion : undefined;
         const isParent = accountType === 'parent'
@@ -394,6 +400,10 @@ module.exports = (plugin) => {
           throw new ValidationError('Religion is required for religious providers');
         }
 
+        if (accountType === 'provider' && !location) {
+          throw new ValidationError('Location is required for provider accounts');
+        }
+
         if (!normalizedPhone) {
           throw new ValidationError('Phone number is required');
         }
@@ -405,6 +415,7 @@ module.exports = (plugin) => {
           isParent,
           accountType,
           providerType,
+          location: location || undefined,
           schoolName: schoolName || undefined,
           educationLevel,
           educationLevels: educationLevels.length > 0 ? educationLevels : undefined,
@@ -458,6 +469,7 @@ module.exports = (plugin) => {
         if (extras.isParent) updateData.isParent = true;
         if (extras.accountType) updateData.accountType = extras.accountType;
         if (extras.providerType) updateData.providerType = extras.providerType;
+        if (extras.location) updateData.location = extras.location;
         if (extras.schoolName) updateData.schoolName = extras.schoolName;
         if (extras.educationLevel) updateData.educationLevel = extras.educationLevel;
         if (extras.educationLevels) updateData.educationLevels = extras.educationLevels;

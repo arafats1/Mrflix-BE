@@ -6,13 +6,40 @@
 
 const { createCoreController } = require('@strapi/strapi').factories;
 
+function normalizeDeliveryAreas(input = []) {
+  const values = Array.isArray(input)
+    ? input
+    : typeof input === 'string'
+      ? input.split(/[\n,]+/)
+      : [];
+
+  return [...new Set(values.map((value) => String(value || '').trim()).filter(Boolean))];
+}
+
 function withSellerPaymentFallback(product) {
   if (!product) return product;
 
   return {
     ...product,
+    deliveryAreas: normalizeDeliveryAreas(product.deliveryAreas),
     paymentPhone: product.paymentPhone || product.seller?.paymentPhone || null,
     paymentCode: product.paymentCode || product.seller?.paymentCode || null,
+  };
+}
+
+async function withSoldCount(strapi, product) {
+  if (!product) return product;
+
+  const soldCount = await strapi.db.query('api::purchase.purchase').count({
+    where: {
+      product: { id: product.id },
+      status: { $ne: 'failed' },
+    },
+  });
+
+  return {
+    ...withSellerPaymentFallback(product),
+    soldCount,
   };
 }
 
@@ -67,7 +94,7 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
       status: 'published',
     });
 
-    return { data: products };
+    return { data: await Promise.all(products.map((product) => withSoldCount(strapi, product))) };
   },
 
   /**
@@ -89,7 +116,9 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
         featuredImage: input.featuredImage,
         ageRange: input.ageRange,
         audience: input.audience || 'children',
+        discountPercent: input.discountPercent,
         stockQuantity: input.stockQuantity,
+        deliveryAreas: normalizeDeliveryAreas(input.deliveryAreas),
         paymentPhone: input.paymentPhone,
         paymentCode: input.paymentCode,
         status: input.status || 'active',
@@ -101,7 +130,7 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
       status: 'published',
     });
 
-    return { data: created };
+    return { data: await withSoldCount(strapi, created) };
   },
 
   /**
@@ -125,7 +154,7 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
       status: 'published',
     });
 
-    return { data: products.map(withSellerPaymentFallback) };
+    return { data: await Promise.all(products.map((product) => withSoldCount(strapi, product))) };
   },
 
   async findOne(ctx) {
@@ -139,6 +168,6 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
       return ctx.notFound('Product not found');
     }
 
-    return { data: withSellerPaymentFallback(product) };
+    return { data: await withSoldCount(strapi, product) };
   },
 }));
