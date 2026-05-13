@@ -104,6 +104,10 @@ module.exports = (plugin) => {
     type: 'string',
   };
 
+  plugin.contentTypes.user.schema.attributes.fullName = {
+    type: 'string',
+  };
+
   plugin.contentTypes.user.schema.attributes.location = {
     type: 'string',
   };

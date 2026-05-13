@@ -2638,6 +2638,7 @@ export interface PluginUsersPermissionsUser
       Schema.Attribute.SetMinMaxLength<{
         minLength: 6;
       }>;
+    fullName: Schema.Attribute.String;
     hasBookLibraryAccess: Schema.Attribute.Boolean &
       Schema.Attribute.DefaultTo<false>;
     isKeypUser: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
