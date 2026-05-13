@@ -141,6 +141,15 @@ module.exports = (plugin) => {
     type: 'json',
   };
 
+  plugin.contentTypes.user.schema.attributes.hasBookLibraryAccess = {
+    type: 'boolean',
+    default: false,
+  };
+
+  plugin.contentTypes.user.schema.attributes.bookLibraryAccessGrantedAt = {
+    type: 'datetime',
+  };
+
   plugin.contentTypes.user.schema.attributes.parentPinHash = {
     type: 'password',
     private: true,
@@ -259,6 +268,8 @@ module.exports = (plugin) => {
       subscribedTeacherIds: Array.isArray(userWithRole.subscribedTeacherIds)
         ? userWithRole.subscribedTeacherIds.map((value) => Number(value)).filter(Number.isFinite)
         : [],
+      hasBookLibraryAccess: !!userWithRole.hasBookLibraryAccess,
+      bookLibraryAccessGrantedAt: userWithRole.bookLibraryAccessGrantedAt || null,
       hasParentPin: !!userWithRole.parentPinHash,
       parentPinUpdatedAt: userWithRole.parentPinUpdatedAt || null,
       childProfiles: Array.isArray(userWithRole.childProfiles)

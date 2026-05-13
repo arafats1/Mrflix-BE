@@ -2542,6 +2542,7 @@ export interface PluginUsersPermissionsUser
     accountType: Schema.Attribute.Enumeration<['parent', 'provider']> &
       Schema.Attribute.DefaultTo<'parent'>;
     blocked: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
+    bookLibraryAccessGrantedAt: Schema.Attribute.DateTime;
     childProfiles: Schema.Attribute.Relation<
       'oneToMany',
       'api::child-profile.child-profile'
@@ -2568,6 +2569,8 @@ export interface PluginUsersPermissionsUser
       Schema.Attribute.SetMinMaxLength<{
         minLength: 6;
       }>;
+    hasBookLibraryAccess: Schema.Attribute.Boolean &
+      Schema.Attribute.DefaultTo<false>;
     isKeypUser: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
     isParent: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<true>;
     keypActivatedAt: Schema.Attribute.DateTime;
