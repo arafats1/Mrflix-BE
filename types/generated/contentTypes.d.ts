@@ -1516,6 +1516,10 @@ export interface ApiPurchasePurchase extends Struct.CollectionTypeSchema {
       Schema.Attribute.Private;
     deliveryAddress: Schema.Attribute.Text;
     deliveryPhone: Schema.Attribute.String;
+    deliveryStatus: Schema.Attribute.Enumeration<
+      ['pending_delivery', 'delivered', 'not_delivered']
+    > &
+      Schema.Attribute.DefaultTo<'pending_delivery'>;
     dgatewayReference: Schema.Attribute.String;
     downloadCount: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
     expiresAt: Schema.Attribute.DateTime;

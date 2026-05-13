@@ -53,6 +53,11 @@
       "default": "pending",
       "required": true
     },
+    "deliveryStatus": {
+      "type": "enumeration",
+      "enum": ["pending_delivery", "delivered", "not_delivered"],
+      "default": "pending_delivery"
+    },
     "downloadCount": {
       "type": "integer",
       "default": 0

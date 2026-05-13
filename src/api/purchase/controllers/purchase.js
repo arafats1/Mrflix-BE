@@ -153,6 +153,13 @@ function formatBuyerContact(user) {
   return email.endsWith('@phone.movokids.local') ? '' : email;
 }
 
+function normalizeDeliveryStatus(status) {
+  const value = String(status || '').trim().toLowerCase();
+  if (value === 'delivered') return 'delivered';
+  if (value === 'not_delivered' || value === 'not delivered') return 'not_delivered';
+  return 'pending_delivery';
+}
+
 async function resolveRequestUser(strapi, ctx) {
   if (ctx.state.user?.id) {
     return strapi.query('plugin::users-permissions.user').findOne({
@@ -330,6 +337,7 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
     return {
       data: sellerPurchases.map((purchase) => ({
         ...purchase,
+        deliveryStatus: normalizeDeliveryStatus(purchase.deliveryStatus),
         buyer: purchase.buyer
           ? {
               ...purchase.buyer,
@@ -338,6 +346,57 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
           : null,
       })),
       meta: { pagination: { total: sellerPurchases.length } },
+    };
+  },
+
+  async updateSellerDeliveryStatus(ctx) {
+    const requestUser = await resolveRequestUser(strapi, ctx);
+    if (!requestUser) {
+      return ctx.unauthorized('You must be logged in');
+    }
+
+    const purchaseId = ctx.params?.id;
+    const nextStatus = normalizeDeliveryStatus((ctx.request.body.data || ctx.request.body || {}).deliveryStatus);
+
+    if (!purchaseId) {
+      return ctx.badRequest('Missing purchase id');
+    }
+
+    const purchase = await strapi.documents('api::purchase.purchase').findOne({
+      documentId: purchaseId,
+      populate: {
+        product: {
+          populate: {
+            seller: true,
+          },
+        },
+      },
+    });
+
+    if (!purchase) {
+      return ctx.notFound('Order not found');
+    }
+
+    if (!purchase.product || purchase.product.seller?.id !== requestUser.id) {
+      return ctx.forbidden('You can only update your own product orders');
+    }
+
+    const updated = await strapi.documents('api::purchase.purchase').update({
+      documentId: purchase.documentId,
+      data: {
+        deliveryStatus: nextStatus,
+      },
+      populate: {
+        product: true,
+        buyer: true,
+      },
+    });
+
+    return {
+      data: {
+        ...updated,
+        deliveryStatus: normalizeDeliveryStatus(updated.deliveryStatus),
+      },
     };
   },
 
@@ -490,6 +549,7 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
       paymentPhone: paymentPhone || '',
       transactionId: merchantReference,
       status: 'pending',
+      deliveryStatus: target.kind === 'product' ? 'pending_delivery' : null,
       seasonNumber: (target.kind === 'movie' && target.movie.type === 'series' && seasonNumber) ? seasonNumber : null,
       book: target.kind === 'book' ? target.id : null,
       purchaseType: target.kind === 'book' ? purchaseType : null,
