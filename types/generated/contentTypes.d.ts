@@ -1235,6 +1235,49 @@ export interface ApiMusicMusic extends Struct.CollectionTypeSchema {
   };
 }
 
+export interface ApiProductReviewProductReview
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'product_reviews';
+  info: {
+    description: 'Customer reviews for marketplace products';
+    displayName: 'Product Review';
+    pluralName: 'product-reviews';
+    singularName: 'product-review';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    comment: Schema.Attribute.Text & Schema.Attribute.Required;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::product-review.product-review'
+    > &
+      Schema.Attribute.Private;
+    productId: Schema.Attribute.String & Schema.Attribute.Required;
+    publishedAt: Schema.Attribute.DateTime;
+    rating: Schema.Attribute.Integer &
+      Schema.Attribute.SetMinMax<
+        {
+          max: 5;
+          min: 1;
+        },
+        number
+      > &
+      Schema.Attribute.DefaultTo<5>;
+    reviewerName: Schema.Attribute.String & Schema.Attribute.Required;
+    status: Schema.Attribute.Enumeration<['approved', 'pending']> &
+      Schema.Attribute.DefaultTo<'approved'>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface ApiProductProduct extends Struct.CollectionTypeSchema {
   collectionName: 'products';
   info: {
@@ -1248,6 +1291,7 @@ export interface ApiProductProduct extends Struct.CollectionTypeSchema {
   };
   attributes: {
     ageRange: Schema.Attribute.String;
+    category: Schema.Attribute.String & Schema.Attribute.Required;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -1273,6 +1317,15 @@ export interface ApiProductProduct extends Struct.CollectionTypeSchema {
       ['active', 'out_of_stock', 'discontinued']
     > &
       Schema.Attribute.DefaultTo<'active'>;
+    stockQuantity: Schema.Attribute.Integer &
+      Schema.Attribute.Required &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0;
+        },
+        number
+      > &
+      Schema.Attribute.DefaultTo<1>;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -2668,6 +2721,7 @@ declare module '@strapi/strapi' {
       'api::movie-request.movie-request': ApiMovieRequestMovieRequest;
       'api::movie.movie': ApiMovieMovie;
       'api::music.music': ApiMusicMusic;
+      'api::product-review.product-review': ApiProductReviewProductReview;
       'api::product.product': ApiProductProduct;
       'api::promo-code.promo-code': ApiPromoCodePromoCode;
       'api::provider-material.provider-material': ApiProviderMaterialProviderMaterial;

@@ -16,6 +16,37 @@ function withSellerPaymentFallback(product) {
   };
 }
 
+function sanitizeProductIdentifier(value) {
+  return decodeURIComponent(String(value || '')).trim().split(/\s+/)[0] || '';
+}
+
+async function findProductByIdentifier(strapi, id) {
+  const normalizedId = sanitizeProductIdentifier(id);
+
+  if (!normalizedId) return null;
+
+  if (/^\d+$/.test(normalizedId)) {
+    return strapi.entityService.findOne('api::product.product', normalizedId, {
+      populate: {
+        seller: true,
+      },
+    });
+  }
+
+  const products = await strapi.documents('api::product.product').findMany({
+    filters: {
+      documentId: normalizedId,
+    },
+    populate: {
+      seller: true,
+    },
+    limit: 1,
+    status: 'published',
+  });
+
+  return products?.[0] || null;
+}
+
 module.exports = createCoreController('api::product.product', ({ strapi }) => ({
   /**
    * Get products owned by the current user.
@@ -53,9 +84,11 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
         name: input.name,
         description: input.description,
         priceUGX: input.priceUGX,
+        category: input.category,
         images: Array.isArray(input.images) ? input.images : [],
         featuredImage: input.featuredImage,
         ageRange: input.ageRange,
+        stockQuantity: input.stockQuantity,
         paymentPhone: input.paymentPhone,
         paymentCode: input.paymentCode,
         status: input.status || 'active',
@@ -95,13 +128,7 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
   },
 
   async findOne(ctx) {
-    const product = await strapi.documents('api::product.product').findOne({
-      documentId: ctx.params.id,
-      populate: {
-        seller: true,
-      },
-      status: 'published',
-    });
+    const product = await findProductByIdentifier(strapi, ctx.params.id);
 
     if (!product) {
       return ctx.notFound('Product not found');

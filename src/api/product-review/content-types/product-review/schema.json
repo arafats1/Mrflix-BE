@@ -1,0 +1,42 @@
+{
+  "kind": "collectionType",
+  "collectionName": "product_reviews",
+  "info": {
+    "singularName": "product-review",
+    "pluralName": "product-reviews",
+    "displayName": "Product Review",
+    "description": "Customer reviews for marketplace products"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "productId": {
+      "type": "string",
+      "required": true
+    },
+    "reviewerName": {
+      "type": "string",
+      "required": true
+    },
+    "rating": {
+      "type": "integer",
+      "default": 5,
+      "min": 1,
+      "max": 5
+    },
+    "comment": {
+      "type": "text",
+      "required": true
+    },
+    "status": {
+      "type": "enumeration",
+      "enum": [
+        "approved",
+        "pending"
+      ],
+      "default": "approved"
+    }
+  }
+}

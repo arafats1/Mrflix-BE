@@ -24,6 +24,10 @@
       "type": "integer",
       "required": true
     },
+    "category": {
+      "type": "string",
+      "required": true
+    },
     "images": {
       "type": "json",
       "required": true
@@ -34,6 +38,12 @@
     },
     "ageRange": {
       "type": "string"
+    },
+    "stockQuantity": {
+      "type": "integer",
+      "required": true,
+      "min": 0,
+      "default": 1
     },
     "seller": {
       "type": "relation",
