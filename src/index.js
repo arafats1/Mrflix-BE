@@ -13,7 +13,7 @@ async function ensureAdminAcademyPermissions(strapi) {
   for (const action of ADMIN_ACADEMY_ACTIONS) {
     let permission = await knex('up_permissions').where({ action }).first();
     if (!permission) {
-      const timestamp = new Date().toISOString();
+      const timestamp = new Date();
       const inserted = await knex('up_permissions').insert({
         action,
         created_at: timestamp,
