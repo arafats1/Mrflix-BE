@@ -12,7 +12,7 @@ async function resolveUser(strapi, ctx) {
 async function findProfileForUser(strapi, userId) {
   const list = await strapi.entityService.findMany('api::entrep-profile.entrep-profile', {
     filters: { user: userId },
-    populate: ['cluster'],
+    populate: ['cluster', 'savedJobs'],
     limit: 1,
   });
   return list?.[0] || null;
@@ -195,5 +195,37 @@ module.exports = createCoreController('api::entrep-profile.entrep-profile', ({ s
       data: { goal, interestedRoles, skills, experienceLevel, educationLevel, onboardingComplete: true },
     });
     ctx.send({ profile: updated });
+  },
+
+  async saveJob(ctx) {
+    const user = await resolveUser(strapi, ctx);
+    if (!user) return ctx.unauthorized();
+    const profile = await findProfileForUser(strapi, user.id);
+    if (!profile) return ctx.notFound();
+
+    const jobId = Number(ctx.params.id);
+    const savedJobs = Array.isArray(profile.savedJobs) ? profile.savedJobs.map(j => j.id) : [];
+
+    if (!savedJobs.includes(jobId)) {
+      await strapi.entityService.update('api::entrep-profile.entrep-profile', profile.id, {
+        data: { savedJobs: [...savedJobs, jobId] }
+      });
+    }
+    ctx.send({ success: true });
+  },
+
+  async unsaveJob(ctx) {
+    const user = await resolveUser(strapi, ctx);
+    if (!user) return ctx.unauthorized();
+    const profile = await findProfileForUser(strapi, user.id);
+    if (!profile) return ctx.notFound();
+
+    const jobId = Number(ctx.params.id);
+    const savedJobs = Array.isArray(profile.savedJobs) ? profile.savedJobs.map(j => j.id) : [];
+
+    await strapi.entityService.update('api::entrep-profile.entrep-profile', profile.id, {
+      data: { savedJobs: savedJobs.filter(id => id !== jobId) }
+    });
+    ctx.send({ success: true });
   },
 }));

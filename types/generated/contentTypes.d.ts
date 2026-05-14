@@ -1222,9 +1222,11 @@ export interface ApiEntrepJobEntrepJob extends Struct.CollectionTypeSchema {
     draftAndPublish: false;
   };
   attributes: {
+    applicationLink: Schema.Attribute.String;
     applicationsCount: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
     closingAt: Schema.Attribute.DateTime;
     company: Schema.Attribute.String;
+    contactEmail: Schema.Attribute.String;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -1243,6 +1245,10 @@ export interface ApiEntrepJobEntrepJob extends Struct.CollectionTypeSchema {
     postedBy: Schema.Attribute.Relation<
       'manyToOne',
       'plugin::users-permissions.user'
+    >;
+    postedByProfile: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::entrep-profile.entrep-profile'
     >;
     publishedAt: Schema.Attribute.DateTime;
     salary: Schema.Attribute.String;
@@ -1590,6 +1596,10 @@ export interface ApiEntrepProfileEntrepProfile
     > &
       Schema.Attribute.Required &
       Schema.Attribute.DefaultTo<'learner'>;
+    savedJobs: Schema.Attribute.Relation<
+      'manyToMany',
+      'api::entrep-job.entrep-job'
+    >;
     sessionsHosted: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
     skills: Schema.Attribute.JSON & Schema.Attribute.DefaultTo<[]>;
     updatedAt: Schema.Attribute.DateTime;

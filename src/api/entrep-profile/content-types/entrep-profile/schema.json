@@ -54,6 +54,11 @@
     },
     "isMentor": { "type": "boolean", "default": false },
     "mentorRating": { "type": "decimal", "default": 0 },
-    "sessionsHosted": { "type": "integer", "default": 0 }
+    "sessionsHosted": { "type": "integer", "default": 0 },
+    "savedJobs": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::entrep-job.entrep-job"
+    }
   }
 }

@@ -30,6 +30,13 @@
       "enum": ["draft", "open", "closed", "filled"],
       "default": "open"
     },
-    "closingAt": { "type": "datetime" }
+    "closingAt": { "type": "datetime" },
+    "postedByProfile": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::entrep-profile.entrep-profile"
+    },
+    "contactEmail": { "type": "string" },
+    "applicationLink": { "type": "string" }
   }
 }
