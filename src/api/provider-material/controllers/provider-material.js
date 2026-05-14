@@ -6,6 +6,16 @@ const RELIGION_OPTIONS = ['Catholic', 'Protestant', 'Pentecostal', 'Adventist', 
 const EDUCATION_LEVEL_OPTIONS = ['Kindergarten', 'Primary', 'Secondary', 'Technical college', 'University', 'Other'];
 const AGE_RANGE_OPTIONS = ['ages_0_4', 'ages_5_8', 'ages_9_12', 'ages_13_17', 'all_ages'];
 const MEDIA_TYPE_OPTIONS = ['pdf', 'video', 'audio'];
+const PROVIDER_TYPE_OPTIONS = ['teacher', 'religious', 'seller', 'musician', 'creative_artist', 'comedian'];
+
+function normalizeProviderTypes(input) {
+  const values = Array.isArray(input)
+    ? input
+    : typeof input === 'string'
+      ? [input]
+      : [];
+  return [...new Set(values.filter((value) => PROVIDER_TYPE_OPTIONS.includes(value)))];
+}
 
 function normalizeClassLabels(value) {
   if (!Array.isArray(value)) return [];
@@ -43,12 +53,15 @@ function pickUrl(value) {
 async function getFullUser(strapi, userId) {
   return strapi.db.query('plugin::users-permissions.user').findOne({
     where: { id: userId },
-    select: ['id', 'username', 'accountType', 'providerType', 'schoolName', 'educationLevel', 'educationLevelOther', 'religion'],
+    select: ['id', 'username', 'accountType', 'providerType', 'providerTypes', 'schoolName', 'educationLevel', 'educationLevelOther', 'religion'],
   });
 }
 
 function sanitizeMaterialInput(body = {}, provider) {
-  const providerType = provider?.providerType;
+  const availableProviderTypes = normalizeProviderTypes(provider?.providerTypes || provider?.providerType);
+  const providerType = PROVIDER_TYPE_OPTIONS.includes(body.providerType) && availableProviderTypes.includes(body.providerType)
+    ? body.providerType
+    : provider?.providerType;
   const title = String(body.title || '').trim();
   const description = String(body.description || '').trim();
   const priceUGX = Math.max(0, Number.parseInt(body.priceUGX, 10) || 0);
@@ -231,7 +244,7 @@ module.exports = createCoreController('api::provider-material.provider-material'
     if (!ctx.state.user) return ctx.unauthorized();
 
     const provider = await getFullUser(strapi, ctx.state.user.id);
-    if (!provider || provider.accountType !== 'provider') {
+    if (!provider || !['provider', 'both'].includes(provider.accountType)) {
       return ctx.forbidden('Only provider accounts can access provider materials');
     }
 
@@ -256,7 +269,7 @@ module.exports = createCoreController('api::provider-material.provider-material'
     if (!ctx.state.user) return ctx.unauthorized();
 
     const provider = await getFullUser(strapi, ctx.state.user.id);
-    if (!provider || provider.accountType !== 'provider') {
+    if (!provider || !['provider', 'both'].includes(provider.accountType)) {
       return ctx.forbidden('Only provider accounts can access provider summaries');
     }
 
@@ -284,7 +297,7 @@ module.exports = createCoreController('api::provider-material.provider-material'
     if (!ctx.state.user) return ctx.unauthorized();
 
     const provider = await getFullUser(strapi, ctx.state.user.id);
-    if (!provider || provider.accountType !== 'provider') {
+    if (!provider || !['provider', 'both'].includes(provider.accountType)) {
       return ctx.forbidden('Only provider accounts can upload materials');
     }
 
@@ -312,7 +325,7 @@ module.exports = createCoreController('api::provider-material.provider-material'
   async update(ctx) {
     if (!ctx.state.user) return ctx.unauthorized();
     const provider = await getFullUser(strapi, ctx.state.user.id);
-    if (!provider || provider.accountType !== 'provider') {
+    if (!provider || !['provider', 'both'].includes(provider.accountType)) {
       return ctx.forbidden('Only provider accounts can update materials');
     }
 
@@ -348,7 +361,7 @@ module.exports = createCoreController('api::provider-material.provider-material'
   async delete(ctx) {
     if (!ctx.state.user) return ctx.unauthorized();
     const provider = await getFullUser(strapi, ctx.state.user.id);
-    if (!provider || provider.accountType !== 'provider') {
+    if (!provider || !['provider', 'both'].includes(provider.accountType)) {
       return ctx.forbidden('Only provider accounts can delete materials');
     }
 

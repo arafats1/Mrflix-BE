@@ -4,6 +4,15 @@ const EDUCATION_LEVEL_OPTIONS = ['Kindergarten', 'Primary', 'Secondary', 'Techni
 const RELIGION_OPTIONS = ['Catholic', 'Protestant', 'Pentecostal', 'Adventist', 'Orthodox', 'Muslim', 'Hindu', 'Bahai', 'Traditional', 'Other'];
 const PROVIDER_TYPE_OPTIONS = ['teacher', 'religious', 'seller', 'musician', 'creative_artist', 'comedian'];
 
+function normalizeProviderTypes(input) {
+  const values = Array.isArray(input)
+    ? input
+    : typeof input === 'string'
+      ? [input]
+      : [];
+  return [...new Set(values.filter((value) => PROVIDER_TYPE_OPTIONS.includes(value)))];
+}
+
 function normalizeEducationLevels(input = []) {
   const values = Array.isArray(input) ? input : [];
   return [...new Set(values.filter((level) => EDUCATION_LEVEL_OPTIONS.includes(level)))];
@@ -27,11 +36,15 @@ module.exports = {
       where: { id: ctx.state.user.id },
     });
 
-    if (!currentUser || currentUser.accountType !== 'provider') {
+    if (!currentUser || !['provider', 'both'].includes(currentUser.accountType)) {
       return ctx.forbidden('Only provider accounts can update this profile');
     }
 
     const body = ctx.request.body?.data || ctx.request.body || {};
+    const availableProviderTypes = normalizeProviderTypes(currentUser.providerTypes || currentUser.providerType);
+    const requestedProviderType = PROVIDER_TYPE_OPTIONS.includes(body.providerType) && availableProviderTypes.includes(body.providerType)
+      ? body.providerType
+      : currentUser.providerType;
     const fullName = typeof body.fullName === 'string' ? body.fullName.trim() : '';
     const schoolName = typeof body.schoolName === 'string' ? body.schoolName.trim() : '';
     const location = typeof body.location === 'string' ? body.location.trim() : '';
@@ -48,7 +61,7 @@ module.exports = {
 
     const updateData = { fullName };
 
-    if (currentUser.providerType === 'teacher') {
+    if (requestedProviderType === 'teacher') {
       if (!schoolName) return ctx.badRequest('School is required for teacher accounts');
       if (educationLevels.length === 0) return ctx.badRequest('Select at least one education level');
       if (educationLevels.includes('Other') && !educationLevelOther) {
@@ -64,12 +77,12 @@ module.exports = {
       updateData.subjectsTaught = subjectsTaught;
     }
 
-    if (currentUser.providerType === 'religious') {
+    if (requestedProviderType === 'religious') {
       if (!religion) return ctx.badRequest('Religion is required for religious providers');
       updateData.religion = religion;
     }
 
-    if (currentUser.providerType === 'seller') {
+    if (requestedProviderType === 'seller') {
       updateData.location = location || currentUser.location || 'Kampala';
       updateData.paymentPhone = paymentPhone || null;
       updateData.paymentCode = paymentCode || null;
@@ -103,7 +116,7 @@ module.exports = {
     const teacher = await strapi.db.query('plugin::users-permissions.user').findOne({
       where: {
         id: teacherId,
-        accountType: 'provider',
+        accountType: { $in: ['provider', 'both'] },
         providerType: 'teacher',
       },
       select: ['id'],

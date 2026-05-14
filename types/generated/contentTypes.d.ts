@@ -3518,6 +3518,7 @@ export interface PluginUsersPermissionsUser
         'comedian',
       ]
     >;
+    providerTypes: Schema.Attribute.JSON;
     publishedAt: Schema.Attribute.DateTime;
     religion: Schema.Attribute.Enumeration<
       [

@@ -42,7 +42,7 @@ module.exports = ({ env }) => {
           expiresIn: '7d',
         },
         register: {
-          allowedFields: ['phone', 'fullName', 'religion', 'isParent', 'accountType', 'providerType', 'schoolName', 'educationLevel', 'educationLevelOther', 'paymentPhone', 'paymentCode'],
+          allowedFields: ['phone', 'fullName', 'religion', 'isParent', 'accountType', 'providerType', 'providerTypes', 'schoolName', 'educationLevel', 'educationLevelOther', 'paymentPhone', 'paymentCode'],
         },
       },
     },

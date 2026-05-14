@@ -27,7 +27,7 @@ const RELIGION_OPTIONS = [
   'Other',
 ];
 
-  const ACCOUNT_TYPE_OPTIONS = ['parent', 'provider', 'both'];
+const ACCOUNT_TYPE_OPTIONS = ['parent', 'provider', 'both'];
 const PROVIDER_TYPE_OPTIONS = ['teacher', 'religious', 'seller', 'musician', 'creative_artist', 'comedian'];
 const EDUCATION_LEVEL_OPTIONS = [
   'Kindergarten',
@@ -50,6 +50,20 @@ function normalizePhone(phone) {
 function looksLikePhone(identifier) {
   const normalized = normalizePhone(identifier);
   return /^\d{9,15}$/.test(normalized);
+}
+
+function normalizeProviderTypes(input) {
+  const values = Array.isArray(input)
+    ? input
+    : typeof input === 'string'
+      ? [input]
+      : [];
+
+  return [...new Set(values.filter((value) => PROVIDER_TYPE_OPTIONS.includes(value)))];
+}
+
+function userHasProviderAccess(user) {
+  return user?.accountType === 'provider' || user?.accountType === 'both';
 }
 
 module.exports = (plugin) => {
@@ -98,6 +112,10 @@ module.exports = (plugin) => {
   plugin.contentTypes.user.schema.attributes.providerType = {
     type: 'enumeration',
     enum: PROVIDER_TYPE_OPTIONS,
+  };
+
+  plugin.contentTypes.user.schema.attributes.providerTypes = {
+    type: 'json',
   };
 
   plugin.contentTypes.user.schema.attributes.schoolName = {
@@ -260,6 +278,10 @@ module.exports = (plugin) => {
       isParent: !!userWithRole.isParent,
       accountType: userWithRole.accountType || 'parent',
       providerType: userWithRole.providerType || null,
+      providerTypes: normalizeProviderTypes(userWithRole.providerTypes || userWithRole.providerType),
+      isSeller: normalizeProviderTypes(userWithRole.providerTypes || userWithRole.providerType).includes('seller'),
+      isTeacher: normalizeProviderTypes(userWithRole.providerTypes || userWithRole.providerType).includes('teacher'),
+      isReligiousProvider: normalizeProviderTypes(userWithRole.providerTypes || userWithRole.providerType).includes('religious'),
       schoolName: userWithRole.schoolName || null,
       location: userWithRole.location || null,
       paymentPhone: userWithRole.paymentPhone || null,
@@ -365,71 +387,9 @@ module.exports = (plugin) => {
         const normalizedPhone = normalizePhone(body.phone);
         const accountType = ACCOUNT_TYPE_OPTIONS.includes(body.accountType) ? body.accountType : 'parent';
         const providerType = PROVIDER_TYPE_OPTIONS.includes(body.providerType) ? body.providerType : undefined;
-
-        // Check if user already exists by phone
-        if (normalizedPhone) {
-          const users = await strapi.db.query('plugin::users-permissions.user').findMany({
-            where: { phone: { $notNull: true } },
-            select: ['id', 'phone', 'accountType', 'providerType', 'isParent'],
-            limit: 20000,
-          });
-
-          const existingUser = users.find(
-            (entry) => normalizePhone(entry.phone) === normalizedPhone
-          );
-
-          if (existingUser) {
-            // User exists, check if they are trying to "add" a new role
-            // If they are a parent and registering as a provider, or vice versa
-            const currentType = existingUser.accountType || 'parent';
-
-            if (
-              (currentType === 'parent' && accountType === 'provider') ||
-              (currentType === 'provider' && accountType === 'parent')
-            ) {
-              // Upgrade user to 'both' and add the new provider details
-              const updateData = {
-                accountType: 'both',
-              };
-
-              if (accountType === 'provider') {
-                updateData.providerType = providerType;
-                updateData.location = typeof body.location === 'string' ? body.location.trim() : undefined;
-                updateData.schoolName = typeof body.schoolName === 'string' ? body.schoolName.trim() : undefined;
-                // ... add other provider fields as needed
-              } else {
-                updateData.isParent = true;
-              }
-
-              await strapi.db.query('plugin::users-permissions.user').update({
-                where: { id: existingUser.id },
-                data: updateData,
-              });
-
-              // Construct a response similar to a successful login
-              // If we are here, it means the user already exists and we just updated their role.
-              // We return the existing user data and a JWT so they are logged in immediately.
-              const jwt = strapi.plugins['users-permissions'].services.jwt.issue({
-                id: existingUser.id,
-              });
-
-              const userWithRole = await strapi.db
-                .query('plugin::users-permissions.user')
-                .findOne({
-                  where: { id: existingUser.id },
-                  populate: ['role'],
-                });
-
-              ctx.body = {
-                jwt,
-                user: userWithRole,
-              };
-              return;
-            }
-
-            throw new ValidationError('Phone number is already in use');
-          }
-        }
+        const wantsProvider = accountType === 'provider' || accountType === 'both' || !!providerType;
+        const wantsParent = accountType === 'parent' || accountType === 'both' || body.isParent === true || body.isParent === 'true';
+        const requestedProviderTypes = normalizeProviderTypes([providerType, ...(Array.isArray(body.providerTypes) ? body.providerTypes : [])]);
 
         const requestedEducationLevels = Array.isArray(body.educationLevels)
           ? body.educationLevels
@@ -442,12 +402,10 @@ module.exports = (plugin) => {
         const location = typeof body.location === 'string' ? body.location.trim() : '';
         const schoolName = typeof body.schoolName === 'string' ? body.schoolName.trim() : '';
         const religion = RELIGION_OPTIONS.includes(body.religion) ? body.religion : undefined;
-        const isParent = accountType === 'parent'
-          ? body.isParent === true || body.isParent === 'true'
-          : false;
+        const isParent = wantsParent;
 
-        if (accountType === 'parent' && !isParent) {
-          throw new ValidationError('You must confirm that you are a parent to register');
+        if (wantsParent && body.isParent !== true && body.isParent !== 'true') {
+          throw new ValidationError(accountType === 'parent' ? 'You must confirm that you are a parent to register' : 'You must agree to the Terms and Conditions');
         }
 
         if (accountType === 'provider' && !providerType) {
@@ -470,12 +428,77 @@ module.exports = (plugin) => {
           throw new ValidationError('Religion is required for religious providers');
         }
 
-        if (accountType === 'provider' && !location) {
+        if (wantsProvider && providerType && !location) {
           throw new ValidationError('Location is required for provider accounts');
         }
 
         if (!normalizedPhone) {
           throw new ValidationError('Phone number is required');
+        }
+
+        const submittedEmail = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
+
+        async function findExistingUser() {
+          if (submittedEmail) {
+            const byEmail = await strapi.db.query('plugin::users-permissions.user').findOne({
+              where: { email: submittedEmail },
+              select: ['id', 'email', 'username', 'password', 'phone', 'accountType', 'providerType', 'providerTypes', 'isParent'],
+            });
+            if (byEmail) return byEmail;
+          }
+
+          const users = await strapi.db.query('plugin::users-permissions.user').findMany({
+            where: { phone: { $notNull: true } },
+            select: ['id', 'email', 'username', 'password', 'phone', 'accountType', 'providerType', 'providerTypes', 'isParent'],
+            limit: 20000,
+          });
+
+          return users.find((entry) => normalizePhone(entry.phone) === normalizedPhone) || null;
+        }
+
+        const existingUser = await findExistingUser();
+        if (existingUser) {
+          const passwordMatches = existingUser.password && await bcrypt.compare(String(body.password || ''), existingUser.password);
+          if (!passwordMatches) {
+            throw new ValidationError('An account already exists with this phone or email. Enter the same password when filing this form to link them together.');
+          }
+
+          const currentProviderTypes = normalizeProviderTypes(existingUser.providerTypes || existingUser.providerType);
+          const mergedProviderTypes = normalizeProviderTypes([...currentProviderTypes, ...requestedProviderTypes]);
+          const willBeParent = !!existingUser.isParent || wantsParent;
+          const willBeProvider = userHasProviderAccess(existingUser) || wantsProvider || mergedProviderTypes.length > 0;
+          const nextAccountType = willBeParent && willBeProvider ? 'both' : willBeProvider ? 'provider' : 'parent';
+          const updateData = {
+            accountType: nextAccountType,
+            isParent: willBeParent,
+            phone: existingUser.phone || normalizedPhone,
+          };
+
+          if (mergedProviderTypes.length > 0) {
+            updateData.providerTypes = mergedProviderTypes;
+            updateData.providerType = providerType || existingUser.providerType || mergedProviderTypes[0];
+          }
+          if (typeof body.fullName === 'string' && body.fullName.trim()) updateData.fullName = body.fullName.trim();
+          if (religion) updateData.religion = religion;
+          if (location) updateData.location = location;
+          if (schoolName) updateData.schoolName = schoolName;
+          if (educationLevel) updateData.educationLevel = educationLevel;
+          if (educationLevels.length > 0) updateData.educationLevels = educationLevels;
+          if (educationLevels.includes('Other')) updateData.educationLevelOther = educationLevelOther;
+
+          await strapi.db.query('plugin::users-permissions.user').update({
+            where: { id: existingUser.id },
+            data: updateData,
+          });
+
+          const jwt = strapi.plugins['users-permissions'].services.jwt.issue({ id: existingUser.id });
+          const userWithRole = await strapi.db.query('plugin::users-permissions.user').findOne({
+            where: { id: existingUser.id },
+            populate: ['role'],
+          });
+
+          ctx.body = { jwt, user: userWithRole };
+          return;
         }
 
         const extras = {
@@ -485,6 +508,7 @@ module.exports = (plugin) => {
           isParent,
           accountType,
           providerType,
+          providerTypes: requestedProviderTypes.length > 0 ? requestedProviderTypes : undefined,
           location: location || undefined,
           schoolName: schoolName || undefined,
           educationLevel,
@@ -492,29 +516,10 @@ module.exports = (plugin) => {
           educationLevelOther: educationLevels.includes('Other') ? educationLevelOther : undefined,
         };
 
-        if (normalizedPhone) {
-          // This block is now redundant since we check at the beginning of register()
-          /* 
-          const existingUsers = await strapi.db.query('plugin::users-permissions.user').findMany({
-            where: { phone: { $notNull: true } },
-            select: ['id', 'phone'],
-            limit: 20000,
-          });
-
-          const duplicatePhone = existingUsers.find(
-            (entry) => normalizePhone(entry.phone) === normalizedPhone
-          );
-          if (duplicatePhone) {
-            throw new ValidationError('Phone number is already in use');
-          }
-          */
-        }
-
         // Email is optional on phone-first signup. Strapi's core register
         // validator still requires an email-shaped string + uniqueness, so
         // synthesize a deterministic placeholder from the phone when the user
         // didn't provide one. The user can update it later from their profile.
-        const submittedEmail = typeof body.email === 'string' ? body.email.trim() : '';
         const effectiveEmail = submittedEmail || `${normalizedPhone}@phone.movokids.local`;
 
         // Strapi v5's users-permissions register validator rejects unknown keys
@@ -542,6 +547,7 @@ module.exports = (plugin) => {
         if (extras.isParent) updateData.isParent = true;
         if (extras.accountType) updateData.accountType = extras.accountType;
         if (extras.providerType) updateData.providerType = extras.providerType;
+        if (extras.providerTypes) updateData.providerTypes = extras.providerTypes;
         if (extras.location) updateData.location = extras.location;
         if (extras.schoolName) updateData.schoolName = extras.schoolName;
         if (extras.educationLevel) updateData.educationLevel = extras.educationLevel;

@@ -74,7 +74,7 @@ async function ensureFolderAccess(ctx, authUser, folder) {
   if (folderType === 'open') return true;
 
   if (folderType === 'provider') {
-    if (authUser.accountType === 'provider') return true;
+    if (authUser.accountType === 'provider' || authUser.accountType === 'both') return true;
     if (folderMatchesPrefix(folder, 'product-images') && await isEntrepreneurUploadUser(authUser)) return true;
     if (await isAdminUploadUser(authUser)) return true;
     ctx.forbidden('Provider/Seller access required for this folder');
