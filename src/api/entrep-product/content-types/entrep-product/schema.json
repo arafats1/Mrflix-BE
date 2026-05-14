@@ -1,0 +1,31 @@
+{
+  "kind": "collectionType",
+  "collectionName": "entrep_products",
+  "info": {
+    "singularName": "entrep-product",
+    "pluralName": "entrep-products",
+    "displayName": "Entrep Marketplace Product"
+  },
+  "options": { "draftAndPublish": false },
+  "attributes": {
+    "name": { "type": "string", "required": true },
+    "description": { "type": "text" },
+    "priceUGX": { "type": "integer", "default": 0 },
+    "category": { "type": "string" },
+    "imageUrls": { "type": "json", "default": [] },
+    "emoji": { "type": "string" },
+    "seller": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::entrep-profile.entrep-profile"
+    },
+    "sellerName": { "type": "string" },
+    "rating": { "type": "decimal", "default": 0 },
+    "stock": { "type": "integer", "default": 0 },
+    "status": {
+      "type": "enumeration",
+      "enum": ["draft", "pending", "approved", "rejected", "sold_out"],
+      "default": "approved"
+    }
+  }
+}

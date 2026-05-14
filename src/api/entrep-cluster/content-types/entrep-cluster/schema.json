@@ -1,0 +1,28 @@
+{
+  "kind": "collectionType",
+  "collectionName": "entrep_clusters",
+  "info": {
+    "singularName": "entrep-cluster",
+    "pluralName": "entrep-clusters",
+    "displayName": "Entrep Cluster",
+    "description": "Umbrella organizations coordinating learners/CBOs"
+  },
+  "options": { "draftAndPublish": false },
+  "attributes": {
+    "name": { "type": "string", "required": true },
+    "organizationName": { "type": "string" },
+    "region": { "type": "string" },
+    "contactPerson": { "type": "string" },
+    "contactEmail": { "type": "string" },
+    "contactPhone": { "type": "string" },
+    "description": { "type": "text" },
+    "industryCategory": { "type": "string" },
+    "code": { "type": "string", "unique": true },
+    "members": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::entrep-profile.entrep-profile",
+      "mappedBy": "cluster"
+    }
+  }
+}

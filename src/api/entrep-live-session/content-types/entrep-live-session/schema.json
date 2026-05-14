@@ -1,0 +1,50 @@
+{
+  "kind": "collectionType",
+  "collectionName": "entrep_live_sessions",
+  "info": {
+    "singularName": "entrep-live-session",
+    "pluralName": "entrep-live-sessions",
+    "displayName": "Entrep Live Session",
+    "description": "Scheduled live training sessions (Whereby-backed)"
+  },
+  "options": { "draftAndPublish": false },
+  "attributes": {
+    "title": { "type": "string", "required": true },
+    "description": { "type": "text" },
+    "topic": { "type": "string" },
+    "startsAt": { "type": "datetime", "required": true },
+    "endsAt": { "type": "datetime" },
+    "durationMinutes": { "type": "integer", "default": 60 },
+    "trainer": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::entrep-profile.entrep-profile"
+    },
+    "course": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::entrep-course.entrep-course"
+    },
+    "cluster": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::entrep-cluster.entrep-cluster"
+    },
+    "provider": {
+      "type": "enumeration",
+      "enum": ["whereby", "zoom", "jitsi"],
+      "default": "whereby"
+    },
+    "hostRoomUrl": { "type": "string", "private": true },
+    "viewerRoomUrl": { "type": "string" },
+    "wherebyMeetingId": { "type": "string", "private": true },
+    "recordingUrl": { "type": "string" },
+    "transcriptUrl": { "type": "string" },
+    "status": {
+      "type": "enumeration",
+      "enum": ["scheduled", "live", "ended", "cancelled"],
+      "default": "scheduled"
+    },
+    "attendees": { "type": "json", "default": [] }
+  }
+}

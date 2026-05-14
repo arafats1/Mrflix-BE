@@ -1,0 +1,43 @@
+{
+  "kind": "collectionType",
+  "collectionName": "entrep_events",
+  "info": {
+    "singularName": "entrep-event",
+    "pluralName": "entrep-events",
+    "displayName": "Entrep Event",
+    "description": "Calendar events (deadlines, live sessions, milestones)"
+  },
+  "options": { "draftAndPublish": false },
+  "attributes": {
+    "title": { "type": "string", "required": true },
+    "description": { "type": "text" },
+    "eventType": {
+      "type": "enumeration",
+      "enum": ["live_session", "quiz_deadline", "assignment_deadline", "announcement", "other"],
+      "default": "other"
+    },
+    "startsAt": { "type": "datetime", "required": true },
+    "endsAt": { "type": "datetime" },
+    "course": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::entrep-course.entrep-course"
+    },
+    "liveSession": {
+      "type": "relation",
+      "relation": "oneToOne",
+      "target": "api::entrep-live-session.entrep-live-session"
+    },
+    "createdBy": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user"
+    },
+    "visibility": {
+      "type": "enumeration",
+      "enum": ["public", "course", "cluster", "private"],
+      "default": "course"
+    },
+    "color": { "type": "string" }
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "kind": "collectionType",
+  "collectionName": "entrep_quiz_attempts",
+  "info": {
+    "singularName": "entrep-quiz-attempt",
+    "pluralName": "entrep-quiz-attempts",
+    "displayName": "Entrep Quiz Attempt"
+  },
+  "options": { "draftAndPublish": false },
+  "attributes": {
+    "user": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user"
+    },
+    "quiz": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::entrep-quiz.entrep-quiz"
+    },
+    "course": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::entrep-course.entrep-course"
+    },
+    "module": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::entrep-module.entrep-module"
+    },
+    "answers": { "type": "json", "default": [] },
+    "score": { "type": "integer", "default": 0 },
+    "totalPoints": { "type": "integer", "default": 0 },
+    "percentage": { "type": "decimal", "default": 0 },
+    "passed": { "type": "boolean", "default": false },
+    "attemptNumber": { "type": "integer", "default": 1 },
+    "submittedAt": { "type": "datetime" }
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "kind": "collectionType",
+  "collectionName": "entrep_posts",
+  "info": {
+    "singularName": "entrep-post",
+    "pluralName": "entrep-posts",
+    "displayName": "Entrep Community Post"
+  },
+  "options": { "draftAndPublish": false },
+  "attributes": {
+    "author": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user"
+    },
+    "authorName": { "type": "string" },
+    "authorRole": { "type": "string" },
+    "content": { "type": "text", "required": true },
+    "mediaUrls": { "type": "json", "default": [] },
+    "tags": { "type": "json", "default": [] },
+    "likesCount": { "type": "integer", "default": 0 },
+    "commentsCount": { "type": "integer", "default": 0 },
+    "likedBy": { "type": "json", "default": [] },
+    "comments": { "type": "json", "default": [] },
+    "isExpert": { "type": "boolean", "default": false },
+    "status": {
+      "type": "enumeration",
+      "enum": ["published", "pending", "rejected", "hidden"],
+      "default": "published"
+    }
+  }
+}

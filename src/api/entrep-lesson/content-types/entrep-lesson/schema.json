@@ -1,0 +1,31 @@
+{
+  "kind": "collectionType",
+  "collectionName": "entrep_lessons",
+  "info": {
+    "singularName": "entrep-lesson",
+    "pluralName": "entrep-lessons",
+    "displayName": "Entrep Lesson"
+  },
+  "options": { "draftAndPublish": false },
+  "attributes": {
+    "title": { "type": "string", "required": true },
+    "description": { "type": "text" },
+    "order": { "type": "integer", "default": 0 },
+    "lessonType": {
+      "type": "enumeration",
+      "enum": ["video", "pdf", "image", "text", "live", "practical", "quiz"],
+      "default": "video"
+    },
+    "videoUrl": { "type": "string" },
+    "pdfUrl": { "type": "string" },
+    "imageUrl": { "type": "string" },
+    "bodyText": { "type": "text" },
+    "durationMin": { "type": "integer", "default": 0 },
+    "module": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::entrep-module.entrep-module",
+      "inversedBy": "lessons"
+    }
+  }
+}

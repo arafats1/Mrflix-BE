@@ -1,0 +1,58 @@
+{
+  "kind": "collectionType",
+  "collectionName": "entrep_profiles",
+  "info": {
+    "singularName": "entrep-profile",
+    "pluralName": "entrep-profiles",
+    "displayName": "Entrep Profile",
+    "description": "Profile for Movo Entrepreneur users (learner / trainer / cluster / provider)"
+  },
+  "options": { "draftAndPublish": false },
+  "pluginOptions": {},
+  "attributes": {
+    "user": {
+      "type": "relation",
+      "relation": "oneToOne",
+      "target": "plugin::users-permissions.user"
+    },
+    "fullName": { "type": "string", "required": true },
+    "email": { "type": "string" },
+    "phone": { "type": "string" },
+    "role": {
+      "type": "enumeration",
+      "enum": ["learner", "trainer", "cluster", "provider", "admin"],
+      "default": "learner",
+      "required": true
+    },
+    "approvalStatus": {
+      "type": "enumeration",
+      "enum": ["pending", "approved", "rejected", "clarification"],
+      "default": "approved"
+    },
+    "onboardingComplete": { "type": "boolean", "default": false },
+    "goal": { "type": "string" },
+    "interestedRoles": { "type": "json", "default": [] },
+    "skills": { "type": "json", "default": [] },
+    "experienceLevel": { "type": "string" },
+    "educationLevel": { "type": "string" },
+    "age": { "type": "integer" },
+    "gender": { "type": "string" },
+    "location": { "type": "string" },
+    "bio": { "type": "text" },
+    "expertise": { "type": "string" },
+    "yearsOfExperience": { "type": "integer", "default": 0 },
+    "nationalId": { "type": "string" },
+    "certifications": { "type": "json", "default": [] },
+    "profilePhotoUrl": { "type": "string" },
+    "portfolioUrls": { "type": "json", "default": [] },
+    "cluster": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::entrep-cluster.entrep-cluster",
+      "inversedBy": "members"
+    },
+    "isMentor": { "type": "boolean", "default": false },
+    "mentorRating": { "type": "decimal", "default": 0 },
+    "sessionsHosted": { "type": "integer", "default": 0 }
+  }
+}

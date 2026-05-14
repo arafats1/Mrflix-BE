@@ -1,0 +1,51 @@
+{
+  "kind": "collectionType",
+  "collectionName": "entrep_courses",
+  "info": {
+    "singularName": "entrep-course",
+    "pluralName": "entrep-courses",
+    "displayName": "Entrep Course",
+    "description": "Training course (Movo Entrepreneur)"
+  },
+  "options": { "draftAndPublish": false },
+  "attributes": {
+    "title": { "type": "string", "required": true },
+    "slug": { "type": "uid", "targetField": "title" },
+    "description": { "type": "text" },
+    "category": { "type": "string" },
+    "level": {
+      "type": "enumeration",
+      "enum": ["Beginner", "Intermediate", "Advanced"],
+      "default": "Beginner"
+    },
+    "skills": { "type": "json", "default": [] },
+    "durationWeeks": { "type": "integer", "default": 0 },
+    "coverUrl": { "type": "string" },
+    "coverGradient": { "type": "string" },
+    "accent": { "type": "string" },
+    "priceUGX": { "type": "integer", "default": 0 },
+    "passMark": { "type": "integer", "default": 80 },
+    "status": {
+      "type": "enumeration",
+      "enum": ["draft", "pending_review", "approved", "rejected", "archived"],
+      "default": "draft"
+    },
+    "rejectionFeedback": { "type": "text" },
+    "rating": { "type": "decimal", "default": 0 },
+    "reviewsCount": { "type": "integer", "default": 0 },
+    "enrollmentsCount": { "type": "integer", "default": 0 },
+    "topRecommended": { "type": "boolean", "default": false },
+    "providerName": { "type": "string" },
+    "trainer": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::entrep-profile.entrep-profile"
+    },
+    "modules": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::entrep-module.entrep-module",
+      "mappedBy": "course"
+    }
+  }
+}

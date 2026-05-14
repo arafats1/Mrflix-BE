@@ -1,0 +1,34 @@
+{
+  "kind": "collectionType",
+  "collectionName": "entrep_enrollments",
+  "info": {
+    "singularName": "entrep-enrollment",
+    "pluralName": "entrep-enrollments",
+    "displayName": "Entrep Enrollment"
+  },
+  "options": { "draftAndPublish": false },
+  "attributes": {
+    "user": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user"
+    },
+    "course": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::entrep-course.entrep-course"
+    },
+    "enrolledAt": { "type": "datetime" },
+    "completedLessons": { "type": "json", "default": [] },
+    "moduleQuizResults": { "type": "json", "default": {} },
+    "progressPct": { "type": "decimal", "default": 0 },
+    "overallScore": { "type": "decimal", "default": 0 },
+    "status": {
+      "type": "enumeration",
+      "enum": ["active", "completed", "dropped"],
+      "default": "active"
+    },
+    "completedAt": { "type": "datetime" },
+    "certificateIssued": { "type": "boolean", "default": false }
+  }
+}

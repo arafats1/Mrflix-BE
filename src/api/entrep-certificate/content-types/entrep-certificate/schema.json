@@ -1,0 +1,28 @@
+{
+  "kind": "collectionType",
+  "collectionName": "entrep_certificates",
+  "info": {
+    "singularName": "entrep-certificate",
+    "pluralName": "entrep-certificates",
+    "displayName": "Entrep Certificate"
+  },
+  "options": { "draftAndPublish": false },
+  "attributes": {
+    "certificateNumber": { "type": "string", "unique": true, "required": true },
+    "user": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user"
+    },
+    "course": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::entrep-course.entrep-course"
+    },
+    "learnerName": { "type": "string" },
+    "courseTitle": { "type": "string" },
+    "finalScore": { "type": "decimal", "default": 0 },
+    "issuedAt": { "type": "datetime" },
+    "pdfUrl": { "type": "string" }
+  }
+}

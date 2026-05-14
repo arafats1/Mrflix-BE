@@ -1,0 +1,27 @@
+{
+  "kind": "collectionType",
+  "collectionName": "entrep_quizzes",
+  "info": {
+    "singularName": "entrep-quiz",
+    "pluralName": "entrep-quizzes",
+    "displayName": "Entrep Quiz",
+    "description": "Quiz/assessment attached to a module. Pass mark default 80%."
+  },
+  "options": { "draftAndPublish": false },
+  "attributes": {
+    "title": { "type": "string", "required": true },
+    "instructions": { "type": "text" },
+    "passMark": { "type": "integer", "default": 80 },
+    "maxAttempts": { "type": "integer", "default": 3 },
+    "timeLimitMinutes": { "type": "integer", "default": 0 },
+    "questions": {
+      "type": "json",
+      "default": []
+    },
+    "course": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::entrep-course.entrep-course"
+    }
+  }
+}

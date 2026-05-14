@@ -1,0 +1,30 @@
+{
+  "kind": "collectionType",
+  "collectionName": "entrep_mentorships",
+  "info": {
+    "singularName": "entrep-mentorship",
+    "pluralName": "entrep-mentorships",
+    "displayName": "Entrep Mentorship Request"
+  },
+  "options": { "draftAndPublish": false },
+  "attributes": {
+    "mentor": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::entrep-profile.entrep-profile"
+    },
+    "mentee": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user"
+    },
+    "topic": { "type": "string" },
+    "message": { "type": "text" },
+    "scheduledAt": { "type": "datetime" },
+    "status": {
+      "type": "enumeration",
+      "enum": ["pending", "accepted", "rejected", "completed"],
+      "default": "pending"
+    }
+  }
+}

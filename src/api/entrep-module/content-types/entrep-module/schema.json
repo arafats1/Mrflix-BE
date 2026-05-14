@@ -1,0 +1,32 @@
+{
+  "kind": "collectionType",
+  "collectionName": "entrep_modules",
+  "info": {
+    "singularName": "entrep-module",
+    "pluralName": "entrep-modules",
+    "displayName": "Entrep Module"
+  },
+  "options": { "draftAndPublish": false },
+  "attributes": {
+    "title": { "type": "string", "required": true },
+    "description": { "type": "text" },
+    "order": { "type": "integer", "default": 0 },
+    "course": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::entrep-course.entrep-course",
+      "inversedBy": "modules"
+    },
+    "lessons": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::entrep-lesson.entrep-lesson",
+      "mappedBy": "module"
+    },
+    "quiz": {
+      "type": "relation",
+      "relation": "oneToOne",
+      "target": "api::entrep-quiz.entrep-quiz"
+    }
+  }
+}

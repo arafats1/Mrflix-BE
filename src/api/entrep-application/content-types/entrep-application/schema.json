@@ -1,0 +1,30 @@
+{
+  "kind": "collectionType",
+  "collectionName": "entrep_applications",
+  "info": {
+    "singularName": "entrep-application",
+    "pluralName": "entrep-applications",
+    "displayName": "Entrep Job Application"
+  },
+  "options": { "draftAndPublish": false },
+  "attributes": {
+    "job": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::entrep-job.entrep-job"
+    },
+    "applicant": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user"
+    },
+    "applicantName": { "type": "string" },
+    "coverNote": { "type": "text" },
+    "portfolioUrls": { "type": "json", "default": [] },
+    "status": {
+      "type": "enumeration",
+      "enum": ["submitted", "reviewing", "shortlisted", "rejected", "hired"],
+      "default": "submitted"
+    }
+  }
+}

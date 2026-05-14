@@ -918,6 +918,829 @@ export interface ApiEducationSubjectEducationSubject
   };
 }
 
+export interface ApiEntrepApplicationEntrepApplication
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'entrep_applications';
+  info: {
+    displayName: 'Entrep Job Application';
+    pluralName: 'entrep-applications';
+    singularName: 'entrep-application';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    applicant: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+    applicantName: Schema.Attribute.String;
+    coverNote: Schema.Attribute.Text;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    job: Schema.Attribute.Relation<'manyToOne', 'api::entrep-job.entrep-job'>;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::entrep-application.entrep-application'
+    > &
+      Schema.Attribute.Private;
+    portfolioUrls: Schema.Attribute.JSON & Schema.Attribute.DefaultTo<[]>;
+    publishedAt: Schema.Attribute.DateTime;
+    status: Schema.Attribute.Enumeration<
+      ['submitted', 'reviewing', 'shortlisted', 'rejected', 'hired']
+    > &
+      Schema.Attribute.DefaultTo<'submitted'>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
+export interface ApiEntrepCertificateEntrepCertificate
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'entrep_certificates';
+  info: {
+    displayName: 'Entrep Certificate';
+    pluralName: 'entrep-certificates';
+    singularName: 'entrep-certificate';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    certificateNumber: Schema.Attribute.String &
+      Schema.Attribute.Required &
+      Schema.Attribute.Unique;
+    course: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::entrep-course.entrep-course'
+    >;
+    courseTitle: Schema.Attribute.String;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    finalScore: Schema.Attribute.Decimal & Schema.Attribute.DefaultTo<0>;
+    issuedAt: Schema.Attribute.DateTime;
+    learnerName: Schema.Attribute.String;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::entrep-certificate.entrep-certificate'
+    > &
+      Schema.Attribute.Private;
+    pdfUrl: Schema.Attribute.String;
+    publishedAt: Schema.Attribute.DateTime;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    user: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+  };
+}
+
+export interface ApiEntrepClusterEntrepCluster
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'entrep_clusters';
+  info: {
+    description: 'Umbrella organizations coordinating learners/CBOs';
+    displayName: 'Entrep Cluster';
+    pluralName: 'entrep-clusters';
+    singularName: 'entrep-cluster';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    code: Schema.Attribute.String & Schema.Attribute.Unique;
+    contactEmail: Schema.Attribute.String;
+    contactPerson: Schema.Attribute.String;
+    contactPhone: Schema.Attribute.String;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    description: Schema.Attribute.Text;
+    industryCategory: Schema.Attribute.String;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::entrep-cluster.entrep-cluster'
+    > &
+      Schema.Attribute.Private;
+    members: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::entrep-profile.entrep-profile'
+    >;
+    name: Schema.Attribute.String & Schema.Attribute.Required;
+    organizationName: Schema.Attribute.String;
+    publishedAt: Schema.Attribute.DateTime;
+    region: Schema.Attribute.String;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
+export interface ApiEntrepCourseEntrepCourse
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'entrep_courses';
+  info: {
+    description: 'Training course (Movo Entrepreneur)';
+    displayName: 'Entrep Course';
+    pluralName: 'entrep-courses';
+    singularName: 'entrep-course';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    accent: Schema.Attribute.String;
+    category: Schema.Attribute.String;
+    coverGradient: Schema.Attribute.String;
+    coverUrl: Schema.Attribute.String;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    description: Schema.Attribute.Text;
+    durationWeeks: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    enrollmentsCount: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    level: Schema.Attribute.Enumeration<
+      ['Beginner', 'Intermediate', 'Advanced']
+    > &
+      Schema.Attribute.DefaultTo<'Beginner'>;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::entrep-course.entrep-course'
+    > &
+      Schema.Attribute.Private;
+    modules: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::entrep-module.entrep-module'
+    >;
+    passMark: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<80>;
+    priceUGX: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    providerName: Schema.Attribute.String;
+    publishedAt: Schema.Attribute.DateTime;
+    rating: Schema.Attribute.Decimal & Schema.Attribute.DefaultTo<0>;
+    rejectionFeedback: Schema.Attribute.Text;
+    reviewsCount: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    skills: Schema.Attribute.JSON & Schema.Attribute.DefaultTo<[]>;
+    slug: Schema.Attribute.UID<'title'>;
+    status: Schema.Attribute.Enumeration<
+      ['draft', 'pending_review', 'approved', 'rejected', 'archived']
+    > &
+      Schema.Attribute.DefaultTo<'draft'>;
+    title: Schema.Attribute.String & Schema.Attribute.Required;
+    topRecommended: Schema.Attribute.Boolean &
+      Schema.Attribute.DefaultTo<false>;
+    trainer: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::entrep-profile.entrep-profile'
+    >;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
+export interface ApiEntrepEnrollmentEntrepEnrollment
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'entrep_enrollments';
+  info: {
+    displayName: 'Entrep Enrollment';
+    pluralName: 'entrep-enrollments';
+    singularName: 'entrep-enrollment';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    certificateIssued: Schema.Attribute.Boolean &
+      Schema.Attribute.DefaultTo<false>;
+    completedAt: Schema.Attribute.DateTime;
+    completedLessons: Schema.Attribute.JSON & Schema.Attribute.DefaultTo<[]>;
+    course: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::entrep-course.entrep-course'
+    >;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    enrolledAt: Schema.Attribute.DateTime;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::entrep-enrollment.entrep-enrollment'
+    > &
+      Schema.Attribute.Private;
+    moduleQuizResults: Schema.Attribute.JSON & Schema.Attribute.DefaultTo<{}>;
+    overallScore: Schema.Attribute.Decimal & Schema.Attribute.DefaultTo<0>;
+    progressPct: Schema.Attribute.Decimal & Schema.Attribute.DefaultTo<0>;
+    publishedAt: Schema.Attribute.DateTime;
+    status: Schema.Attribute.Enumeration<['active', 'completed', 'dropped']> &
+      Schema.Attribute.DefaultTo<'active'>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    user: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+  };
+}
+
+export interface ApiEntrepEventEntrepEvent extends Struct.CollectionTypeSchema {
+  collectionName: 'entrep_events';
+  info: {
+    description: 'Calendar events (deadlines, live sessions, milestones)';
+    displayName: 'Entrep Event';
+    pluralName: 'entrep-events';
+    singularName: 'entrep-event';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    color: Schema.Attribute.String;
+    course: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::entrep-course.entrep-course'
+    >;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    description: Schema.Attribute.Text;
+    endsAt: Schema.Attribute.DateTime;
+    eventType: Schema.Attribute.Enumeration<
+      [
+        'live_session',
+        'quiz_deadline',
+        'assignment_deadline',
+        'announcement',
+        'other',
+      ]
+    > &
+      Schema.Attribute.DefaultTo<'other'>;
+    liveSession: Schema.Attribute.Relation<
+      'oneToOne',
+      'api::entrep-live-session.entrep-live-session'
+    >;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::entrep-event.entrep-event'
+    > &
+      Schema.Attribute.Private;
+    publishedAt: Schema.Attribute.DateTime;
+    startsAt: Schema.Attribute.DateTime & Schema.Attribute.Required;
+    title: Schema.Attribute.String & Schema.Attribute.Required;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    visibility: Schema.Attribute.Enumeration<
+      ['public', 'course', 'cluster', 'private']
+    > &
+      Schema.Attribute.DefaultTo<'course'>;
+  };
+}
+
+export interface ApiEntrepJobEntrepJob extends Struct.CollectionTypeSchema {
+  collectionName: 'entrep_jobs';
+  info: {
+    displayName: 'Entrep Job';
+    pluralName: 'entrep-jobs';
+    singularName: 'entrep-job';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    applicationsCount: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    closingAt: Schema.Attribute.DateTime;
+    company: Schema.Attribute.String;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    description: Schema.Attribute.Text;
+    jobType: Schema.Attribute.Enumeration<
+      ['Full-time', 'Part-time', 'Internship', 'Contract', 'Freelance']
+    > &
+      Schema.Attribute.DefaultTo<'Full-time'>;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::entrep-job.entrep-job'
+    > &
+      Schema.Attribute.Private;
+    location: Schema.Attribute.String;
+    postedBy: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+    publishedAt: Schema.Attribute.DateTime;
+    salary: Schema.Attribute.String;
+    skills: Schema.Attribute.JSON & Schema.Attribute.DefaultTo<[]>;
+    status: Schema.Attribute.Enumeration<
+      ['draft', 'open', 'closed', 'filled']
+    > &
+      Schema.Attribute.DefaultTo<'open'>;
+    title: Schema.Attribute.String & Schema.Attribute.Required;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
+export interface ApiEntrepLessonEntrepLesson
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'entrep_lessons';
+  info: {
+    displayName: 'Entrep Lesson';
+    pluralName: 'entrep-lessons';
+    singularName: 'entrep-lesson';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    bodyText: Schema.Attribute.Text;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    description: Schema.Attribute.Text;
+    durationMin: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    imageUrl: Schema.Attribute.String;
+    lessonType: Schema.Attribute.Enumeration<
+      ['video', 'pdf', 'image', 'text', 'live', 'practical', 'quiz']
+    > &
+      Schema.Attribute.DefaultTo<'video'>;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::entrep-lesson.entrep-lesson'
+    > &
+      Schema.Attribute.Private;
+    module: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::entrep-module.entrep-module'
+    >;
+    order: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    pdfUrl: Schema.Attribute.String;
+    publishedAt: Schema.Attribute.DateTime;
+    title: Schema.Attribute.String & Schema.Attribute.Required;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    videoUrl: Schema.Attribute.String;
+  };
+}
+
+export interface ApiEntrepLiveSessionEntrepLiveSession
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'entrep_live_sessions';
+  info: {
+    description: 'Scheduled live training sessions (Whereby-backed)';
+    displayName: 'Entrep Live Session';
+    pluralName: 'entrep-live-sessions';
+    singularName: 'entrep-live-session';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    attendees: Schema.Attribute.JSON & Schema.Attribute.DefaultTo<[]>;
+    cluster: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::entrep-cluster.entrep-cluster'
+    >;
+    course: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::entrep-course.entrep-course'
+    >;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    description: Schema.Attribute.Text;
+    durationMinutes: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<60>;
+    endsAt: Schema.Attribute.DateTime;
+    hostRoomUrl: Schema.Attribute.String & Schema.Attribute.Private;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::entrep-live-session.entrep-live-session'
+    > &
+      Schema.Attribute.Private;
+    provider: Schema.Attribute.Enumeration<['whereby', 'zoom', 'jitsi']> &
+      Schema.Attribute.DefaultTo<'whereby'>;
+    publishedAt: Schema.Attribute.DateTime;
+    recordingUrl: Schema.Attribute.String;
+    startsAt: Schema.Attribute.DateTime & Schema.Attribute.Required;
+    status: Schema.Attribute.Enumeration<
+      ['scheduled', 'live', 'ended', 'cancelled']
+    > &
+      Schema.Attribute.DefaultTo<'scheduled'>;
+    title: Schema.Attribute.String & Schema.Attribute.Required;
+    topic: Schema.Attribute.String;
+    trainer: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::entrep-profile.entrep-profile'
+    >;
+    transcriptUrl: Schema.Attribute.String;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    viewerRoomUrl: Schema.Attribute.String;
+    wherebyMeetingId: Schema.Attribute.String & Schema.Attribute.Private;
+  };
+}
+
+export interface ApiEntrepMentorshipEntrepMentorship
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'entrep_mentorships';
+  info: {
+    displayName: 'Entrep Mentorship Request';
+    pluralName: 'entrep-mentorships';
+    singularName: 'entrep-mentorship';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::entrep-mentorship.entrep-mentorship'
+    > &
+      Schema.Attribute.Private;
+    mentee: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+    mentor: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::entrep-profile.entrep-profile'
+    >;
+    message: Schema.Attribute.Text;
+    publishedAt: Schema.Attribute.DateTime;
+    scheduledAt: Schema.Attribute.DateTime;
+    status: Schema.Attribute.Enumeration<
+      ['pending', 'accepted', 'rejected', 'completed']
+    > &
+      Schema.Attribute.DefaultTo<'pending'>;
+    topic: Schema.Attribute.String;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
+export interface ApiEntrepModuleEntrepModule
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'entrep_modules';
+  info: {
+    displayName: 'Entrep Module';
+    pluralName: 'entrep-modules';
+    singularName: 'entrep-module';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    course: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::entrep-course.entrep-course'
+    >;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    description: Schema.Attribute.Text;
+    lessons: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::entrep-lesson.entrep-lesson'
+    >;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::entrep-module.entrep-module'
+    > &
+      Schema.Attribute.Private;
+    order: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    publishedAt: Schema.Attribute.DateTime;
+    quiz: Schema.Attribute.Relation<'oneToOne', 'api::entrep-quiz.entrep-quiz'>;
+    title: Schema.Attribute.String & Schema.Attribute.Required;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
+export interface ApiEntrepPostEntrepPost extends Struct.CollectionTypeSchema {
+  collectionName: 'entrep_posts';
+  info: {
+    displayName: 'Entrep Community Post';
+    pluralName: 'entrep-posts';
+    singularName: 'entrep-post';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    author: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+    authorName: Schema.Attribute.String;
+    authorRole: Schema.Attribute.String;
+    comments: Schema.Attribute.JSON & Schema.Attribute.DefaultTo<[]>;
+    commentsCount: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    content: Schema.Attribute.Text & Schema.Attribute.Required;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    isExpert: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
+    likedBy: Schema.Attribute.JSON & Schema.Attribute.DefaultTo<[]>;
+    likesCount: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::entrep-post.entrep-post'
+    > &
+      Schema.Attribute.Private;
+    mediaUrls: Schema.Attribute.JSON & Schema.Attribute.DefaultTo<[]>;
+    publishedAt: Schema.Attribute.DateTime;
+    status: Schema.Attribute.Enumeration<
+      ['published', 'pending', 'rejected', 'hidden']
+    > &
+      Schema.Attribute.DefaultTo<'published'>;
+    tags: Schema.Attribute.JSON & Schema.Attribute.DefaultTo<[]>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
+export interface ApiEntrepProductEntrepProduct
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'entrep_products';
+  info: {
+    displayName: 'Entrep Marketplace Product';
+    pluralName: 'entrep-products';
+    singularName: 'entrep-product';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    category: Schema.Attribute.String;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    description: Schema.Attribute.Text;
+    emoji: Schema.Attribute.String;
+    imageUrls: Schema.Attribute.JSON & Schema.Attribute.DefaultTo<[]>;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::entrep-product.entrep-product'
+    > &
+      Schema.Attribute.Private;
+    name: Schema.Attribute.String & Schema.Attribute.Required;
+    priceUGX: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    publishedAt: Schema.Attribute.DateTime;
+    rating: Schema.Attribute.Decimal & Schema.Attribute.DefaultTo<0>;
+    seller: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::entrep-profile.entrep-profile'
+    >;
+    sellerName: Schema.Attribute.String;
+    status: Schema.Attribute.Enumeration<
+      ['draft', 'pending', 'approved', 'rejected', 'sold_out']
+    > &
+      Schema.Attribute.DefaultTo<'approved'>;
+    stock: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
+export interface ApiEntrepProfileEntrepProfile
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'entrep_profiles';
+  info: {
+    description: 'Profile for Movo Entrepreneur users (learner / trainer / cluster / provider)';
+    displayName: 'Entrep Profile';
+    pluralName: 'entrep-profiles';
+    singularName: 'entrep-profile';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    age: Schema.Attribute.Integer;
+    approvalStatus: Schema.Attribute.Enumeration<
+      ['pending', 'approved', 'rejected', 'clarification']
+    > &
+      Schema.Attribute.DefaultTo<'approved'>;
+    bio: Schema.Attribute.Text;
+    certifications: Schema.Attribute.JSON & Schema.Attribute.DefaultTo<[]>;
+    cluster: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::entrep-cluster.entrep-cluster'
+    >;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    educationLevel: Schema.Attribute.String;
+    email: Schema.Attribute.String;
+    experienceLevel: Schema.Attribute.String;
+    expertise: Schema.Attribute.String;
+    fullName: Schema.Attribute.String & Schema.Attribute.Required;
+    gender: Schema.Attribute.String;
+    goal: Schema.Attribute.String;
+    interestedRoles: Schema.Attribute.JSON & Schema.Attribute.DefaultTo<[]>;
+    isMentor: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::entrep-profile.entrep-profile'
+    > &
+      Schema.Attribute.Private;
+    location: Schema.Attribute.String;
+    mentorRating: Schema.Attribute.Decimal & Schema.Attribute.DefaultTo<0>;
+    nationalId: Schema.Attribute.String;
+    onboardingComplete: Schema.Attribute.Boolean &
+      Schema.Attribute.DefaultTo<false>;
+    phone: Schema.Attribute.String;
+    portfolioUrls: Schema.Attribute.JSON & Schema.Attribute.DefaultTo<[]>;
+    profilePhotoUrl: Schema.Attribute.String;
+    publishedAt: Schema.Attribute.DateTime;
+    role: Schema.Attribute.Enumeration<
+      ['learner', 'trainer', 'cluster', 'provider', 'admin']
+    > &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<'learner'>;
+    sessionsHosted: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    skills: Schema.Attribute.JSON & Schema.Attribute.DefaultTo<[]>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    user: Schema.Attribute.Relation<
+      'oneToOne',
+      'plugin::users-permissions.user'
+    >;
+    yearsOfExperience: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+  };
+}
+
+export interface ApiEntrepQuizAttemptEntrepQuizAttempt
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'entrep_quiz_attempts';
+  info: {
+    displayName: 'Entrep Quiz Attempt';
+    pluralName: 'entrep-quiz-attempts';
+    singularName: 'entrep-quiz-attempt';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    answers: Schema.Attribute.JSON & Schema.Attribute.DefaultTo<[]>;
+    attemptNumber: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<1>;
+    course: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::entrep-course.entrep-course'
+    >;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::entrep-quiz-attempt.entrep-quiz-attempt'
+    > &
+      Schema.Attribute.Private;
+    module: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::entrep-module.entrep-module'
+    >;
+    passed: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
+    percentage: Schema.Attribute.Decimal & Schema.Attribute.DefaultTo<0>;
+    publishedAt: Schema.Attribute.DateTime;
+    quiz: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::entrep-quiz.entrep-quiz'
+    >;
+    score: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    submittedAt: Schema.Attribute.DateTime;
+    totalPoints: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    user: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+  };
+}
+
+export interface ApiEntrepQuizEntrepQuiz extends Struct.CollectionTypeSchema {
+  collectionName: 'entrep_quizzes';
+  info: {
+    description: 'Quiz/assessment attached to a module. Pass mark default 80%.';
+    displayName: 'Entrep Quiz';
+    pluralName: 'entrep-quizzes';
+    singularName: 'entrep-quiz';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    course: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::entrep-course.entrep-course'
+    >;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    instructions: Schema.Attribute.Text;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::entrep-quiz.entrep-quiz'
+    > &
+      Schema.Attribute.Private;
+    maxAttempts: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<3>;
+    passMark: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<80>;
+    publishedAt: Schema.Attribute.DateTime;
+    questions: Schema.Attribute.JSON & Schema.Attribute.DefaultTo<[]>;
+    timeLimitMinutes: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    title: Schema.Attribute.String & Schema.Attribute.Required;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
+export interface ApiEntrepSubmissionEntrepSubmission
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'entrep_submissions';
+  info: {
+    displayName: 'Entrep Practical Submission';
+    pluralName: 'entrep-submissions';
+    singularName: 'entrep-submission';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    course: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::entrep-course.entrep-course'
+    >;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    feedback: Schema.Attribute.Text;
+    grade: Schema.Attribute.Integer;
+    lesson: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::entrep-lesson.entrep-lesson'
+    >;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::entrep-submission.entrep-submission'
+    > &
+      Schema.Attribute.Private;
+    mediaUrl: Schema.Attribute.String;
+    publishedAt: Schema.Attribute.DateTime;
+    status: Schema.Attribute.Enumeration<
+      ['submitted', 'reviewing', 'approved', 'needs_revision', 'rejected']
+    > &
+      Schema.Attribute.DefaultTo<'submitted'>;
+    submissionType: Schema.Attribute.Enumeration<
+      ['video', 'image', 'audio', 'text', 'document']
+    > &
+      Schema.Attribute.DefaultTo<'text'>;
+    textResponse: Schema.Attribute.Text;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    user: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+  };
+}
+
 export interface ApiExclusiveSubscriptionExclusiveSubscription
   extends Struct.CollectionTypeSchema {
   collectionName: 'exclusive_subscriptions';
@@ -2734,6 +3557,23 @@ declare module '@strapi/strapi' {
       'api::contact-message.contact-message': ApiContactMessageContactMessage;
       'api::education-course.education-course': ApiEducationCourseEducationCourse;
       'api::education-subject.education-subject': ApiEducationSubjectEducationSubject;
+      'api::entrep-application.entrep-application': ApiEntrepApplicationEntrepApplication;
+      'api::entrep-certificate.entrep-certificate': ApiEntrepCertificateEntrepCertificate;
+      'api::entrep-cluster.entrep-cluster': ApiEntrepClusterEntrepCluster;
+      'api::entrep-course.entrep-course': ApiEntrepCourseEntrepCourse;
+      'api::entrep-enrollment.entrep-enrollment': ApiEntrepEnrollmentEntrepEnrollment;
+      'api::entrep-event.entrep-event': ApiEntrepEventEntrepEvent;
+      'api::entrep-job.entrep-job': ApiEntrepJobEntrepJob;
+      'api::entrep-lesson.entrep-lesson': ApiEntrepLessonEntrepLesson;
+      'api::entrep-live-session.entrep-live-session': ApiEntrepLiveSessionEntrepLiveSession;
+      'api::entrep-mentorship.entrep-mentorship': ApiEntrepMentorshipEntrepMentorship;
+      'api::entrep-module.entrep-module': ApiEntrepModuleEntrepModule;
+      'api::entrep-post.entrep-post': ApiEntrepPostEntrepPost;
+      'api::entrep-product.entrep-product': ApiEntrepProductEntrepProduct;
+      'api::entrep-profile.entrep-profile': ApiEntrepProfileEntrepProfile;
+      'api::entrep-quiz-attempt.entrep-quiz-attempt': ApiEntrepQuizAttemptEntrepQuizAttempt;
+      'api::entrep-quiz.entrep-quiz': ApiEntrepQuizEntrepQuiz;
+      'api::entrep-submission.entrep-submission': ApiEntrepSubmissionEntrepSubmission;
       'api::exclusive-subscription.exclusive-subscription': ApiExclusiveSubscriptionExclusiveSubscription;
       'api::free-trial-watch.free-trial-watch': ApiFreeTrialWatchFreeTrialWatch;
       'api::movie-request.movie-request': ApiMovieRequestMovieRequest;

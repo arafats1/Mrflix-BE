@@ -1,0 +1,35 @@
+{
+  "kind": "collectionType",
+  "collectionName": "entrep_jobs",
+  "info": {
+    "singularName": "entrep-job",
+    "pluralName": "entrep-jobs",
+    "displayName": "Entrep Job"
+  },
+  "options": { "draftAndPublish": false },
+  "attributes": {
+    "title": { "type": "string", "required": true },
+    "company": { "type": "string" },
+    "location": { "type": "string" },
+    "jobType": {
+      "type": "enumeration",
+      "enum": ["Full-time", "Part-time", "Internship", "Contract", "Freelance"],
+      "default": "Full-time"
+    },
+    "salary": { "type": "string" },
+    "skills": { "type": "json", "default": [] },
+    "description": { "type": "text" },
+    "postedBy": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user"
+    },
+    "applicationsCount": { "type": "integer", "default": 0 },
+    "status": {
+      "type": "enumeration",
+      "enum": ["draft", "open", "closed", "filled"],
+      "default": "open"
+    },
+    "closingAt": { "type": "datetime" }
+  }
+}
