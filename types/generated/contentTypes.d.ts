@@ -1463,7 +1463,7 @@ export interface ApiEntrepPostEntrepPost extends Struct.CollectionTypeSchema {
     authorRole: Schema.Attribute.String;
     comments: Schema.Attribute.JSON & Schema.Attribute.DefaultTo<[]>;
     commentsCount: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
-    content: Schema.Attribute.Text & Schema.Attribute.Required;
+    content: Schema.Attribute.Text;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -2143,6 +2143,8 @@ export interface ApiProductProduct extends Struct.CollectionTypeSchema {
       'api::product.product'
     > &
       Schema.Attribute.Private;
+    marketplaceSource: Schema.Attribute.Enumeration<['core', 'entrepreneur']> &
+      Schema.Attribute.DefaultTo<'core'>;
     name: Schema.Attribute.String & Schema.Attribute.Required;
     paymentCode: Schema.Attribute.String;
     paymentPhone: Schema.Attribute.String;

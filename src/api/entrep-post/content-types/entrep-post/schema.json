@@ -15,7 +15,7 @@
     },
     "authorName": { "type": "string" },
     "authorRole": { "type": "string" },
-    "content": { "type": "text", "required": true },
+    "content": { "type": "text" },
     "mediaUrls": { "type": "json", "default": [] },
     "tags": { "type": "json", "default": [] },
     "likesCount": { "type": "integer", "default": 0 },

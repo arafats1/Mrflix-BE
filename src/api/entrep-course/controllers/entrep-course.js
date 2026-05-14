@@ -252,6 +252,7 @@ module.exports = createCoreController('api::entrep-course.entrep-course', ({ str
         name: learnerProfile?.fullName || enrollment.user?.username || enrollment.user?.email || 'Learner',
         email: enrollment.user?.email || learnerProfile?.email || '',
         phone: learnerProfile?.phone || '',
+        photoUrl: learnerProfile?.profilePhotoUrl || '',
         progressPct: Math.round(Number(enrollment.progressPct || 0)),
         overallScore: Math.round(Number(enrollment.overallScore || 0)),
         status: enrollment.status,

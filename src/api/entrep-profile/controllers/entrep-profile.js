@@ -18,6 +18,20 @@ async function findProfileForUser(strapi, userId) {
   return list?.[0] || null;
 }
 
+function serializeEntrepUser(user) {
+  if (!user) return null;
+
+  return {
+    id: user.id,
+    email: user.email,
+    username: user.username,
+    paymentPhone: user.paymentPhone || null,
+    paymentCode: user.paymentCode || null,
+    phone: user.phone || null,
+    location: user.location || null,
+  };
+}
+
 module.exports = createCoreController('api::entrep-profile.entrep-profile', ({ strapi }) => ({
   /**
    * POST /entrep/auth/register
@@ -45,6 +59,9 @@ module.exports = createCoreController('api::entrep-profile.entrep-profile', ({ s
       confirmed: true,
       blocked: false,
       role: defaultRole?.id,
+      fullName: name,
+      phone: body.phone || null,
+      location: body.location || null,
     });
 
     let clusterRecord = null;
@@ -99,7 +116,7 @@ module.exports = createCoreController('api::entrep-profile.entrep-profile', ({ s
     });
 
     const jwt = strapi.plugins['users-permissions'].services.jwt.issue({ id: user.id });
-    ctx.send({ jwt, user: { id: user.id, email: user.email, username: user.username }, profile });
+    ctx.send({ jwt, user: serializeEntrepUser(user), profile });
   },
 
   async me(ctx) {
@@ -111,7 +128,7 @@ module.exports = createCoreController('api::entrep-profile.entrep-profile', ({ s
         data: { user: user.id, fullName: user.username, email: user.email, role: 'learner', onboardingComplete: false },
       });
     }
-    ctx.send({ user: { id: user.id, email: user.email, username: user.username }, profile });
+    ctx.send({ user: serializeEntrepUser(user), profile });
   },
 
   async updateMe(ctx) {
@@ -129,8 +146,41 @@ module.exports = createCoreController('api::entrep-profile.entrep-profile', ({ s
     const patch = {};
     for (const k of allowed) if (k in body) patch[k] = body[k];
 
+    const paymentPhone = typeof body.paymentPhone === 'string' ? body.paymentPhone.trim() : undefined;
+    const paymentCode = typeof body.paymentCode === 'string' ? body.paymentCode.trim() : undefined;
+
+    if (paymentPhone !== undefined || paymentCode !== undefined) {
+      await strapi.entityService.update('plugin::users-permissions.user', user.id, {
+        data: {
+          ...(typeof body.fullName === 'string' ? { fullName: body.fullName.trim() || null } : {}),
+          ...(typeof body.phone === 'string' ? { phone: body.phone.trim() || null } : {}),
+          ...(typeof body.location === 'string' ? { location: body.location.trim() || null } : {}),
+          ...(paymentPhone !== undefined ? { paymentPhone: paymentPhone || null } : {}),
+          ...(paymentCode !== undefined ? { paymentCode: paymentCode || null } : {}),
+        },
+      });
+      user.paymentPhone = paymentPhone !== undefined ? (paymentPhone || null) : user.paymentPhone;
+      user.paymentCode = paymentCode !== undefined ? (paymentCode || null) : user.paymentCode;
+      if (typeof body.fullName === 'string') user.fullName = body.fullName.trim() || null;
+      if (typeof body.phone === 'string') user.phone = body.phone.trim() || null;
+      if (typeof body.location === 'string') user.location = body.location.trim() || null;
+    }
+
+    if (paymentPhone === undefined && paymentCode === undefined && (typeof body.fullName === 'string' || typeof body.phone === 'string' || typeof body.location === 'string')) {
+      await strapi.entityService.update('plugin::users-permissions.user', user.id, {
+        data: {
+          ...(typeof body.fullName === 'string' ? { fullName: body.fullName.trim() || null } : {}),
+          ...(typeof body.phone === 'string' ? { phone: body.phone.trim() || null } : {}),
+          ...(typeof body.location === 'string' ? { location: body.location.trim() || null } : {}),
+        },
+      });
+      if (typeof body.fullName === 'string') user.fullName = body.fullName.trim() || null;
+      if (typeof body.phone === 'string') user.phone = body.phone.trim() || null;
+      if (typeof body.location === 'string') user.location = body.location.trim() || null;
+    }
+
     const updated = await strapi.entityService.update('api::entrep-profile.entrep-profile', profile.id, { data: patch });
-    ctx.send({ profile: updated });
+    ctx.send({ user: serializeEntrepUser(user), profile: updated });
   },
 
   async completeOnboarding(ctx) {

@@ -24,6 +24,38 @@ function withSellerPaymentFallback(product) {
     deliveryAreas: normalizeDeliveryAreas(product.deliveryAreas),
     paymentPhone: product.paymentPhone || product.seller?.paymentPhone || null,
     paymentCode: product.paymentCode || product.seller?.paymentCode || null,
+    marketplaceSource: product.marketplaceSource || 'core',
+  };
+}
+
+function normalizeMarketplaceSource(value) {
+  return value === 'entrepreneur' ? 'entrepreneur' : 'core';
+}
+
+async function getEntrepreneurProfileForUser(strapi, userId) {
+  if (!userId) return null;
+
+  const profiles = await strapi.entityService.findMany('api::entrep-profile.entrep-profile', {
+    filters: { user: userId },
+    limit: 1,
+  });
+
+  return profiles?.[0] || null;
+}
+
+async function enrichSellerIdentity(strapi, product) {
+  if (!product?.seller?.id) return product;
+
+  const entrepreneurProfile = await getEntrepreneurProfileForUser(strapi, product.seller.id);
+  const sellerDisplayName = entrepreneurProfile?.fullName || product.seller?.fullName || product.seller?.shopName || product.seller?.username || product.seller?.email || null;
+  const sellerLocation = entrepreneurProfile?.location || product.seller?.location || null;
+  const sellerPhone = entrepreneurProfile?.phone || product.paymentPhone || product.seller?.phone || product.seller?.paymentPhone || null;
+
+  return {
+    ...product,
+    sellerDisplayName,
+    sellerLocation,
+    sellerPhone,
   };
 }
 
@@ -38,7 +70,7 @@ async function withSoldCount(strapi, product) {
   });
 
   return {
-    ...withSellerPaymentFallback(product),
+    ...(await enrichSellerIdentity(strapi, withSellerPaymentFallback(product))),
     soldCount,
   };
 }
@@ -121,6 +153,7 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
         deliveryAreas: normalizeDeliveryAreas(input.deliveryAreas),
         paymentPhone: input.paymentPhone,
         paymentCode: input.paymentCode,
+        marketplaceSource: normalizeMarketplaceSource(input.marketplaceSource),
         status: input.status || 'active',
         seller: ctx.state.user.id,
       },

@@ -35,7 +35,7 @@ async function requireUploadUser(ctx) {
   return user;
 }
 
-const OPEN_UPLOAD_FOLDERS = ['stories', 'entrep-documents', 'entrep-course-media'];
+const OPEN_UPLOAD_FOLDERS = ['stories', 'entrep-documents', 'entrep-course-media', 'entrep-community-media', 'entrep-profile-media'];
 const PROVIDER_UPLOAD_FOLDERS = ['provider-materials', 'product-images'];
 
 function folderMatchesPrefix(folder, prefix) {
@@ -57,6 +57,17 @@ async function isAdminUploadUser(authUser) {
   return userWithRole?.role?.type === 'admin' || userWithRole?.role?.name === 'Admin';
 }
 
+async function isEntrepreneurUploadUser(authUser) {
+  if (!authUser?.id) return false;
+
+  const profiles = await strapi.entityService.findMany('api::entrep-profile.entrep-profile', {
+    filters: { user: authUser.id },
+    limit: 1,
+  });
+
+  return !!profiles?.[0];
+}
+
 async function ensureFolderAccess(ctx, authUser, folder) {
   const folderType = resolveUploadFolderType(folder);
 
@@ -64,6 +75,7 @@ async function ensureFolderAccess(ctx, authUser, folder) {
 
   if (folderType === 'provider') {
     if (authUser.accountType === 'provider') return true;
+    if (folderMatchesPrefix(folder, 'product-images') && await isEntrepreneurUploadUser(authUser)) return true;
     if (await isAdminUploadUser(authUser)) return true;
     ctx.forbidden('Provider/Seller access required for this folder');
     return false;

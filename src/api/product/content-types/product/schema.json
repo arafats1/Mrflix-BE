@@ -47,6 +47,14 @@
       ],
       "default": "children"
     },
+    "marketplaceSource": {
+      "type": "enumeration",
+      "enum": [
+        "core",
+        "entrepreneur"
+      ],
+      "default": "core"
+    },
     "stockQuantity": {
       "type": "integer",
       "required": true,
