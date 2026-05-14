@@ -16,6 +16,10 @@ async function getProfile(strapi, userId) {
   return list?.[0] || null;
 }
 
+function isAdminUser(user, profile) {
+  return user?.role?.type === 'admin' || user?.role?.name === 'Admin' || profile?.role === 'admin';
+}
+
 module.exports = createCoreController('api::entrep-course.entrep-course', ({ strapi }) => ({
   /**
    * Default `find` enriched to deep-populate modules & lessons for the catalog.
@@ -50,7 +54,8 @@ module.exports = createCoreController('api::entrep-course.entrep-course', ({ str
     const user = await resolveUser(strapi, ctx);
     if (!user) return ctx.unauthorized();
     const profile = await getProfile(strapi, user.id);
-    if (!profile || !['trainer', 'admin', 'provider'].includes(profile.role)) {
+    const adminUser = isAdminUser(user, profile);
+    if ((!profile && !adminUser) || (profile && !['trainer', 'admin', 'provider'].includes(profile.role) && !adminUser)) {
       return ctx.forbidden('Only trainers or admins can author courses');
     }
 
@@ -60,19 +65,21 @@ module.exports = createCoreController('api::entrep-course.entrep-course', ({ str
     const course = await strapi.entityService.create('api::entrep-course.entrep-course', {
       data: {
         title: b.title,
+        shortDescription: b.shortDescription,
         description: b.description,
         category: b.category,
         level: b.level || 'Beginner',
         skills: b.skills || [],
         durationWeeks: b.durationWeeks || 0,
         coverUrl: b.coverUrl,
+        previewVideoUrl: b.previewVideoUrl,
         coverGradient: b.coverGradient,
         accent: b.accent,
         priceUGX: b.priceUGX || 0,
         passMark: b.passMark || 80,
-        providerName: b.providerName || profile.fullName,
-        trainer: profile.id,
-        status: profile.role === 'admin' ? 'approved' : 'pending_review',
+        providerName: b.providerName || profile?.fullName || user.username || user.email,
+        trainer: profile?.id || null,
+        status: adminUser ? 'approved' : 'pending_review',
       },
     });
 
@@ -154,7 +161,7 @@ module.exports = createCoreController('api::entrep-course.entrep-course', ({ str
     const user = await resolveUser(strapi, ctx);
     if (!user) return ctx.unauthorized();
     const profile = await getProfile(strapi, user.id);
-    const isAdmin = user.role?.type === 'admin' || profile?.role === 'admin';
+    const isAdmin = isAdminUser(user, profile);
     if (!isAdmin) return ctx.forbidden('Admin only');
     const { status = 'approved', feedback } = ctx.request.body || {};
     const updated = await strapi.entityService.update('api::entrep-course.entrep-course', ctx.params.id, {

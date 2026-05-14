@@ -11,6 +11,7 @@
   "attributes": {
     "title": { "type": "string", "required": true },
     "slug": { "type": "uid", "targetField": "title" },
+    "shortDescription": { "type": "text" },
     "description": { "type": "text" },
     "category": { "type": "string" },
     "level": {
@@ -21,6 +22,7 @@
     "skills": { "type": "json", "default": [] },
     "durationWeeks": { "type": "integer", "default": 0 },
     "coverUrl": { "type": "string" },
+    "previewVideoUrl": { "type": "string" },
     "coverGradient": { "type": "string" },
     "accent": { "type": "string" },
     "priceUGX": { "type": "integer", "default": 0 },

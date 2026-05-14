@@ -43,6 +43,7 @@
     "yearsOfExperience": { "type": "integer", "default": 0 },
     "nationalId": { "type": "string" },
     "certifications": { "type": "json", "default": [] },
+    "verificationDocumentUrls": { "type": "json", "default": [] },
     "profilePhotoUrl": { "type": "string" },
     "portfolioUrls": { "type": "json", "default": [] },
     "cluster": {

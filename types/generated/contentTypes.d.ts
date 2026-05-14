@@ -1082,12 +1082,14 @@ export interface ApiEntrepCourseEntrepCourse
       'api::entrep-module.entrep-module'
     >;
     passMark: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<80>;
+    previewVideoUrl: Schema.Attribute.String;
     priceUGX: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
     providerName: Schema.Attribute.String;
     publishedAt: Schema.Attribute.DateTime;
     rating: Schema.Attribute.Decimal & Schema.Attribute.DefaultTo<0>;
     rejectionFeedback: Schema.Attribute.Text;
     reviewsCount: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    shortDescription: Schema.Attribute.Text;
     skills: Schema.Attribute.JSON & Schema.Attribute.DefaultTo<[]>;
     slug: Schema.Attribute.UID<'title'>;
     status: Schema.Attribute.Enumeration<
@@ -1596,6 +1598,8 @@ export interface ApiEntrepProfileEntrepProfile
       'oneToOne',
       'plugin::users-permissions.user'
     >;
+    verificationDocumentUrls: Schema.Attribute.JSON &
+      Schema.Attribute.DefaultTo<[]>;
     yearsOfExperience: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
   };
 }

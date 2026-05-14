@@ -113,7 +113,7 @@ module.exports = {
 
     // Allow folders: stories, provider-materials, product-images
     // product-images requires provider/seller account
-    const allowedFolders = ['stories', 'provider-materials', 'product-images'];
+    const allowedFolders = ['stories', 'provider-materials', 'product-images', 'entrep-documents', 'entrep-course-media'];
     
     if (!allowedFolders.includes(folder)) {
       const userWithRole = await strapi.query('plugin::users-permissions.user').findOne({
@@ -172,7 +172,7 @@ module.exports = {
 
     // Allow folders: stories, provider-materials, product-images
     // product-images requires provider/seller account
-    const allowedFolders = ['stories', 'provider-materials', 'product-images'];
+    const allowedFolders = ['stories', 'provider-materials', 'product-images', 'entrep-documents', 'entrep-course-media'];
     
     if (!allowedFolders.includes(folder)) {
       const userWithRole = await strapi.query('plugin::users-permissions.user').findOne({

@@ -21,13 +21,16 @@ async function findProfileForUser(strapi, userId) {
 module.exports = createCoreController('api::entrep-profile.entrep-profile', ({ strapi }) => ({
   /**
    * POST /entrep/auth/register
-   * Body: { name, email, password, role?, phone? }
+   * Body: { name, email, password, role?, phone?, location?, expertise?, bio?, yearsOfExperience?, nationalId?, certifications?, interestedRoles? }
    * Creates a users-permissions user + entrep-profile, returns { jwt, user, profile }.
    */
   async register(ctx) {
-    const { name, email, password, role = 'learner', phone } = ctx.request.body || {};
+    const body = ctx.request.body || {};
+    const { name, email, password, role = 'learner' } = body;
+    const allowedRoles = ['learner', 'trainer', 'cluster', 'provider', 'admin'];
     if (!name || !email || !password) return ctx.badRequest('name, email and password are required');
     if (String(password).length < 6) return ctx.badRequest('Password must be at least 6 characters');
+    if (!allowedRoles.includes(role)) return ctx.badRequest('Invalid entrepreneur role');
 
     const existing = await strapi.query('plugin::users-permissions.user').findOne({ where: { email: email.toLowerCase() } });
     if (existing) return ctx.badRequest('An account with this email already exists');
@@ -44,16 +47,55 @@ module.exports = createCoreController('api::entrep-profile.entrep-profile', ({ s
       role: defaultRole?.id,
     });
 
+    let clusterRecord = null;
+    if (role === 'cluster') {
+      const clusterData = body.clusterData || {};
+      if (!clusterData.name || !clusterData.organizationName || !clusterData.region) {
+        return ctx.badRequest('Cluster name, organization name and region are required for cluster registration');
+      }
+
+      clusterRecord = await strapi.entityService.create('api::entrep-cluster.entrep-cluster', {
+        data: {
+          name: String(clusterData.name).trim(),
+          organizationName: String(clusterData.organizationName).trim(),
+          region: String(clusterData.region).trim(),
+          contactPerson: String(clusterData.contactPerson || name).trim(),
+          contactEmail: String(clusterData.contactEmail || email).toLowerCase(),
+          contactPhone: clusterData.contactPhone || body.phone || null,
+          description: clusterData.description || null,
+          industryCategory: clusterData.industryCategory || null,
+          code: `CL-${Date.now().toString(36).toUpperCase()}`,
+        },
+      });
+    }
+
+    const profileData = {
+      user: user.id,
+      fullName: name,
+      email: email.toLowerCase(),
+      phone: body.phone || null,
+      location: body.location || null,
+      bio: body.bio || null,
+      expertise: body.expertise || null,
+      yearsOfExperience: Number.isFinite(Number(body.yearsOfExperience)) ? Number(body.yearsOfExperience) : 0,
+      nationalId: body.nationalId || null,
+      certifications: Array.isArray(body.certifications) ? body.certifications.filter(Boolean) : [],
+      verificationDocumentUrls: Array.isArray(body.verificationDocumentUrls) ? body.verificationDocumentUrls.filter(Boolean) : [],
+      interestedRoles: Array.isArray(body.interestedRoles) ? body.interestedRoles.filter(Boolean) : [],
+      role,
+      onboardingComplete: role !== 'learner',
+      approvalStatus: ['trainer', 'provider'].includes(role) ? 'pending' : 'approved',
+    };
+
+    const clusterId = Number(body.clusterId);
+    if (clusterRecord?.id) {
+      profileData.cluster = clusterRecord.id;
+    } else if (Number.isFinite(clusterId) && clusterId > 0) {
+      profileData.cluster = clusterId;
+    }
+
     const profile = await strapi.entityService.create('api::entrep-profile.entrep-profile', {
-      data: {
-        user: user.id,
-        fullName: name,
-        email: email.toLowerCase(),
-        phone: phone || null,
-        role,
-        onboardingComplete: false,
-        approvalStatus: role === 'trainer' ? 'pending' : 'approved',
-      },
+      data: profileData,
     });
 
     const jwt = strapi.plugins['users-permissions'].services.jwt.issue({ id: user.id });
@@ -80,7 +122,7 @@ module.exports = createCoreController('api::entrep-profile.entrep-profile', ({ s
 
     const allowed = [
       'fullName', 'phone', 'age', 'gender', 'location', 'bio', 'expertise', 'yearsOfExperience',
-      'nationalId', 'certifications', 'profilePhotoUrl', 'portfolioUrls', 'goal', 'interestedRoles',
+      'nationalId', 'certifications', 'verificationDocumentUrls', 'profilePhotoUrl', 'portfolioUrls', 'goal', 'interestedRoles',
       'skills', 'experienceLevel', 'educationLevel',
     ];
     const body = ctx.request.body || {};
