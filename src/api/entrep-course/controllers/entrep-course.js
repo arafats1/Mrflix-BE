@@ -20,6 +20,50 @@ function isAdminUser(user, profile) {
   return user?.role?.type === 'admin' || user?.role?.name === 'Admin' || profile?.role === 'admin';
 }
 
+async function getManagedCourse(strapi, user, profile, courseId) {
+  const course = await strapi.entityService.findOne('api::entrep-course.entrep-course', courseId, {
+    populate: { trainer: true, modules: { populate: ['lessons', 'quiz'] } },
+  });
+  if (!course) return null;
+
+  const isAdmin = isAdminUser(user, profile);
+  const ownsCourse = profile?.id && Number(course.trainer?.id) === Number(profile.id);
+  if (!isAdmin && !ownsCourse) return false;
+  return course;
+}
+
+async function listCourseEnrollments(strapi, courseId) {
+  return strapi.entityService.findMany('api::entrep-enrollment.entrep-enrollment', {
+    filters: { course: courseId },
+    populate: ['user'],
+    sort: { enrolledAt: 'desc' },
+  });
+}
+
+async function getProfilesByUserIds(strapi, userIds) {
+  if (!userIds.length) return new Map();
+  const profiles = await strapi.entityService.findMany('api::entrep-profile.entrep-profile', {
+    filters: { user: { id: { $in: userIds } } },
+    populate: ['user'],
+  });
+  return new Map(profiles.map((profile) => [Number(profile.user?.id), profile]));
+}
+
+function summarizeCourseMetrics(enrollments) {
+  const totalLearners = enrollments.length;
+  const completedLearners = enrollments.filter((enrollment) => enrollment.status === 'completed' || enrollment.certificateIssued).length;
+  const averageProgress = totalLearners
+    ? Math.round(enrollments.reduce((sum, enrollment) => sum + Number(enrollment.progressPct || 0), 0) / totalLearners)
+    : 0;
+
+  return {
+    totalLearners,
+    completedLearners,
+    activeLearners: Math.max(totalLearners - completedLearners, 0),
+    averageProgress,
+  };
+}
+
 module.exports = createCoreController('api::entrep-course.entrep-course', ({ strapi }) => ({
   /**
    * Default `find` enriched to deep-populate modules & lessons for the catalog.
@@ -151,7 +195,142 @@ module.exports = createCoreController('api::entrep-course.entrep-course', ({ str
       populate: { modules: { populate: ['lessons', 'quiz'] } },
       sort: { createdAt: 'desc' },
     });
-    ctx.send({ data: list });
+
+    const courseIds = list.map((course) => course.id).filter(Boolean);
+    const enrollments = courseIds.length
+      ? await strapi.entityService.findMany('api::entrep-enrollment.entrep-enrollment', {
+          filters: { course: { id: { $in: courseIds } } },
+          populate: ['course'],
+        })
+      : [];
+
+    const metricsByCourseId = enrollments.reduce((acc, enrollment) => {
+      const key = Number(enrollment.course?.id || enrollment.course);
+      if (!key) return acc;
+      acc[key] = acc[key] || [];
+      acc[key].push(enrollment);
+      return acc;
+    }, {});
+
+    ctx.send({
+      data: list.map((course) => ({
+        ...course,
+        metrics: summarizeCourseMetrics(metricsByCourseId[course.id] || []),
+      })),
+    });
+  },
+
+  async trainerCourseOverview(ctx) {
+    const user = await resolveUser(strapi, ctx);
+    if (!user) return ctx.unauthorized();
+
+    const profile = await getProfile(strapi, user.id);
+    const course = await getManagedCourse(strapi, user, profile, ctx.params.id);
+    if (course === false) return ctx.forbidden('You can only manage your own courses');
+    if (!course) return ctx.notFound();
+
+    const enrollments = await listCourseEnrollments(strapi, course.id);
+    const userIds = enrollments.map((enrollment) => Number(enrollment.user?.id)).filter(Boolean);
+    const profilesByUserId = await getProfilesByUserIds(strapi, userIds);
+    const events = await strapi.entityService.findMany('api::entrep-event.entrep-event', {
+      filters: { course: course.id },
+      sort: { startsAt: 'asc' },
+      populate: ['liveSession'],
+    });
+    const sessions = await strapi.entityService.findMany('api::entrep-live-session.entrep-live-session', {
+      filters: { course: course.id },
+      sort: { startsAt: 'desc' },
+    });
+
+    const learners = enrollments.map((enrollment) => {
+      const learnerProfile = profilesByUserId.get(Number(enrollment.user?.id));
+      const lessonProgress = enrollment.lessonProgress || {};
+      const completedLessons = Array.isArray(enrollment.completedLessons) ? enrollment.completedLessons : [];
+      return {
+        enrollmentId: enrollment.id,
+        userId: enrollment.user?.id,
+        name: learnerProfile?.fullName || enrollment.user?.username || enrollment.user?.email || 'Learner',
+        email: enrollment.user?.email || learnerProfile?.email || '',
+        phone: learnerProfile?.phone || '',
+        progressPct: Math.round(Number(enrollment.progressPct || 0)),
+        overallScore: Math.round(Number(enrollment.overallScore || 0)),
+        status: enrollment.status,
+        completedAt: enrollment.completedAt,
+        enrolledAt: enrollment.enrolledAt,
+        certificateIssued: !!enrollment.certificateIssued,
+        completedLessonsCount: completedLessons.length,
+        lessonProgress,
+      };
+    });
+
+    ctx.send({
+      data: {
+        course,
+        metrics: summarizeCourseMetrics(enrollments),
+        learners,
+        events,
+        sessions,
+      },
+    });
+  },
+
+  async addCourseMaterial(ctx) {
+    const user = await resolveUser(strapi, ctx);
+    if (!user) return ctx.unauthorized();
+
+    const profile = await getProfile(strapi, user.id);
+    const course = await getManagedCourse(strapi, user, profile, ctx.params.id);
+    if (course === false) return ctx.forbidden('You can only manage your own courses');
+    if (!course) return ctx.notFound();
+
+    const body = ctx.request.body || {};
+    const lesson = body.lesson || {};
+    if (!lesson.title) return ctx.badRequest('lesson.title is required');
+
+    let moduleId = body.moduleId ? Number(body.moduleId) : null;
+    let moduleEntity = null;
+
+    if (moduleId) {
+      moduleEntity = await strapi.entityService.findOne('api::entrep-module.entrep-module', moduleId, {
+        populate: ['course'],
+      });
+      if (!moduleEntity || Number(moduleEntity.course?.id || moduleEntity.course) !== Number(course.id)) {
+        return ctx.badRequest('Selected module does not belong to this course');
+      }
+    } else {
+      const nextOrder = Array.isArray(course.modules) ? course.modules.length : 0;
+      moduleEntity = await strapi.entityService.create('api::entrep-module.entrep-module', {
+        data: {
+          title: body.moduleTitle || lesson.title,
+          description: body.moduleDescription || '',
+          order: nextOrder,
+          course: course.id,
+        },
+      });
+      moduleId = moduleEntity.id;
+    }
+
+    const existingLessons = moduleEntity?.lessons || [];
+    const lessonEntity = await strapi.entityService.create('api::entrep-lesson.entrep-lesson', {
+      data: {
+        title: lesson.title,
+        description: lesson.description,
+        order: Array.isArray(existingLessons) ? existingLessons.length : 0,
+        lessonType: lesson.lessonType || 'video',
+        videoUrl: lesson.videoUrl || null,
+        pdfUrl: lesson.pdfUrl || null,
+        imageUrl: lesson.imageUrl || null,
+        bodyText: lesson.bodyText || null,
+        durationMin: lesson.durationMin || 0,
+        module: moduleId,
+      },
+    });
+
+    const updatedCourse = await strapi.entityService.findOne('api::entrep-course.entrep-course', course.id, {
+      populate: { trainer: true, modules: { populate: ['lessons', 'quiz'] } },
+    });
+
+    ctx.send({ data: { course: updatedCourse, lesson: lessonEntity } });
   },
 
   /**

@@ -28,11 +28,6 @@
       "relation": "oneToOne",
       "target": "api::entrep-live-session.entrep-live-session"
     },
-    "createdBy": {
-      "type": "relation",
-      "relation": "manyToOne",
-      "target": "plugin::users-permissions.user"
-    },
     "visibility": {
       "type": "enumeration",
       "enum": ["public", "course", "cluster", "private"],

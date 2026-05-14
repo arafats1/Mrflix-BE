@@ -35,6 +35,45 @@ async function requireUploadUser(ctx) {
   return user;
 }
 
+const OPEN_UPLOAD_FOLDERS = ['stories', 'entrep-documents', 'entrep-course-media'];
+const PROVIDER_UPLOAD_FOLDERS = ['provider-materials', 'product-images'];
+
+function folderMatchesPrefix(folder, prefix) {
+  return folder === prefix || folder.startsWith(`${prefix}/`);
+}
+
+function resolveUploadFolderType(folder) {
+  if (!folder) return 'other';
+  if (OPEN_UPLOAD_FOLDERS.some((prefix) => folderMatchesPrefix(folder, prefix))) return 'open';
+  if (PROVIDER_UPLOAD_FOLDERS.some((prefix) => folderMatchesPrefix(folder, prefix))) return 'provider';
+  return 'other';
+}
+
+async function isAdminUploadUser(authUser) {
+  const userWithRole = await strapi.query('plugin::users-permissions.user').findOne({
+    where: { id: authUser.id },
+    populate: ['role'],
+  });
+  return userWithRole?.role?.type === 'admin' || userWithRole?.role?.name === 'Admin';
+}
+
+async function ensureFolderAccess(ctx, authUser, folder) {
+  const folderType = resolveUploadFolderType(folder);
+
+  if (folderType === 'open') return true;
+
+  if (folderType === 'provider') {
+    if (authUser.accountType === 'provider') return true;
+    if (await isAdminUploadUser(authUser)) return true;
+    ctx.forbidden('Provider/Seller access required for this folder');
+    return false;
+  }
+
+  if (await isAdminUploadUser(authUser)) return true;
+  ctx.forbidden('Admin access required for this folder');
+  return false;
+}
+
 // ──────────────────────────────────────────
 // Storage provider: "backblaze" or "cloudflare"
 // Controlled by STORAGE_PROVIDER env var
@@ -111,30 +150,7 @@ module.exports = {
 
     const { fileName, contentType, folder } = ctx.request.body;
 
-    // Allow folders: stories, provider-materials, product-images
-    // product-images requires provider/seller account
-    const allowedFolders = ['stories', 'provider-materials', 'product-images', 'entrep-documents', 'entrep-course-media'];
-    
-    if (!allowedFolders.includes(folder)) {
-      const userWithRole = await strapi.query('plugin::users-permissions.user').findOne({
-        where: { id: authUser.id },
-        populate: ['role'],
-      });
-      if (userWithRole?.role?.type !== 'admin' && userWithRole?.role?.name !== 'Admin') {
-        return ctx.forbidden('Admin access required for this folder');
-      }
-    }
-    
-    // product-images and provider-materials require provider/seller account
-    if ((folder === 'product-images' || folder === 'provider-materials') && authUser.accountType !== 'provider') {
-      const userWithRole = await strapi.query('plugin::users-permissions.user').findOne({
-        where: { id: authUser.id },
-        populate: ['role'],
-      });
-      if (userWithRole?.role?.type !== 'admin' && userWithRole?.role?.name !== 'Admin') {
-        return ctx.forbidden('Provider/Seller access required for this folder');
-      }
-    }
+    if (!(await ensureFolderAccess(ctx, authUser, folder))) return;
     
     if (!fileName || !contentType) {
       return ctx.badRequest('fileName and contentType are required');
@@ -170,30 +186,7 @@ module.exports = {
 
     const { fileName, contentType, folder } = ctx.request.body;
 
-    // Allow folders: stories, provider-materials, product-images
-    // product-images requires provider/seller account
-    const allowedFolders = ['stories', 'provider-materials', 'product-images', 'entrep-documents', 'entrep-course-media'];
-    
-    if (!allowedFolders.includes(folder)) {
-      const userWithRole = await strapi.query('plugin::users-permissions.user').findOne({
-        where: { id: authUser.id },
-        populate: ['role'],
-      });
-      if (userWithRole?.role?.type !== 'admin' && userWithRole?.role?.name !== 'Admin') {
-        return ctx.forbidden('Admin access required for this folder');
-      }
-    }
-    
-    // product-images and provider-materials require provider/seller account
-    if ((folder === 'product-images' || folder === 'provider-materials') && authUser.accountType !== 'provider') {
-      const userWithRole = await strapi.query('plugin::users-permissions.user').findOne({
-        where: { id: authUser.id },
-        populate: ['role'],
-      });
-      if (userWithRole?.role?.type !== 'admin' && userWithRole?.role?.name !== 'Admin') {
-        return ctx.forbidden('Provider/Seller access required for this folder');
-      }
-    }
+    if (!(await ensureFolderAccess(ctx, authUser, folder))) return;
     
     if (!fileName || !contentType) {
       return ctx.badRequest('fileName and contentType are required');

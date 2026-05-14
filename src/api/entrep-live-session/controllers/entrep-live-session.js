@@ -68,7 +68,6 @@ module.exports = createCoreController('api::entrep-live-session.entrep-live-sess
         endsAt: endsAt || meeting.endsAt,
         course: courseId || null,
         liveSession: session.id,
-        createdBy: user.id,
         visibility: courseId ? 'course' : 'public',
         color: '#dc2626',
       },
