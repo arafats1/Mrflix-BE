@@ -3431,7 +3431,7 @@ export interface PluginUsersPermissionsUser
     timestamps: true;
   };
   attributes: {
-    accountType: Schema.Attribute.Enumeration<['parent', 'provider']> &
+    accountType: Schema.Attribute.Enumeration<['parent', 'provider', 'both']> &
       Schema.Attribute.DefaultTo<'parent'>;
     blocked: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
     bookLibraryAccessGrantedAt: Schema.Attribute.DateTime;

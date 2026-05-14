@@ -27,7 +27,7 @@ const RELIGION_OPTIONS = [
   'Other',
 ];
 
-const ACCOUNT_TYPE_OPTIONS = ['parent', 'provider'];
+  const ACCOUNT_TYPE_OPTIONS = ['parent', 'provider', 'both'];
 const PROVIDER_TYPE_OPTIONS = ['teacher', 'religious', 'seller', 'musician', 'creative_artist', 'comedian'];
 const EDUCATION_LEVEL_OPTIONS = [
   'Kindergarten',
@@ -365,6 +365,72 @@ module.exports = (plugin) => {
         const normalizedPhone = normalizePhone(body.phone);
         const accountType = ACCOUNT_TYPE_OPTIONS.includes(body.accountType) ? body.accountType : 'parent';
         const providerType = PROVIDER_TYPE_OPTIONS.includes(body.providerType) ? body.providerType : undefined;
+
+        // Check if user already exists by phone
+        if (normalizedPhone) {
+          const users = await strapi.db.query('plugin::users-permissions.user').findMany({
+            where: { phone: { $notNull: true } },
+            select: ['id', 'phone', 'accountType', 'providerType', 'isParent'],
+            limit: 20000,
+          });
+
+          const existingUser = users.find(
+            (entry) => normalizePhone(entry.phone) === normalizedPhone
+          );
+
+          if (existingUser) {
+            // User exists, check if they are trying to "add" a new role
+            // If they are a parent and registering as a provider, or vice versa
+            const currentType = existingUser.accountType || 'parent';
+
+            if (
+              (currentType === 'parent' && accountType === 'provider') ||
+              (currentType === 'provider' && accountType === 'parent')
+            ) {
+              // Upgrade user to 'both' and add the new provider details
+              const updateData = {
+                accountType: 'both',
+              };
+
+              if (accountType === 'provider') {
+                updateData.providerType = providerType;
+                updateData.location = typeof body.location === 'string' ? body.location.trim() : undefined;
+                updateData.schoolName = typeof body.schoolName === 'string' ? body.schoolName.trim() : undefined;
+                // ... add other provider fields as needed
+              } else {
+                updateData.isParent = true;
+              }
+
+              await strapi.db.query('plugin::users-permissions.user').update({
+                where: { id: existingUser.id },
+                data: updateData,
+              });
+
+              // Construct a response similar to a successful login
+              // If we are here, it means the user already exists and we just updated their role.
+              // We return the existing user data and a JWT so they are logged in immediately.
+              const jwt = strapi.plugins['users-permissions'].services.jwt.issue({
+                id: existingUser.id,
+              });
+
+              const userWithRole = await strapi.db
+                .query('plugin::users-permissions.user')
+                .findOne({
+                  where: { id: existingUser.id },
+                  populate: ['role'],
+                });
+
+              ctx.body = {
+                jwt,
+                user: userWithRole,
+              };
+              return;
+            }
+
+            throw new ValidationError('Phone number is already in use');
+          }
+        }
+
         const requestedEducationLevels = Array.isArray(body.educationLevels)
           ? body.educationLevels
           : body.educationLevel
@@ -427,6 +493,8 @@ module.exports = (plugin) => {
         };
 
         if (normalizedPhone) {
+          // This block is now redundant since we check at the beginning of register()
+          /* 
           const existingUsers = await strapi.db.query('plugin::users-permissions.user').findMany({
             where: { phone: { $notNull: true } },
             select: ['id', 'phone'],
@@ -439,6 +507,7 @@ module.exports = (plugin) => {
           if (duplicatePhone) {
             throw new ValidationError('Phone number is already in use');
           }
+          */
         }
 
         // Email is optional on phone-first signup. Strapi's core register
