@@ -2,6 +2,8 @@
 
 const { createCoreController } = require('@strapi/strapi').factories;
 
+const LESSON_COMPLETION_THRESHOLD = 95;
+
 async function resolveUser(strapi, ctx) {
   if (ctx.state.user?.id) {
     return strapi.entityService.findOne('plugin::users-permissions.user', ctx.state.user.id, { populate: ['role'] });
@@ -37,6 +39,7 @@ async function findOrCreateEnrollment(strapi, userId, courseId) {
       enrolledAt: new Date().toISOString(),
       status: 'active',
       completedLessons: [],
+      lessonProgress: {},
       moduleQuizResults: {},
       progressPct: 0,
       overallScore: 0,
@@ -44,9 +47,20 @@ async function findOrCreateEnrollment(strapi, userId, courseId) {
   });
 }
 
-function computeProgressAndScore(course, completedLessons, moduleQuizResults) {
+function computeProgressAndScore(course, completedLessons, moduleQuizResults, lessonProgress = {}) {
   const totalLessons = (course.modules || []).reduce((acc, m) => acc + (m.lessons?.length || 0), 0);
-  const progressPct = totalLessons > 0 ? Math.round((completedLessons.length / totalLessons) * 100) : 0;
+  let summedLessonProgress = 0;
+  for (const module of course.modules || []) {
+    for (const lesson of module.lessons || []) {
+      const entry = lessonProgress[String(lesson.id)] || null;
+      if (entry?.completed) {
+        summedLessonProgress += 100;
+        continue;
+      }
+      summedLessonProgress += Math.max(0, Math.min(100, Number(entry?.progressPct) || 0));
+    }
+  }
+  const progressPct = totalLessons > 0 ? Math.round(summedLessonProgress / totalLessons) : 0;
 
   const moduleScores = Object.values(moduleQuizResults || {})
     .map((r) => Number(r?.percentage) || 0);
@@ -55,6 +69,30 @@ function computeProgressAndScore(course, completedLessons, moduleQuizResults) {
     : 0;
 
   return { progressPct, overallScore };
+}
+
+function clampPercent(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return null;
+  return Math.max(0, Math.min(100, Math.round(parsed)));
+}
+
+function positiveNumberOrNull(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) return null;
+  return parsed;
+}
+
+function findLessonInCourse(course, lessonId) {
+  const key = String(lessonId);
+  for (const module of course.modules || []) {
+    for (const lesson of module.lessons || []) {
+      if (String(lesson.id) === key) {
+        return { module, lesson };
+      }
+    }
+  }
+  return null;
 }
 
 module.exports = createCoreController('api::entrep-enrollment.entrep-enrollment', ({ strapi }) => ({
@@ -87,8 +125,8 @@ module.exports = createCoreController('api::entrep-enrollment.entrep-enrollment'
 
   /**
    * POST /entrep/courses/:id/progress
-   * Body: { lessonId }
-   * Marks a lesson complete for the current user, recomputes progress.
+   * Body: { lessonId, progressPct?, lastPositionSec?, durationSec?, lastPage?, totalPages?, isCompleted? }
+   * Stores lesson progress/resume state and marks a lesson complete at the threshold.
    */
   async markLessonComplete(ctx) {
     const user = await resolveUser(strapi, ctx);
@@ -101,17 +139,67 @@ module.exports = createCoreController('api::entrep-enrollment.entrep-enrollment'
     const course = await getCoursePopulated(strapi, courseId);
     if (!course) return ctx.notFound('Course not found');
 
-    const completed = Array.isArray(enrollment.completedLessons) ? [...enrollment.completedLessons] : [];
-    const idStr = String(lessonId);
-    if (!completed.includes(idStr)) completed.push(idStr);
+    const match = findLessonInCourse(course, lessonId);
+    if (!match) return ctx.badRequest('Lesson not found in this course');
 
-    const { progressPct, overallScore } = computeProgressAndScore(course, completed, enrollment.moduleQuizResults);
+    const {
+      progressPct,
+      lastPositionSec,
+      durationSec,
+      lastPage,
+      totalPages,
+      isCompleted,
+    } = ctx.request.body || {};
+
+    const completed = Array.isArray(enrollment.completedLessons) ? [...enrollment.completedLessons] : [];
+    const lessonProgress = enrollment.lessonProgress && typeof enrollment.lessonProgress === 'object'
+      ? { ...enrollment.lessonProgress }
+      : {};
+    const idStr = String(lessonId);
+    const previous = lessonProgress[idStr] && typeof lessonProgress[idStr] === 'object'
+      ? lessonProgress[idStr]
+      : {};
+
+    let nextProgressPct = clampPercent(progressPct);
+    const nextDurationSec = positiveNumberOrNull(durationSec) ?? positiveNumberOrNull(previous.durationSec);
+    const nextPositionSec = positiveNumberOrNull(lastPositionSec);
+    const nextLastPage = positiveNumberOrNull(lastPage);
+    const nextTotalPages = positiveNumberOrNull(totalPages) ?? positiveNumberOrNull(previous.totalPages);
+
+    if (nextProgressPct == null && nextDurationSec && nextPositionSec != null && nextDurationSec > 0) {
+      nextProgressPct = clampPercent((nextPositionSec / nextDurationSec) * 100);
+    }
+
+    if (nextProgressPct == null && nextLastPage != null && nextTotalPages && nextTotalPages > 0) {
+      nextProgressPct = clampPercent((nextLastPage / nextTotalPages) * 100);
+    }
+
+    nextProgressPct = Math.max(nextProgressPct ?? 0, clampPercent(previous.progressPct) ?? 0);
+    if (isCompleted === true) nextProgressPct = 100;
+
+    const reachedCompletionThreshold = nextProgressPct >= LESSON_COMPLETION_THRESHOLD || previous.completed === true;
+    if (reachedCompletionThreshold && !completed.includes(idStr)) completed.push(idStr);
+
+    lessonProgress[idStr] = {
+      ...previous,
+      lessonType: match.lesson.lessonType || previous.lessonType || 'video',
+      moduleId: match.module?.id || previous.moduleId || null,
+      progressPct: nextProgressPct,
+      lastPositionSec: nextPositionSec != null ? nextPositionSec : (previous.lastPositionSec ?? null),
+      durationSec: nextDurationSec ?? null,
+      lastPage: nextLastPage != null ? nextLastPage : (previous.lastPage ?? null),
+      totalPages: nextTotalPages ?? null,
+      completed: reachedCompletionThreshold,
+      updatedAt: new Date().toISOString(),
+    };
+
+    const { progressPct: computedProgressPct, overallScore } = computeProgressAndScore(course, completed, enrollment.moduleQuizResults, lessonProgress);
 
     const updated = await strapi.entityService.update('api::entrep-enrollment.entrep-enrollment', enrollment.id, {
-      data: { completedLessons: completed, progressPct, overallScore },
+      data: { completedLessons: completed, lessonProgress, progressPct: computedProgressPct, overallScore },
     });
 
-    ctx.send({ enrollment: updated });
+    ctx.send({ enrollment: updated, lessonProgress: lessonProgress[idStr] });
   },
 
   /**
@@ -132,6 +220,19 @@ module.exports = createCoreController('api::entrep-enrollment.entrep-enrollment'
       strapi.entityService.findOne('api::entrep-quiz.entrep-quiz', quizId),
     ]);
     if (!course || !quiz) return ctx.notFound();
+
+    const enrollment = await findOrCreateEnrollment(strapi, user.id, courseId);
+    const targetModule = (course.modules || []).find((module) => {
+      if (moduleId && String(module.id) === String(moduleId)) return true;
+      return Number(module.quiz?.id) === quizId;
+    });
+    if (!targetModule) return ctx.badRequest('Quiz module not found for this course');
+
+    const completed = Array.isArray(enrollment.completedLessons) ? enrollment.completedLessons : [];
+    const lockedLessons = (targetModule.lessons || []).filter((lesson) => !completed.includes(String(lesson.id)));
+    if (lockedLessons.length > 0) {
+      return ctx.badRequest(`Complete at least ${LESSON_COMPLETION_THRESHOLD}% of every lesson in this module before taking the quiz`);
+    }
 
     // Grade MCQ + true/false. Unsupported types contribute 0 unless marked by trainer.
     const questions = Array.isArray(quiz.questions) ? quiz.questions : [];
@@ -178,7 +279,6 @@ module.exports = createCoreController('api::entrep-enrollment.entrep-enrollment'
     });
 
     // Update enrollment
-    const enrollment = await findOrCreateEnrollment(strapi, user.id, courseId);
     const moduleQuizResults = { ...(enrollment.moduleQuizResults || {}) };
     const key = String(moduleId || quizId);
     const previous = moduleQuizResults[key];
@@ -186,8 +286,7 @@ module.exports = createCoreController('api::entrep-enrollment.entrep-enrollment'
       moduleQuizResults[key] = { percentage, passed, attemptNumber, score: earned, totalPoints: total, at: new Date().toISOString() };
     }
 
-    const completed = Array.isArray(enrollment.completedLessons) ? enrollment.completedLessons : [];
-    const { progressPct, overallScore } = computeProgressAndScore(course, completed, moduleQuizResults);
+    const { progressPct, overallScore } = computeProgressAndScore(course, completed, moduleQuizResults, enrollment.lessonProgress || {});
 
     let updateData = { moduleQuizResults, progressPct, overallScore };
 
