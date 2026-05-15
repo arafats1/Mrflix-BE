@@ -1,6 +1,7 @@
 'use strict';
 
 const { createCoreController } = require('@strapi/strapi').factories;
+const { getCoursePopulated, syncEnrollmentMetricsAndCertificate } = require('../../../utils/entrep-course-progress');
 
 const LESSON_COMPLETION_THRESHOLD = 95;
 
@@ -9,21 +10,6 @@ async function resolveUser(strapi, ctx) {
     return strapi.entityService.findOne('plugin::users-permissions.user', ctx.state.user.id, { populate: ['role'] });
   }
   return null;
-}
-
-function genCertNumber(courseId, userId) {
-  const stamp = Date.now().toString(36).toUpperCase();
-  return `MOVO-ENT-${courseId}-${userId}-${stamp}`;
-}
-
-async function getCoursePopulated(strapi, courseId) {
-  return strapi.entityService.findOne('api::entrep-course.entrep-course', courseId, {
-    populate: {
-      modules: {
-        populate: ['lessons', 'quiz'],
-      },
-    },
-  });
 }
 
 async function findOrCreateEnrollment(strapi, userId, courseId) {
@@ -41,34 +27,11 @@ async function findOrCreateEnrollment(strapi, userId, courseId) {
       completedLessons: [],
       lessonProgress: {},
       moduleQuizResults: {},
+      assignmentResults: {},
       progressPct: 0,
       overallScore: 0,
     },
   });
-}
-
-function computeProgressAndScore(course, completedLessons, moduleQuizResults, lessonProgress = {}) {
-  const totalLessons = (course.modules || []).reduce((acc, m) => acc + (m.lessons?.length || 0), 0);
-  let summedLessonProgress = 0;
-  for (const module of course.modules || []) {
-    for (const lesson of module.lessons || []) {
-      const entry = lessonProgress[String(lesson.id)] || null;
-      if (entry?.completed) {
-        summedLessonProgress += 100;
-        continue;
-      }
-      summedLessonProgress += Math.max(0, Math.min(100, Number(entry?.progressPct) || 0));
-    }
-  }
-  const progressPct = totalLessons > 0 ? Math.round(summedLessonProgress / totalLessons) : 0;
-
-  const moduleScores = Object.values(moduleQuizResults || {})
-    .map((r) => Number(r?.percentage) || 0);
-  const overallScore = moduleScores.length
-    ? Math.round(moduleScores.reduce((a, b) => a + b, 0) / moduleScores.length)
-    : 0;
-
-  return { progressPct, overallScore };
 }
 
 function clampPercent(value) {
@@ -193,11 +156,16 @@ module.exports = createCoreController('api::entrep-enrollment.entrep-enrollment'
       updatedAt: new Date().toISOString(),
     };
 
-    const { progressPct: computedProgressPct, overallScore } = computeProgressAndScore(course, completed, enrollment.moduleQuizResults, lessonProgress);
-
-    const updated = await strapi.entityService.update('api::entrep-enrollment.entrep-enrollment', enrollment.id, {
-      data: { completedLessons: completed, lessonProgress, progressPct: computedProgressPct, overallScore },
+    const syncResult = await syncEnrollmentMetricsAndCertificate(strapi, {
+      enrollment,
+      course,
+      userId: user.id,
+      completedLessons: completed,
+      lessonProgress,
+      moduleQuizResults: enrollment.moduleQuizResults,
+      assignmentResults: enrollment.assignmentResults,
     });
+    const updated = syncResult.enrollment;
 
     ctx.send({ enrollment: updated, lessonProgress: lessonProgress[idStr] });
   },
@@ -286,41 +254,17 @@ module.exports = createCoreController('api::entrep-enrollment.entrep-enrollment'
       moduleQuizResults[key] = { percentage, passed, attemptNumber, score: earned, totalPoints: total, at: new Date().toISOString() };
     }
 
-    const { progressPct, overallScore } = computeProgressAndScore(course, completed, moduleQuizResults, enrollment.lessonProgress || {});
-
-    let updateData = { moduleQuizResults, progressPct, overallScore };
-
-    // Certificate eligibility: 100% lesson progress + average >= course.passMark, AND every required quiz passed.
-    const coursePassMark = Number(course.passMark || 80);
-    const allModuleQuizzes = (course.modules || []).filter((m) => m.quiz?.id);
-    const allModulesPassed = allModuleQuizzes.every((m) => {
-      const r = moduleQuizResults[String(m.id)];
-      return r && r.passed;
+    const syncResult = await syncEnrollmentMetricsAndCertificate(strapi, {
+      enrollment,
+      course,
+      userId: user.id,
+      completedLessons: completed,
+      lessonProgress: enrollment.lessonProgress || {},
+      moduleQuizResults,
+      assignmentResults: enrollment.assignmentResults,
     });
-
-    let issuedCertificate = null;
-    if (progressPct >= 100 && overallScore >= coursePassMark && allModulesPassed && !enrollment.certificateIssued) {
-      const certNumber = genCertNumber(courseId, user.id);
-      const profile = await strapi.entityService.findMany('api::entrep-profile.entrep-profile', {
-        filters: { user: user.id }, limit: 1,
-      });
-      issuedCertificate = await strapi.entityService.create('api::entrep-certificate.entrep-certificate', {
-        data: {
-          certificateNumber: certNumber,
-          user: user.id,
-          course: courseId,
-          learnerName: profile?.[0]?.fullName || user.username,
-          courseTitle: course.title,
-          finalScore: overallScore,
-          issuedAt: new Date().toISOString(),
-        },
-      });
-      updateData.status = 'completed';
-      updateData.completedAt = new Date().toISOString();
-      updateData.certificateIssued = true;
-    }
-
-    const updated = await strapi.entityService.update('api::entrep-enrollment.entrep-enrollment', enrollment.id, { data: updateData });
+    const updated = syncResult.enrollment;
+    const issuedCertificate = syncResult.certificate;
 
     ctx.send({
       result: { earned, total, percentage, passed, passMark, breakdown },

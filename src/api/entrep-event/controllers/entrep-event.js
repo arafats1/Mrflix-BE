@@ -40,7 +40,7 @@ module.exports = createCoreController('api::entrep-event.entrep-event', ({ strap
    * Returns events visible to the current user (their enrolled courses + their cluster + public).
    */
   async calendar(ctx) {
-    const { from, to } = ctx.query;
+    const { from, to, includePast } = ctx.query;
     const user = await resolveUser(strapi, ctx);
     const profile = user ? await getProfile(strapi, user.id) : null;
     const adminUser = isAdminUser(user, profile);
@@ -66,7 +66,14 @@ module.exports = createCoreController('api::entrep-event.entrep-event', ({ strap
     }
 
     const filters = { $and: [] };
-    if (from) filters.$and.push({ startsAt: { $gte: from } });
+    const shouldIncludePast = String(includePast || '').toLowerCase() === 'true';
+    if (shouldIncludePast) {
+      if (from) filters.$and.push({ startsAt: { $gte: from } });
+    } else {
+      const fromTime = from && !Number.isNaN(Date.parse(from)) ? Date.parse(from) : null;
+      const effectiveFrom = new Date(Math.max(fromTime || 0, Date.now())).toISOString();
+      filters.$and.push({ startsAt: { $gte: effectiveFrom } });
+    }
     if (to) filters.$and.push({ startsAt: { $lte: to } });
 
     if (!adminUser) {

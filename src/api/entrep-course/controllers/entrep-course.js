@@ -49,6 +49,10 @@ async function getProfilesByUserIds(strapi, userIds) {
   return new Map(profiles.map((profile) => [Number(profile.user?.id), profile]));
 }
 
+function getDisplayName(user, profile, fallback = 'Learner') {
+  return profile?.fullName || user?.fullName || user?.name || user?.username || user?.email || fallback;
+}
+
 function summarizeCourseMetrics(enrollments) {
   const totalLearners = enrollments.length;
   const completedLearners = enrollments.filter((enrollment) => enrollment.status === 'completed' || enrollment.certificateIssued).length;
@@ -230,7 +234,22 @@ module.exports = createCoreController('api::entrep-course.entrep-course', ({ str
     if (!course) return ctx.notFound();
 
     const enrollments = await listCourseEnrollments(strapi, course.id);
-    const userIds = enrollments.map((enrollment) => Number(enrollment.user?.id)).filter(Boolean);
+    const assignments = await strapi.entityService.findMany('api::entrep-assignment.entrep-assignment', {
+      filters: { course: course.id },
+      sort: { dueAt: 'asc' },
+    });
+    const assignmentIds = assignments.map((assignment) => assignment.id).filter(Boolean);
+    const submissions = assignmentIds.length
+      ? await strapi.entityService.findMany('api::entrep-submission.entrep-submission', {
+          filters: { assignment: { id: { $in: assignmentIds } } },
+          populate: ['user', 'assignment'],
+          sort: { submittedAt: 'desc' },
+        })
+      : [];
+    const userIds = [...new Set([
+      ...enrollments.map((enrollment) => Number(enrollment.user?.id)).filter(Boolean),
+      ...submissions.map((submission) => Number(submission.user?.id)).filter(Boolean),
+    ])];
     const profilesByUserId = await getProfilesByUserIds(strapi, userIds);
     const events = await strapi.entityService.findMany('api::entrep-event.entrep-event', {
       filters: { course: course.id },
@@ -264,11 +283,23 @@ module.exports = createCoreController('api::entrep-course.entrep-course', ({ str
       };
     });
 
+    const assignmentsWithSubmissions = assignments.map((assignment) => ({
+      ...assignment,
+      submissions: submissions
+        .filter((submission) => Number(submission.assignment?.id || submission.assignment) === Number(assignment.id))
+        .map((submission) => ({
+          ...submission,
+          learnerName: getDisplayName(submission.user, profilesByUserId.get(Number(submission.user?.id)), 'Learner'),
+          learnerPhotoUrl: profilesByUserId.get(Number(submission.user?.id))?.profilePhotoUrl || '',
+        })),
+    }));
+
     ctx.send({
       data: {
         course,
         metrics: summarizeCourseMetrics(enrollments),
         learners,
+        assignments: assignmentsWithSubmissions,
         events,
         sessions,
       },

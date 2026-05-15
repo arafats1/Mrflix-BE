@@ -1,0 +1,29 @@
+{
+  "kind": "collectionType",
+  "collectionName": "entrep_assignments",
+  "info": {
+    "singularName": "entrep-assignment",
+    "pluralName": "entrep-assignments",
+    "displayName": "Entrep Assignment"
+  },
+  "options": { "draftAndPublish": false },
+  "attributes": {
+    "title": { "type": "string", "required": true },
+    "description": { "type": "text" },
+    "instructions": { "type": "text" },
+    "dueAt": { "type": "datetime", "required": true },
+    "maxScore": { "type": "integer", "default": 100 },
+    "acceptedSubmissionTypes": { "type": "json", "default": ["video", "image", "document"] },
+    "course": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::entrep-course.entrep-course",
+      "inversedBy": "assignments"
+    },
+    "trainer": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::entrep-profile.entrep-profile"
+    }
+  }
+}

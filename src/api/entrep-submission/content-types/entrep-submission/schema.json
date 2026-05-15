@@ -18,6 +18,11 @@
       "relation": "manyToOne",
       "target": "api::entrep-course.entrep-course"
     },
+    "assignment": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::entrep-assignment.entrep-assignment"
+    },
     "lesson": {
       "type": "relation",
       "relation": "manyToOne",
@@ -28,10 +33,13 @@
       "enum": ["video", "image", "audio", "text", "document"],
       "default": "text"
     },
+    "fileName": { "type": "string" },
     "mediaUrl": { "type": "string" },
     "textResponse": { "type": "text" },
+    "submittedAt": { "type": "datetime" },
     "grade": { "type": "integer" },
     "feedback": { "type": "text" },
+    "gradedAt": { "type": "datetime" },
     "status": {
       "type": "enumeration",
       "enum": ["submitted", "reviewing", "approved", "needs_revision", "rejected"],

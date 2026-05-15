@@ -48,6 +48,12 @@
       "relation": "oneToMany",
       "target": "api::entrep-module.entrep-module",
       "mappedBy": "course"
+    },
+    "assignments": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::entrep-assignment.entrep-assignment",
+      "mappedBy": "course"
     }
   }
 }

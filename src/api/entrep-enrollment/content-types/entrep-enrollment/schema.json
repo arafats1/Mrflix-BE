@@ -22,6 +22,7 @@
     "completedLessons": { "type": "json", "default": [] },
     "lessonProgress": { "type": "json", "default": {} },
     "moduleQuizResults": { "type": "json", "default": {} },
+    "assignmentResults": { "type": "json", "default": {} },
     "progressPct": { "type": "decimal", "default": 0 },
     "overallScore": { "type": "decimal", "default": 0 },
     "status": {

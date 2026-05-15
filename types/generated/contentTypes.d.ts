@@ -958,6 +958,49 @@ export interface ApiEntrepApplicationEntrepApplication
   };
 }
 
+export interface ApiEntrepAssignmentEntrepAssignment
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'entrep_assignments';
+  info: {
+    displayName: 'Entrep Assignment';
+    pluralName: 'entrep-assignments';
+    singularName: 'entrep-assignment';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    acceptedSubmissionTypes: Schema.Attribute.JSON &
+      Schema.Attribute.DefaultTo<['video', 'image', 'document']>;
+    course: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::entrep-course.entrep-course'
+    >;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    description: Schema.Attribute.Text;
+    dueAt: Schema.Attribute.DateTime & Schema.Attribute.Required;
+    instructions: Schema.Attribute.Text;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::entrep-assignment.entrep-assignment'
+    > &
+      Schema.Attribute.Private;
+    maxScore: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<100>;
+    publishedAt: Schema.Attribute.DateTime;
+    title: Schema.Attribute.String & Schema.Attribute.Required;
+    trainer: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::entrep-profile.entrep-profile'
+    >;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface ApiEntrepCertificateEntrepCertificate
   extends Struct.CollectionTypeSchema {
   collectionName: 'entrep_certificates';
@@ -1058,6 +1101,10 @@ export interface ApiEntrepCourseEntrepCourse
   };
   attributes: {
     accent: Schema.Attribute.String;
+    assignments: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::entrep-assignment.entrep-assignment'
+    >;
     category: Schema.Attribute.String;
     coverGradient: Schema.Attribute.String;
     coverUrl: Schema.Attribute.String;
@@ -1121,6 +1168,7 @@ export interface ApiEntrepEnrollmentEntrepEnrollment
     draftAndPublish: false;
   };
   attributes: {
+    assignmentResults: Schema.Attribute.JSON & Schema.Attribute.DefaultTo<{}>;
     certificateIssued: Schema.Attribute.Boolean &
       Schema.Attribute.DefaultTo<false>;
     completedAt: Schema.Attribute.DateTime;
@@ -1729,6 +1777,10 @@ export interface ApiEntrepSubmissionEntrepSubmission
     draftAndPublish: false;
   };
   attributes: {
+    assignment: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::entrep-assignment.entrep-assignment'
+    >;
     course: Schema.Attribute.Relation<
       'manyToOne',
       'api::entrep-course.entrep-course'
@@ -1737,7 +1789,9 @@ export interface ApiEntrepSubmissionEntrepSubmission
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
     feedback: Schema.Attribute.Text;
+    fileName: Schema.Attribute.String;
     grade: Schema.Attribute.Integer;
+    gradedAt: Schema.Attribute.DateTime;
     lesson: Schema.Attribute.Relation<
       'manyToOne',
       'api::entrep-lesson.entrep-lesson'
@@ -1758,6 +1812,7 @@ export interface ApiEntrepSubmissionEntrepSubmission
       ['video', 'image', 'audio', 'text', 'document']
     > &
       Schema.Attribute.DefaultTo<'text'>;
+    submittedAt: Schema.Attribute.DateTime;
     textResponse: Schema.Attribute.Text;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
@@ -3589,6 +3644,7 @@ declare module '@strapi/strapi' {
       'api::education-course.education-course': ApiEducationCourseEducationCourse;
       'api::education-subject.education-subject': ApiEducationSubjectEducationSubject;
       'api::entrep-application.entrep-application': ApiEntrepApplicationEntrepApplication;
+      'api::entrep-assignment.entrep-assignment': ApiEntrepAssignmentEntrepAssignment;
       'api::entrep-certificate.entrep-certificate': ApiEntrepCertificateEntrepCertificate;
       'api::entrep-cluster.entrep-cluster': ApiEntrepClusterEntrepCluster;
       'api::entrep-course.entrep-course': ApiEntrepCourseEntrepCourse;
