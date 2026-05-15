@@ -10,6 +10,7 @@
     "dev": "strapi develop",
     "develop": "strapi develop",
     "generate:720p": "node scripts/generate-720p-variants.js",
+    "regenerate:marketplace-images": "node scripts/regenerate-marketplace-image-variants.js",
     "migrate:bunny-stream": "node scripts/migrate-bunny-stream.js",
     "start": "strapi start",
     "strapi": "strapi",
