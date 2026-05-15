@@ -14,9 +14,45 @@
  */
 
 const DEFAULT_BASE_URL = 'https://api.whereby.dev/v1';
+const LEGACY_BASE_URL = 'https://api.appear.in/v1';
 
 function isEnabled() {
   return !!process.env.WHEREBY_API_KEY;
+}
+
+function getBaseUrls() {
+  return [...new Set([
+    process.env.WHEREBY_BASE_URL,
+    DEFAULT_BASE_URL,
+    LEGACY_BASE_URL,
+  ].filter(Boolean))];
+}
+
+async function requestWhereby(path, options) {
+  const errors = [];
+
+  for (const baseUrl of getBaseUrls()) {
+    let res;
+    try {
+      res = await fetch(`${baseUrl}${path}`, options);
+    } catch (error) {
+      errors.push(`${baseUrl}: ${error.message}`);
+      continue;
+    }
+
+    if (res.ok) {
+      return res;
+    }
+
+    const text = await res.text();
+    errors.push(`${baseUrl}: ${res.status} ${text}`);
+
+    if (res.status !== 404 && res.status !== 401 && res.status !== 403) {
+      throw new Error(`Whereby request failed: ${baseUrl}: ${res.status} ${text}`);
+    }
+  }
+
+  throw new Error(`Whereby request failed across configured endpoints. ${errors.join(' | ')}`);
 }
 
 async function createMeeting({ startsAt, endsAt, isLocked = false, roomMode = 'group' }) {
@@ -35,8 +71,7 @@ async function createMeeting({ startsAt, endsAt, isLocked = false, roomMode = 'g
     };
   }
 
-  const baseUrl = process.env.WHEREBY_BASE_URL || DEFAULT_BASE_URL;
-  const res = await fetch(`${baseUrl}/meetings`, {
+  const res = await requestWhereby('/meetings', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${process.env.WHEREBY_API_KEY}`,
@@ -51,11 +86,6 @@ async function createMeeting({ startsAt, endsAt, isLocked = false, roomMode = 'g
     }),
   });
 
-  if (!res.ok) {
-    const txt = await res.text();
-    throw new Error(`Whereby create meeting failed: ${res.status} ${txt}`);
-  }
-
   const data = await res.json();
   return {
     meetingId: data.meetingId,
@@ -69,8 +99,7 @@ async function createMeeting({ startsAt, endsAt, isLocked = false, roomMode = 'g
 
 async function deleteMeeting(meetingId) {
   if (!isEnabled() || !meetingId || meetingId.startsWith('mock_')) return true;
-  const baseUrl = process.env.WHEREBY_BASE_URL || DEFAULT_BASE_URL;
-  await fetch(`${baseUrl}/meetings/${meetingId}`, {
+  await requestWhereby(`/meetings/${meetingId}`, {
     method: 'DELETE',
     headers: { Authorization: `Bearer ${process.env.WHEREBY_API_KEY}` },
   });

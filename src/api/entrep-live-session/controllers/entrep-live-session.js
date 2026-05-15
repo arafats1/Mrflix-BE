@@ -17,6 +17,40 @@ async function getTrainerProfile(strapi, userId) {
   return list?.[0] || null;
 }
 
+function isMockSession(session) {
+  return String(session?.wherebyMeetingId || '').startsWith('mock_')
+    || String(session?.viewerRoomUrl || '').includes('movo-entrepreneur.whereby.com')
+    || String(session?.hostRoomUrl || '').includes('movo-entrepreneur.whereby.com');
+}
+
+async function ensureRealMeeting(strapi, session) {
+  if (!whereby.isEnabled() || !isMockSession(session)) return session;
+
+  const startsAtDate = new Date(session.startsAt);
+  const fallbackStart = new Date(Date.now() + 5 * 60_000);
+  const resolvedStartsAt = Number.isNaN(startsAtDate.getTime()) || startsAtDate.getTime() < Date.now()
+    ? fallbackStart.toISOString()
+    : session.startsAt;
+  const resolvedEndsAt = session.endsAt || new Date(new Date(resolvedStartsAt).getTime() + (Number(session.durationMinutes) || 60) * 60_000).toISOString();
+
+  const meeting = await whereby.createMeeting({
+    startsAt: resolvedStartsAt,
+    endsAt: resolvedEndsAt,
+  });
+
+  return strapi.entityService.update('api::entrep-live-session.entrep-live-session', session.id, {
+    data: {
+      startsAt: resolvedStartsAt,
+      endsAt: resolvedEndsAt,
+      provider: 'whereby',
+      hostRoomUrl: meeting.hostRoomUrl,
+      viewerRoomUrl: meeting.viewerRoomUrl,
+      wherebyMeetingId: meeting.meetingId,
+    },
+    populate: { trainer: { populate: ['user'] }, course: true },
+  });
+}
+
 module.exports = createCoreController('api::entrep-live-session.entrep-live-session', ({ strapi }) => ({
   /**
    * POST /entrep/live-sessions
@@ -100,10 +134,11 @@ module.exports = createCoreController('api::entrep-live-session.entrep-live-sess
   async join(ctx) {
     const user = await resolveUser(strapi, ctx);
     if (!user) return ctx.unauthorized();
-    const session = await strapi.entityService.findOne('api::entrep-live-session.entrep-live-session', ctx.params.id, {
+    let session = await strapi.entityService.findOne('api::entrep-live-session.entrep-live-session', ctx.params.id, {
       populate: { trainer: { populate: ['user'] } },
     });
     if (!session) return ctx.notFound();
+    session = await ensureRealMeeting(strapi, session);
     const trainerProfile = await getTrainerProfile(strapi, user.id);
     const isHost = session.trainer?.user?.id === user.id;
     const isModerator = trainerProfile && ['admin'].includes(trainerProfile.role);
