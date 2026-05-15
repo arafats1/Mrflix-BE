@@ -12,7 +12,12 @@ async function resolveUser(strapi, ctx) {
 async function findProfileForUser(strapi, userId) {
   const list = await strapi.entityService.findMany('api::entrep-profile.entrep-profile', {
     filters: { user: userId },
-    populate: ['cluster', 'savedJobs'],
+    populate: {
+      cluster: {
+        fields: ['name', 'organizationName']
+      },
+      savedJobs: true
+    },
     limit: 1,
   });
   return list?.[0] || null;

@@ -33,7 +33,9 @@ module.exports = createCoreController('api::entrep-cluster.entrep-cluster', ({ s
 			},
 		});
 
-		const members = Array.isArray(cluster?.members) ? cluster.members : [];
+		const members = (Array.isArray(cluster?.members) ? cluster.members : [])
+			.filter(m => m.role !== 'cluster');
+
 		ctx.send({
 			cluster,
 			members,
