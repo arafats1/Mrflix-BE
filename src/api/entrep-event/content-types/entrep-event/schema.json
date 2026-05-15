@@ -28,6 +28,21 @@
       "relation": "oneToOne",
       "target": "api::entrep-live-session.entrep-live-session"
     },
+    "mentorProfile": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::entrep-profile.entrep-profile"
+    },
+    "learner": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user"
+    },
+    "mentorship": {
+      "type": "relation",
+      "relation": "oneToOne",
+      "target": "api::entrep-mentorship.entrep-mentorship"
+    },
     "visibility": {
       "type": "enumeration",
       "enum": ["public", "course", "cluster", "private"],

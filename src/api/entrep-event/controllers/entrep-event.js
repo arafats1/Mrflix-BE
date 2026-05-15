@@ -73,14 +73,38 @@ module.exports = createCoreController('api::entrep-event.entrep-event', ({ strap
       const visibility = { $or: [{ visibility: 'public' }] };
       if (courseIds.size) visibility.$or.push({ course: { id: { $in: Array.from(courseIds) } } });
       if (profile?.cluster?.id) visibility.$or.push({ cluster: { id: profile.cluster.id } });
+      if (user?.id) visibility.$or.push({ learner: { id: user.id } });
+      
+      // Also show events directly authored by the trainer/expert even if visibility isn't public
+      // BUT IMPORTANT: If it's a live_session event, ONLY show it if THIS user is the trainer of that session.
+      // We don't want trainers seeing OTHER trainers' sessions just because they share a course.
+      if (profile?.id && ['trainer', 'provider'].includes(profile.role)) {
+        visibility.$or.push({ liveSession: { trainer: profile.id } });
+        visibility.$or.push({ mentorProfile: { id: profile.id } });
+        
+        // Remove course-based visibility for live sessions to prevent collision
+        // We'll filter the final result to ensure trainers only see their own sessions
+      }
+
       filters.$and.push(visibility);
     }
 
-    const events = await strapi.entityService.findMany('api::entrep-event.entrep-event', {
+    let events = await strapi.entityService.findMany('api::entrep-event.entrep-event', {
       filters,
       sort: { startsAt: 'asc' },
-      populate: { course: true, liveSession: true },
+      populate: { course: true, liveSession: { populate: ['trainer'] }, mentorProfile: true, learner: true, mentorship: true },
     });
+
+    // Post-filter for trainers/experts: 
+    // If it's a live session event, they should only see it if they are the trainer.
+    if (!adminUser && profile?.id && ['trainer', 'provider'].includes(profile.role)) {
+      events = events.filter(event => {
+        if (event.eventType === 'live_session' && event.liveSession) {
+          return event.liveSession.trainer?.id === profile.id;
+        }
+        return true;
+      });
+    }
 
     ctx.send({ data: events });
   },

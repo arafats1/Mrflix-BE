@@ -20,6 +20,7 @@
     },
     "topic": { "type": "string" },
     "message": { "type": "text" },
+    "intent": { "type": "text" },
     "scheduledAt": { "type": "datetime" },
     "status": {
       "type": "enumeration",

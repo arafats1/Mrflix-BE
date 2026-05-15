@@ -100,6 +100,7 @@ module.exports = createCoreController('api::entrep-profile.entrep-profile', ({ s
       verificationDocumentUrls: Array.isArray(body.verificationDocumentUrls) ? body.verificationDocumentUrls.filter(Boolean) : [],
       interestedRoles: Array.isArray(body.interestedRoles) ? body.interestedRoles.filter(Boolean) : [],
       role,
+      isMentor: role === 'provider',
       onboardingComplete: role !== 'learner',
       approvalStatus: ['trainer', 'provider'].includes(role) ? 'pending' : 'approved',
     };

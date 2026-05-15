@@ -2,6 +2,17 @@
 
 const { createCoreController } = require('@strapi/strapi').factories;
 
+function getDisplayName(user, profile, fallback = 'Community Member') {
+  return profile?.fullName || user?.fullName || user?.name || user?.username || fallback;
+}
+
+function withPostedByName(job) {
+  return {
+    ...job,
+    postedByName: getDisplayName(job.postedBy, job.postedByProfile),
+  };
+}
+
 module.exports = createCoreController('api::entrep-job.entrep-job', ({ strapi }) => ({
   async find(ctx) {
     const list = await strapi.entityService.findMany('api::entrep-job.entrep-job', {
@@ -18,7 +29,7 @@ module.exports = createCoreController('api::entrep-job.entrep-job', ({ strapi })
         postedByProfile: true
       },
     });
-    ctx.send({ data: list });
+    ctx.send({ data: list.map(withPostedByName) });
   },
   async createJob(ctx) {
     if (!ctx.state.user?.id) return ctx.unauthorized();
@@ -51,7 +62,7 @@ module.exports = createCoreController('api::entrep-job.entrep-job', ({ strapi })
         postedByProfile: true
       },
     });
-    ctx.send({ job });
+    ctx.send({ job: withPostedByName(job) });
   },
   async updateJob(ctx) {
     if (!ctx.state.user?.id) return ctx.unauthorized();
@@ -82,7 +93,7 @@ module.exports = createCoreController('api::entrep-job.entrep-job', ({ strapi })
         postedByProfile: true
       },
     });
-    ctx.send({ job: updated });
+    ctx.send({ job: withPostedByName(updated) });
   },
   async deleteJob(ctx) {
     if (!ctx.state.user?.id) return ctx.unauthorized();

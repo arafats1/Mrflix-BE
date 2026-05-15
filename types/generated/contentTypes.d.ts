@@ -1188,6 +1188,10 @@ export interface ApiEntrepEventEntrepEvent extends Struct.CollectionTypeSchema {
       ]
     > &
       Schema.Attribute.DefaultTo<'other'>;
+    learner: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
     liveSession: Schema.Attribute.Relation<
       'oneToOne',
       'api::entrep-live-session.entrep-live-session'
@@ -1198,6 +1202,14 @@ export interface ApiEntrepEventEntrepEvent extends Struct.CollectionTypeSchema {
       'api::entrep-event.entrep-event'
     > &
       Schema.Attribute.Private;
+    mentorProfile: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::entrep-profile.entrep-profile'
+    >;
+    mentorship: Schema.Attribute.Relation<
+      'oneToOne',
+      'api::entrep-mentorship.entrep-mentorship'
+    >;
     publishedAt: Schema.Attribute.DateTime;
     startsAt: Schema.Attribute.DateTime & Schema.Attribute.Required;
     title: Schema.Attribute.String & Schema.Attribute.Required;
@@ -1382,6 +1394,7 @@ export interface ApiEntrepMentorshipEntrepMentorship
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    intent: Schema.Attribute.Text;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
       'oneToMany',
