@@ -27,6 +27,25 @@ function isAdminUser(user, profile) {
   return user?.role?.type === 'admin' || user?.role?.name === 'Admin' || profile?.role === 'admin';
 }
 
+function getMentorshipDescription(description, mentorName) {
+  if (mentorName) return `Mentorship session with ${mentorName}`;
+
+  const match = String(description || '').match(/^Mentorship session between\s+(.+?)\s+and\s+.+$/i);
+  if (match?.[1]) return `Mentorship session with ${match[1].trim()}`;
+
+  return description || 'Mentorship session with Expert';
+}
+
+function sanitizeEventForCalendar(event) {
+  const isMentorshipEvent = Boolean(event?.mentorship) || String(event?.title || '').startsWith('Mentorship:');
+  if (!isMentorshipEvent) return event;
+
+  return {
+    ...event,
+    description: getMentorshipDescription(event.description, event.mentorProfile?.fullName),
+  };
+}
+
 async function getProfile(strapi, userId) {
   const list = await strapi.entityService.findMany('api::entrep-profile.entrep-profile', {
     filters: { user: userId }, limit: 1, populate: ['cluster'],
@@ -103,7 +122,7 @@ module.exports = createCoreController('api::entrep-event.entrep-event', ({ strap
       });
     }
 
-    ctx.send({ data: events });
+    ctx.send({ data: events.map(sanitizeEventForCalendar) });
   },
 
   /**

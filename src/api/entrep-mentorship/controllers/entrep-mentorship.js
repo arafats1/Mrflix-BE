@@ -6,6 +6,10 @@ function getDisplayName(user, profile, fallback = 'Learner') {
   return profile?.fullName || user?.fullName || user?.name || user?.username || fallback;
 }
 
+function buildMentorshipDescription(mentorName) {
+  return `Mentorship session with ${mentorName || 'Expert'}`;
+}
+
 module.exports = createCoreController('api::entrep-mentorship.entrep-mentorship', ({ strapi }) => ({
   async request(ctx) {
     if (!ctx.state.user?.id) return ctx.unauthorized();
@@ -55,7 +59,7 @@ module.exports = createCoreController('api::entrep-mentorship.entrep-mentorship'
       await strapi.entityService.create('api::entrep-event.entrep-event', {
         data: {
           title: `Mentorship: ${updated.topic || 'Session'}`,
-          description: `Mentorship session between ${mentorship.mentor.fullName || 'Expert'} and ${mentorship.mentee.username}`,
+          description: buildMentorshipDescription(mentorship.mentor.fullName),
           eventType: 'other',
           startsAt: scheduledAt,
           endsAt: new Date(new Date(scheduledAt).getTime() + 60 * 60 * 1000).toISOString(), // +1 hour default

@@ -6,7 +6,7 @@ function buildEventPayload(mentorship) {
   const startsAt = mentorship.scheduledAt;
   return {
     title: `Mentorship: ${mentorship.topic || 'Session'}`,
-    description: `Mentorship session between ${mentorship.mentor?.fullName || 'Expert'} and ${mentorship.mentee?.username || 'Learner'}`,
+    description: `Mentorship session with ${mentorship.mentor?.fullName || 'Expert'}`,
     eventType: 'other',
     startsAt,
     endsAt: new Date(new Date(startsAt).getTime() + 60 * 60 * 1000).toISOString(),
