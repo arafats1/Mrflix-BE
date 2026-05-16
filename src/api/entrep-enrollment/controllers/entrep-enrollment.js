@@ -67,7 +67,15 @@ module.exports = createCoreController('api::entrep-enrollment.entrep-enrollment'
     if (!user) return ctx.unauthorized();
     const list = await strapi.entityService.findMany('api::entrep-enrollment.entrep-enrollment', {
       filters: { user: user.id },
-      populate: { course: { populate: ['modules'] } },
+      populate: {
+        course: {
+          populate: {
+            modules: {
+              populate: ['lessons'],
+            },
+          },
+        },
+      },
       sort: { enrolledAt: 'desc' },
     });
     ctx.send({ data: list });
