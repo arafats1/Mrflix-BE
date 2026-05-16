@@ -30,6 +30,7 @@ function getBaseUrls() {
 
 async function requestWhereby(path, options) {
   const errors = [];
+  let lastStatusError = null;
 
   for (const baseUrl of getBaseUrls()) {
     let res;
@@ -46,10 +47,11 @@ async function requestWhereby(path, options) {
 
     const text = await res.text();
     errors.push(`${baseUrl}: ${res.status} ${text}`);
+    lastStatusError = new Error(`Whereby request failed: ${baseUrl}: ${res.status} ${text}`);
+  }
 
-    if (res.status !== 404 && res.status !== 401 && res.status !== 403) {
-      throw new Error(`Whereby request failed: ${baseUrl}: ${res.status} ${text}`);
-    }
+  if (lastStatusError) {
+    throw new Error(`Whereby request failed across configured endpoints. ${errors.join(' | ')}`);
   }
 
   throw new Error(`Whereby request failed across configured endpoints. ${errors.join(' | ')}`);
