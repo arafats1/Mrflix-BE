@@ -53,6 +53,13 @@ function getDisplayName(user, profile, fallback = 'Learner') {
   return profile?.fullName || user?.fullName || user?.name || user?.username || user?.email || fallback;
 }
 
+function withPostedByName(job) {
+  return {
+    ...job,
+    postedByName: getDisplayName(job.postedBy, job.postedByProfile, 'Community Member'),
+  };
+}
+
 function summarizeCourseMetrics(enrollments) {
   const totalLearners = enrollments.length;
   const completedLearners = enrollments.filter((enrollment) => enrollment.status === 'completed' || enrollment.certificateIssued).length;
@@ -65,6 +72,20 @@ function summarizeCourseMetrics(enrollments) {
     completedLearners,
     activeLearners: Math.max(totalLearners - completedLearners, 0),
     averageProgress,
+  };
+}
+
+function serializeCluster(cluster) {
+  if (!cluster) return null;
+
+  return {
+    id: cluster.id,
+    name: cluster.name || cluster.organizationName || 'Cluster',
+    organizationName: cluster.organizationName || '',
+    region: cluster.region || '',
+    contactPerson: cluster.contactPerson || '',
+    contactEmail: cluster.contactEmail || '',
+    contactPhone: cluster.contactPhone || '',
   };
 }
 
@@ -225,6 +246,194 @@ module.exports = createCoreController('api::entrep-course.entrep-course', ({ str
         ...course,
         metrics: summarizeCourseMetrics(metricsByCourseId[course.id] || []),
       })),
+    });
+  },
+
+  async adminOverview(ctx) {
+    const user = await resolveUser(strapi, ctx);
+    if (!user) return ctx.unauthorized();
+
+    const profile = await getProfile(strapi, user.id);
+    if (!isAdminUser(user, profile)) return ctx.forbidden('Admin only');
+
+    const [profiles, courses, enrollments, jobs, posts, discussionGroups, sessions, allClusters] = await Promise.all([
+      strapi.entityService.findMany('api::entrep-profile.entrep-profile', {
+        sort: { createdAt: 'desc' },
+        populate: ['user', 'cluster'],
+      }),
+      strapi.entityService.findMany('api::entrep-course.entrep-course', {
+        sort: { createdAt: 'desc' },
+        populate: ['trainer', 'modules'],
+      }),
+      strapi.entityService.findMany('api::entrep-enrollment.entrep-enrollment', {
+        sort: { enrolledAt: 'desc' },
+        populate: {
+          user: true,
+          course: { populate: ['trainer'] },
+        },
+      }),
+      strapi.entityService.findMany('api::entrep-job.entrep-job', {
+        sort: { createdAt: 'desc' },
+        populate: ['postedBy', 'postedByProfile'],
+      }),
+      strapi.entityService.findMany('api::entrep-post.entrep-post', {
+        sort: { createdAt: 'desc' },
+        populate: ['author', 'discussionGroup'],
+      }),
+      strapi.entityService.findMany('api::entrep-discussion-group.entrep-discussion-group', {
+        sort: { createdAt: 'desc' },
+        populate: ['course', 'members'],
+      }),
+      strapi.entityService.findMany('api::entrep-live-session.entrep-live-session', {
+        sort: { startsAt: 'desc' },
+        populate: ['trainer', 'course'],
+      }),
+      strapi.entityService.findMany('api::entrep-cluster.entrep-cluster', {
+        sort: { createdAt: 'desc' },
+      }),
+    ]);
+
+    const enrollmentsByUserId = enrollments.reduce((acc, enrollment) => {
+      const key = Number(enrollment.user?.id || enrollment.user);
+      if (!key) return acc;
+      acc[key] = acc[key] || [];
+      acc[key].push(enrollment);
+      return acc;
+    }, {});
+
+    const coursesByTrainerId = courses.reduce((acc, course) => {
+      const key = Number(course.trainer?.id || course.trainer);
+      if (!key) return acc;
+      acc[key] = acc[key] || [];
+      acc[key].push(course);
+      return acc;
+    }, {});
+
+    const learners = profiles
+      .filter((item) => item.role === 'learner')
+      .map((item) => {
+        const userEnrollments = enrollmentsByUserId[Number(item.user?.id)] || [];
+        return {
+          id: item.id,
+          name: item.fullName,
+          email: item.email || item.user?.email || '',
+          phone: item.phone || item.user?.phone || '',
+          location: item.location || '',
+          approvalStatus: item.approvalStatus,
+          cluster: serializeCluster(item.cluster),
+          progress: userEnrollments.map((enrollment) => ({
+            enrollmentId: enrollment.id,
+            courseId: enrollment.course?.id || null,
+            courseTitle: enrollment.course?.title || 'Course',
+            trainerName: enrollment.course?.trainer?.fullName || enrollment.course?.providerName || 'Unknown trainer',
+            progressPct: Math.round(Number(enrollment.progressPct || 0)),
+            overallScore: Math.round(Number(enrollment.overallScore || 0)),
+            status: enrollment.status,
+            certificateIssued: !!enrollment.certificateIssued,
+            enrolledAt: enrollment.enrolledAt,
+            completedAt: enrollment.completedAt,
+          })),
+        };
+      });
+
+    const trainers = profiles
+      .filter((item) => item.role === 'trainer')
+      .map((item) => ({
+        id: item.id,
+        name: item.fullName,
+        email: item.email || item.user?.email || '',
+        phone: item.phone || item.user?.phone || '',
+        location: item.location || '',
+        approvalStatus: item.approvalStatus,
+        cluster: serializeCluster(item.cluster),
+        courses: (coursesByTrainerId[Number(item.id)] || []).map((course) => ({
+          id: course.id,
+          title: course.title,
+          status: course.status,
+          category: course.category || '',
+          level: course.level || 'Beginner',
+          enrollmentsCount: Number(course.enrollmentsCount || 0),
+          modulesCount: Array.isArray(course.modules) ? course.modules.length : 0,
+        })),
+      }));
+
+    const experts = profiles
+      .filter((item) => item.role === 'provider')
+      .map((item) => ({
+        id: item.id,
+        name: item.fullName,
+        email: item.email || item.user?.email || '',
+        phone: item.phone || item.user?.phone || '',
+        location: item.location || '',
+        approvalStatus: item.approvalStatus,
+        cluster: serializeCluster(item.cluster),
+        isMentor: !!item.isMentor,
+        mentorRating: Number(item.mentorRating || 0),
+        sessionsHosted: Number(item.sessionsHosted || 0),
+        courses: (coursesByTrainerId[Number(item.id)] || []).map((course) => ({
+          id: course.id,
+          title: course.title,
+          status: course.status,
+        })),
+      }));
+
+    const clusterSummaries = allClusters.map((cluster) => {
+      const members = profiles.filter((item) => Number(item.cluster?.id || item.cluster) === Number(cluster.id));
+      return {
+        id: cluster.id,
+        name: cluster.name || cluster.organizationName || 'Cluster',
+        organizationName: cluster.organizationName || '',
+        region: cluster.region || '',
+        contactPerson: cluster.contactPerson || '',
+        contactEmail: cluster.contactEmail || '',
+        contactPhone: cluster.contactPhone || '',
+        counts: {
+          learners: members.filter((item) => item.role === 'learner').length,
+          trainers: members.filter((item) => item.role === 'trainer').length,
+          experts: members.filter((item) => item.role === 'provider').length,
+          clusterAdmins: members.filter((item) => item.role === 'cluster').length,
+        },
+        members: members.map((item) => ({
+          id: item.id,
+          name: item.fullName,
+          role: item.role,
+          approvalStatus: item.approvalStatus,
+          email: item.email || item.user?.email || '',
+        })),
+      };
+    });
+
+    ctx.send({
+      data: {
+        stats: {
+          learners: learners.length,
+          trainers: trainers.length,
+          experts: experts.length,
+          clusters: clusterSummaries.length,
+          courses: courses.length,
+          activeEnrollments: enrollments.filter((item) => item.status === 'active').length,
+          completedEnrollments: enrollments.filter((item) => item.status === 'completed' || item.certificateIssued).length,
+          jobs: jobs.length,
+          openJobs: jobs.filter((item) => item.status === 'open').length,
+          communityPosts: posts.length,
+          publishedPosts: posts.filter((item) => item.status === 'published').length,
+          discussionGroups: discussionGroups.length,
+          upcomingSessions: sessions.filter((item) => item.startsAt && new Date(item.startsAt).getTime() >= Date.now()).length,
+        },
+        learners,
+        trainers,
+        experts,
+        clusters: clusterSummaries,
+        jobs: jobs.map(withPostedByName),
+        posts: posts,
+        discussionGroups: discussionGroups.map((group) => ({
+          id: group.id,
+          title: group.title,
+          status: group.status,
+          course: group.course ? { id: group.course.id, title: group.course.title || 'Course' } : null,
+          membersCount: Array.isArray(group.members) ? group.members.length : 0,
+        })),
+      },
     });
   },
 

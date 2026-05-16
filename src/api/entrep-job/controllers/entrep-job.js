@@ -13,6 +13,23 @@ function withPostedByName(job) {
   };
 }
 
+async function resolveUser(strapi, ctx) {
+  if (!ctx.state.user?.id) return null;
+  return strapi.entityService.findOne('plugin::users-permissions.user', ctx.state.user.id, { populate: ['role'] });
+}
+
+async function getProfile(strapi, userId) {
+  const list = await strapi.entityService.findMany('api::entrep-profile.entrep-profile', {
+    filters: { user: userId },
+    limit: 1,
+  });
+  return list?.[0] || null;
+}
+
+function isAdminUser(user, profile) {
+  return user?.role?.type === 'admin' || user?.role?.name === 'Admin' || profile?.role === 'admin';
+}
+
 module.exports = createCoreController('api::entrep-job.entrep-job', ({ strapi }) => ({
   async find(ctx) {
     const list = await strapi.entityService.findMany('api::entrep-job.entrep-job', {
@@ -96,13 +113,15 @@ module.exports = createCoreController('api::entrep-job.entrep-job', ({ strapi })
     ctx.send({ job: withPostedByName(updated) });
   },
   async deleteJob(ctx) {
-    if (!ctx.state.user?.id) return ctx.unauthorized();
+    const user = await resolveUser(strapi, ctx);
+    if (!user) return ctx.unauthorized();
+    const profile = await getProfile(strapi, user.id);
     const { id } = ctx.params;
     const existing = await strapi.entityService.findOne('api::entrep-job.entrep-job', id, {
       populate: ['postedBy'],
     });
     if (!existing) return ctx.notFound();
-    if (existing.postedBy?.id !== ctx.state.user.id) return ctx.forbidden('Not yours');
+    if (existing.postedBy?.id !== user.id && !isAdminUser(user, profile)) return ctx.forbidden('Not yours');
 
     await strapi.entityService.delete('api::entrep-job.entrep-job', id);
     ctx.send({ success: true });

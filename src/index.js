@@ -1,8 +1,11 @@
 const ADMIN_ACADEMY_ACTIONS = [
   'api::entrep-course.entrep-course.find',
   'api::entrep-course.entrep-course.findOne',
+  'api::entrep-course.entrep-course.adminOverview',
   'api::entrep-course.entrep-course.approveCourse',
+  'api::entrep-job.entrep-job.deleteJob',
   'api::entrep-live-session.entrep-live-session.upcoming',
+  'api::entrep-post.entrep-post.deletePost',
 ];
 
 async function ensureAdminAcademyPermissions(strapi) {

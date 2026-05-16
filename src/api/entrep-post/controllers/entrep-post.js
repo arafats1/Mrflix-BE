@@ -4,11 +4,15 @@ const { createCoreController } = require('@strapi/strapi').factories;
 
 async function getUserAndProfile(strapi, ctx) {
   if (!ctx.state.user?.id) return { user: null, profile: null };
-  const user = await strapi.entityService.findOne('plugin::users-permissions.user', ctx.state.user.id);
+  const user = await strapi.entityService.findOne('plugin::users-permissions.user', ctx.state.user.id, { populate: ['role'] });
   const list = await strapi.entityService.findMany('api::entrep-profile.entrep-profile', {
     filters: { user: user.id }, limit: 1,
   });
   return { user, profile: list?.[0] || null };
+}
+
+function isAdminUser(user, profile) {
+  return user?.role?.type === 'admin' || user?.role?.name === 'Admin' || profile?.role === 'admin';
 }
 
 async function getProfilesByUserIds(strapi, userIds) {
@@ -122,6 +126,22 @@ module.exports = createCoreController('api::entrep-post.entrep-post', ({ strapi 
     });
     const profilesByUserId = await getProfilesByUserIds(strapi, [user.id]);
     ctx.send({ post: serializePost(post, profilesByUserId) });
+  },
+  async deletePost(ctx) {
+    const { user, profile } = await getUserAndProfile(strapi, ctx);
+    if (!user) return ctx.unauthorized();
+
+    const post = await strapi.entityService.findOne('api::entrep-post.entrep-post', ctx.params.id, {
+      populate: ['author'],
+    });
+    if (!post) return ctx.notFound();
+
+    if (Number(post.author?.id || post.author) !== Number(user.id) && !isAdminUser(user, profile)) {
+      return ctx.forbidden('Not yours');
+    }
+
+    await strapi.entityService.delete('api::entrep-post.entrep-post', post.id);
+    ctx.send({ success: true });
   },
   async likePost(ctx) {
     const { user } = await getUserAndProfile(strapi, ctx);
