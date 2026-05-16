@@ -2,6 +2,15 @@
 
 const { createCoreController } = require('@strapi/strapi').factories;
 
+function normalizePhone(phone) {
+  const raw = typeof phone === 'string' ? phone.trim() : '';
+  if (!raw) return '';
+
+  let normalized = raw.replace(/[\s()+-]/g, '');
+  if (normalized.startsWith('0')) normalized = `256${normalized.slice(1)}`;
+  return normalized;
+}
+
 async function resolveUser(strapi, ctx) {
   if (ctx.state.user?.id) {
     return strapi.entityService.findOne('plugin::users-permissions.user', ctx.state.user.id, { populate: ['role'] });
@@ -188,35 +197,28 @@ module.exports = createCoreController('api::entrep-profile.entrep-profile', ({ s
 
     const paymentPhone = typeof body.paymentPhone === 'string' ? body.paymentPhone.trim() : undefined;
     const paymentCode = typeof body.paymentCode === 'string' ? body.paymentCode.trim() : undefined;
+    const normalizedIncomingPhone = typeof body.phone === 'string' ? normalizePhone(body.phone) : undefined;
+    const normalizedCurrentPhone = normalizePhone(user.phone);
+    const nextFullName = typeof body.fullName === 'string' ? (body.fullName.trim() || null) : undefined;
+    const nextLocation = typeof body.location === 'string' ? (body.location.trim() || null) : undefined;
 
-    if (paymentPhone !== undefined || paymentCode !== undefined) {
-      await strapi.entityService.update('plugin::users-permissions.user', user.id, {
-        data: {
-          ...(typeof body.fullName === 'string' ? { fullName: body.fullName.trim() || null } : {}),
-          ...(typeof body.phone === 'string' ? { phone: body.phone.trim() || null } : {}),
-          ...(typeof body.location === 'string' ? { location: body.location.trim() || null } : {}),
-          ...(paymentPhone !== undefined ? { paymentPhone: paymentPhone || null } : {}),
-          ...(paymentCode !== undefined ? { paymentCode: paymentCode || null } : {}),
-        },
-      });
-      user.paymentPhone = paymentPhone !== undefined ? (paymentPhone || null) : user.paymentPhone;
-      user.paymentCode = paymentCode !== undefined ? (paymentCode || null) : user.paymentCode;
-      if (typeof body.fullName === 'string') user.fullName = body.fullName.trim() || null;
-      if (typeof body.phone === 'string') user.phone = body.phone.trim() || null;
-      if (typeof body.location === 'string') user.location = body.location.trim() || null;
-    }
+    const userPatch = {
+      ...(nextFullName !== undefined && nextFullName !== (user.fullName || null) ? { fullName: nextFullName } : {}),
+      ...(typeof body.phone === 'string' && normalizedIncomingPhone !== normalizedCurrentPhone ? { phone: normalizedIncomingPhone || null } : {}),
+      ...(nextLocation !== undefined && nextLocation !== (user.location || null) ? { location: nextLocation } : {}),
+      ...(paymentPhone !== undefined && paymentPhone !== (user.paymentPhone || null) ? { paymentPhone: paymentPhone || null } : {}),
+      ...(paymentCode !== undefined && paymentCode !== (user.paymentCode || null) ? { paymentCode: paymentCode || null } : {}),
+    };
 
-    if (paymentPhone === undefined && paymentCode === undefined && (typeof body.fullName === 'string' || typeof body.phone === 'string' || typeof body.location === 'string')) {
+    if (Object.keys(userPatch).length > 0) {
       await strapi.entityService.update('plugin::users-permissions.user', user.id, {
-        data: {
-          ...(typeof body.fullName === 'string' ? { fullName: body.fullName.trim() || null } : {}),
-          ...(typeof body.phone === 'string' ? { phone: body.phone.trim() || null } : {}),
-          ...(typeof body.location === 'string' ? { location: body.location.trim() || null } : {}),
-        },
+        data: userPatch,
       });
-      if (typeof body.fullName === 'string') user.fullName = body.fullName.trim() || null;
-      if (typeof body.phone === 'string') user.phone = body.phone.trim() || null;
-      if (typeof body.location === 'string') user.location = body.location.trim() || null;
+      if ('paymentPhone' in userPatch) user.paymentPhone = userPatch.paymentPhone;
+      if ('paymentCode' in userPatch) user.paymentCode = userPatch.paymentCode;
+      if ('fullName' in userPatch) user.fullName = userPatch.fullName;
+      if ('phone' in userPatch) user.phone = userPatch.phone;
+      if ('location' in userPatch) user.location = userPatch.location;
     }
 
     const updated = await strapi.entityService.update('api::entrep-profile.entrep-profile', profile.id, { data: patch });
