@@ -49,8 +49,8 @@ function serializePost(post, profilesByUserId) {
   };
 }
 
-async function resolveDiscussionGroupMembership(strapi, userId, discussionGroupId) {
-  if (!discussionGroupId) return null;
+async function resolveDiscussionGroupMembership(strapi, user, discussionGroupId) {
+  if (!discussionGroupId || !user) return null;
 
   const group = await strapi.entityService.findOne('api::entrep-discussion-group.entrep-discussion-group', discussionGroupId, {
     populate: {
@@ -62,7 +62,7 @@ async function resolveDiscussionGroupMembership(strapi, userId, discussionGroupI
   if (!group) return null;
 
   const isMember = Array.isArray(group.members)
-    ? group.members.some((member) => Number(member?.id || member) === Number(userId))
+    ? group.members.some((member) => Number(member?.id || member) === Number(user.id))
     : false;
 
   return isMember ? group : false;
@@ -71,11 +71,14 @@ async function resolveDiscussionGroupMembership(strapi, userId, discussionGroupI
 module.exports = createCoreController('api::entrep-post.entrep-post', ({ strapi }) => ({
   async find(ctx) {
     const discussionGroupId = Number(ctx.query?.discussionGroupId);
-    const filters = { status: 'published' };
+    const filters = {
+      status: 'published',
+      discussionGroup: { id: { $null: true } },
+    };
 
     if (Number.isFinite(discussionGroupId) && discussionGroupId > 0) {
       if (!ctx.state.user?.id) return ctx.unauthorized();
-      const group = await resolveDiscussionGroupMembership(strapi, ctx.state.user.id, discussionGroupId);
+      const group = await resolveDiscussionGroupMembership(strapi, ctx.state.user, discussionGroupId);
       if (group === false) return ctx.forbidden('Join this discussion group to view its posts');
       if (!group) return ctx.notFound('Discussion group not found');
       filters.discussionGroup = discussionGroupId;
@@ -100,7 +103,7 @@ module.exports = createCoreController('api::entrep-post.entrep-post', ({ strapi 
     let discussionGroup = null;
     const parsedDiscussionGroupId = Number(discussionGroupId);
     if (Number.isFinite(parsedDiscussionGroupId) && parsedDiscussionGroupId > 0) {
-      discussionGroup = await resolveDiscussionGroupMembership(strapi, user.id, parsedDiscussionGroupId);
+      discussionGroup = await resolveDiscussionGroupMembership(strapi, user, parsedDiscussionGroupId);
       if (discussionGroup === false) return ctx.forbidden('Join this discussion group before posting');
       if (!discussionGroup) return ctx.notFound('Discussion group not found');
     }
@@ -128,7 +131,7 @@ module.exports = createCoreController('api::entrep-post.entrep-post', ({ strapi 
     });
     if (!post) return ctx.notFound();
     if (post.discussionGroup) {
-      const discussionGroup = await resolveDiscussionGroupMembership(strapi, user.id, Number(post.discussionGroup.id || post.discussionGroup));
+      const discussionGroup = await resolveDiscussionGroupMembership(strapi, user, Number(post.discussionGroup.id || post.discussionGroup));
       if (discussionGroup === false) return ctx.forbidden('Join this discussion group before interacting');
     }
     const likedBy = Array.isArray(post.likedBy) ? [...post.likedBy] : [];
@@ -149,7 +152,7 @@ module.exports = createCoreController('api::entrep-post.entrep-post', ({ strapi 
     });
     if (!post) return ctx.notFound();
     if (post.discussionGroup) {
-      const discussionGroup = await resolveDiscussionGroupMembership(strapi, user.id, Number(post.discussionGroup.id || post.discussionGroup));
+      const discussionGroup = await resolveDiscussionGroupMembership(strapi, user, Number(post.discussionGroup.id || post.discussionGroup));
       if (discussionGroup === false) return ctx.forbidden('Join this discussion group before commenting');
     }
     const { text } = ctx.request.body || {};
