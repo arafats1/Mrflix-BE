@@ -1156,6 +1156,51 @@ export interface ApiEntrepCourseEntrepCourse
   };
 }
 
+export interface ApiEntrepDiscussionGroupEntrepDiscussionGroup
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'entrep_discussion_groups';
+  info: {
+    description: 'Private course discussion groups for enrolled learners';
+    displayName: 'Entrep Discussion Group';
+    pluralName: 'entrep-discussion-groups';
+    singularName: 'entrep-discussion-group';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    course: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::entrep-course.entrep-course'
+    >;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    creator: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+    description: Schema.Attribute.Text;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::entrep-discussion-group.entrep-discussion-group'
+    > &
+      Schema.Attribute.Private;
+    members: Schema.Attribute.Relation<
+      'manyToMany',
+      'plugin::users-permissions.user'
+    >;
+    publishedAt: Schema.Attribute.DateTime;
+    status: Schema.Attribute.Enumeration<['active', 'archived']> &
+      Schema.Attribute.DefaultTo<'active'>;
+    title: Schema.Attribute.String & Schema.Attribute.Required;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface ApiEntrepEnrollmentEntrepEnrollment
   extends Struct.CollectionTypeSchema {
   collectionName: 'entrep_enrollments';
@@ -1511,6 +1556,60 @@ export interface ApiEntrepModuleEntrepModule
   };
 }
 
+export interface ApiEntrepNotificationEntrepNotification
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'entrep_notifications';
+  info: {
+    description: 'In-app notifications for entrepreneur learners, mentors, and trainers';
+    displayName: 'Entrep Notification';
+    pluralName: 'entrep-notifications';
+    singularName: 'entrep-notification';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    actionUrl: Schema.Attribute.String;
+    actor: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::entrep-notification.entrep-notification'
+    > &
+      Schema.Attribute.Private;
+    message: Schema.Attribute.Text;
+    metadata: Schema.Attribute.JSON & Schema.Attribute.DefaultTo<{}>;
+    publishedAt: Schema.Attribute.DateTime;
+    readAt: Schema.Attribute.DateTime;
+    recipient: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    > &
+      Schema.Attribute.Required;
+    title: Schema.Attribute.String & Schema.Attribute.Required;
+    type: Schema.Attribute.Enumeration<
+      [
+        'assignment',
+        'live_session',
+        'submission',
+        'grade',
+        'mentorship',
+        'system',
+      ]
+    > &
+      Schema.Attribute.DefaultTo<'system'>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface ApiEntrepPostEntrepPost extends Struct.CollectionTypeSchema {
   collectionName: 'entrep_posts';
   info: {
@@ -1534,6 +1633,10 @@ export interface ApiEntrepPostEntrepPost extends Struct.CollectionTypeSchema {
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    discussionGroup: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::entrep-discussion-group.entrep-discussion-group'
+    >;
     isExpert: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
     likedBy: Schema.Attribute.JSON & Schema.Attribute.DefaultTo<[]>;
     likesCount: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
@@ -3648,6 +3751,7 @@ declare module '@strapi/strapi' {
       'api::entrep-certificate.entrep-certificate': ApiEntrepCertificateEntrepCertificate;
       'api::entrep-cluster.entrep-cluster': ApiEntrepClusterEntrepCluster;
       'api::entrep-course.entrep-course': ApiEntrepCourseEntrepCourse;
+      'api::entrep-discussion-group.entrep-discussion-group': ApiEntrepDiscussionGroupEntrepDiscussionGroup;
       'api::entrep-enrollment.entrep-enrollment': ApiEntrepEnrollmentEntrepEnrollment;
       'api::entrep-event.entrep-event': ApiEntrepEventEntrepEvent;
       'api::entrep-job.entrep-job': ApiEntrepJobEntrepJob;
@@ -3655,6 +3759,7 @@ declare module '@strapi/strapi' {
       'api::entrep-live-session.entrep-live-session': ApiEntrepLiveSessionEntrepLiveSession;
       'api::entrep-mentorship.entrep-mentorship': ApiEntrepMentorshipEntrepMentorship;
       'api::entrep-module.entrep-module': ApiEntrepModuleEntrepModule;
+      'api::entrep-notification.entrep-notification': ApiEntrepNotificationEntrepNotification;
       'api::entrep-post.entrep-post': ApiEntrepPostEntrepPost;
       'api::entrep-product.entrep-product': ApiEntrepProductEntrepProduct;
       'api::entrep-profile.entrep-profile': ApiEntrepProfileEntrepProfile;

@@ -2,6 +2,7 @@
 
 const { createCoreController } = require('@strapi/strapi').factories;
 const { getCoursePopulated, syncEnrollmentMetricsAndCertificate } = require('../../../utils/entrep-course-progress');
+const { createNotification, listCourseLearnerIds, notifyUsers } = require('../../../utils/entrep-notifications');
 
 async function resolveUser(strapi, ctx) {
   if (ctx.state.user?.id) {
@@ -120,6 +121,19 @@ module.exports = createCoreController('api::entrep-assignment.entrep-assignment'
       },
     });
 
+    const learnerUserIds = await listCourseLearnerIds(strapi, course.id);
+    await notifyUsers(strapi, learnerUserIds, {
+      actorId: user.id,
+      type: 'assignment',
+      title: `New assignment: ${assignment.title}`,
+      message: `${course.title} has a new assignment waiting for your submission.`,
+      actionUrl: '/entrepreneur/dashboard',
+      metadata: {
+        assignmentId: assignment.id,
+        courseId: course.id,
+      },
+    });
+
     ctx.send({ data: assignment });
   },
 
@@ -169,7 +183,15 @@ module.exports = createCoreController('api::entrep-assignment.entrep-assignment'
     if (!user) return ctx.unauthorized();
 
     const assignment = await strapi.entityService.findOne('api::entrep-assignment.entrep-assignment', ctx.params.id, {
-      populate: ['course'],
+      populate: {
+        course: {
+          populate: {
+            trainer: {
+              populate: ['user'],
+            },
+          },
+        },
+      },
     });
     if (!assignment) return ctx.notFound('Assignment not found');
 
@@ -214,6 +236,23 @@ module.exports = createCoreController('api::entrep-assignment.entrep-assignment'
     const submission = existing?.[0]
       ? await strapi.entityService.update('api::entrep-submission.entrep-submission', existing[0].id, { data: payload })
       : await strapi.entityService.create('api::entrep-submission.entrep-submission', { data: payload });
+
+    const trainerUserId = Number(assignment.course?.trainer?.user?.id || assignment.course?.trainer?.user || 0);
+    if (trainerUserId) {
+      await createNotification(strapi, {
+        recipientId: trainerUserId,
+        actorId: user.id,
+        type: 'submission',
+        title: `New submission for ${assignment.title}`,
+        message: `${user.username || user.email || 'A learner'} submitted work for ${assignment.course?.title || 'your course'}.`,
+        actionUrl: `/entrepreneur/trainer/courses/${assignment.course?.id || assignment.course}`,
+        metadata: {
+          submissionId: submission.id,
+          assignmentId: assignment.id,
+          courseId: assignment.course?.id || assignment.course,
+        },
+      });
+    }
 
     ctx.send({ data: submission });
   },
@@ -296,6 +335,24 @@ module.exports = createCoreController('api::entrep-assignment.entrep-assignment'
       certificate = syncResult.certificate;
     }
 
+    await createNotification(strapi, {
+      recipientId: submission.user?.id,
+      actorId: user.id,
+      type: 'grade',
+      title: `Marks sent: ${submission.assignment.title}`,
+      message: body.feedback
+        ? `Your work has been graded ${grade}/${maxScore}. Feedback: ${body.feedback}`
+        : `Your work has been graded ${grade}/${maxScore}.`,
+      actionUrl: '/entrepreneur/dashboard',
+      metadata: {
+        submissionId: updatedSubmission.id,
+        assignmentId: submission.assignment.id,
+        courseId: course.id,
+        grade,
+        maxScore,
+      },
+    });
+
     ctx.send({ data: updatedSubmission, enrollment: updatedEnrollment, certificate });
   },
 
@@ -311,6 +368,7 @@ module.exports = createCoreController('api::entrep-assignment.entrep-assignment'
     const assignments = await strapi.entityService.findMany('api::entrep-assignment.entrep-assignment', {
       filters: { course: course.id },
       sort: { dueAt: 'asc' },
+      populate: ['course'],
     });
     const assignmentIds = assignments.map((assignment) => assignment.id).filter(Boolean);
     const submissions = assignmentIds.length

@@ -1,0 +1,35 @@
+{
+  "kind": "collectionType",
+  "collectionName": "entrep_discussion_groups",
+  "info": {
+    "singularName": "entrep-discussion-group",
+    "pluralName": "entrep-discussion-groups",
+    "displayName": "Entrep Discussion Group",
+    "description": "Private course discussion groups for enrolled learners"
+  },
+  "options": { "draftAndPublish": false },
+  "attributes": {
+    "title": { "type": "string", "required": true },
+    "description": { "type": "text" },
+    "course": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::entrep-course.entrep-course"
+    },
+    "creator": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user"
+    },
+    "members": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "plugin::users-permissions.user"
+    },
+    "status": {
+      "type": "enumeration",
+      "enum": ["active", "archived"],
+      "default": "active"
+    }
+  }
+}

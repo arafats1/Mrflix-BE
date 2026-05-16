@@ -75,8 +75,12 @@ module.exports = createCoreController('api::entrep-course.entrep-course', ({ str
   async find(ctx) {
     const params = ctx.query;
     const filters = { ...(params.filters || {}) };
-    // Default to approved unless explicitly overridden (e.g. for trainer dashboard)
-    if (!filters.status) filters.status = 'approved';
+    
+    // If no status is provided, we default to approved for the general catalog.
+    // However, we allow explicitly filtering by status if provided (e.g. status: { $in: ['draft', 'approved'] })
+    if (!filters.status) {
+      filters.status = 'approved';
+    }
 
     const list = await strapi.entityService.findMany('api::entrep-course.entrep-course', {
       filters,

@@ -2,6 +2,7 @@
 
 const { createCoreController } = require('@strapi/strapi').factories;
 const whereby = require('../../../utils/whereby');
+const { listCourseLearnerIds, notifyUsers } = require('../../../utils/entrep-notifications');
 
 async function resolveUser(strapi, ctx) {
   if (ctx.state.user?.id) {
@@ -106,6 +107,21 @@ module.exports = createCoreController('api::entrep-live-session.entrep-live-sess
         color: '#dc2626',
       },
     });
+
+    if (courseId) {
+      const learnerUserIds = await listCourseLearnerIds(strapi, courseId);
+      await notifyUsers(strapi, learnerUserIds, {
+        actorId: user.id,
+        type: 'live_session',
+        title: `New live session: ${title}`,
+        message: `A live session has been scheduled for your course. Tap to view the session details.`,
+        actionUrl: `/entrepreneur/sessions/${session.id}`,
+        metadata: {
+          sessionId: session.id,
+          courseId: Number(courseId),
+        },
+      });
+    }
 
     ctx.send({ session });
   },

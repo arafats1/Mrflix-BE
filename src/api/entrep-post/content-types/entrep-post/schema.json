@@ -13,6 +13,11 @@
       "relation": "manyToOne",
       "target": "plugin::users-permissions.user"
     },
+    "discussionGroup": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::entrep-discussion-group.entrep-discussion-group"
+    },
     "authorName": { "type": "string" },
     "authorRole": { "type": "string" },
     "content": { "type": "text" },

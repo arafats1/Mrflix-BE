@@ -1,0 +1,34 @@
+{
+  "kind": "collectionType",
+  "collectionName": "entrep_notifications",
+  "info": {
+    "singularName": "entrep-notification",
+    "pluralName": "entrep-notifications",
+    "displayName": "Entrep Notification",
+    "description": "In-app notifications for entrepreneur learners, mentors, and trainers"
+  },
+  "options": { "draftAndPublish": false },
+  "attributes": {
+    "recipient": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user",
+      "required": true
+    },
+    "actor": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user"
+    },
+    "type": {
+      "type": "enumeration",
+      "enum": ["assignment", "live_session", "submission", "grade", "mentorship", "system"],
+      "default": "system"
+    },
+    "title": { "type": "string", "required": true },
+    "message": { "type": "text" },
+    "actionUrl": { "type": "string" },
+    "readAt": { "type": "datetime" },
+    "metadata": { "type": "json", "default": {} }
+  }
+}

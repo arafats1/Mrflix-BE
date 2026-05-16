@@ -37,6 +37,40 @@ function serializeEntrepUser(user) {
   };
 }
 
+async function getMentorEligibleEnrollments(strapi, userId) {
+  const enrollments = await strapi.entityService.findMany('api::entrep-enrollment.entrep-enrollment', {
+    filters: {
+      user: userId,
+      certificateIssued: true,
+      status: 'completed',
+    },
+    populate: ['course'],
+    sort: { completedAt: 'desc' },
+  });
+
+  return enrollments.map((enrollment) => ({
+    enrollmentId: enrollment.id,
+    courseId: enrollment.course?.id || null,
+    courseTitle: enrollment.course?.title || 'Course',
+    finalScore: Math.round(Number(enrollment.overallScore || 0)),
+    completedAt: enrollment.completedAt || null,
+  })).filter((item) => item.courseId);
+}
+
+async function decorateProfileWithMentorStatus(strapi, profile, userId) {
+  if (!profile || !userId) return profile;
+  const eligibleCourses = await getMentorEligibleEnrollments(strapi, userId);
+
+  return {
+    ...profile,
+    mentorEligibility: {
+      eligible: eligibleCourses.length > 0,
+      activated: !!profile.isMentor,
+      eligibleCourses,
+    },
+  };
+}
+
 module.exports = createCoreController('api::entrep-profile.entrep-profile', ({ strapi }) => ({
   /**
    * POST /entrep/auth/register
@@ -134,7 +168,7 @@ module.exports = createCoreController('api::entrep-profile.entrep-profile', ({ s
         data: { user: user.id, fullName: user.username, email: user.email, role: 'learner', onboardingComplete: false },
       });
     }
-    ctx.send({ user: serializeEntrepUser(user), profile });
+    ctx.send({ user: serializeEntrepUser(user), profile: await decorateProfileWithMentorStatus(strapi, profile, user.id) });
   },
 
   async updateMe(ctx) {
@@ -186,7 +220,7 @@ module.exports = createCoreController('api::entrep-profile.entrep-profile', ({ s
     }
 
     const updated = await strapi.entityService.update('api::entrep-profile.entrep-profile', profile.id, { data: patch });
-    ctx.send({ user: serializeEntrepUser(user), profile: updated });
+    ctx.send({ user: serializeEntrepUser(user), profile: await decorateProfileWithMentorStatus(strapi, updated, user.id) });
   },
 
   async completeOnboarding(ctx) {
@@ -200,7 +234,27 @@ module.exports = createCoreController('api::entrep-profile.entrep-profile', ({ s
     const updated = await strapi.entityService.update('api::entrep-profile.entrep-profile', profile.id, {
       data: { goal, interestedRoles, skills, experienceLevel, educationLevel, onboardingComplete: true },
     });
-    ctx.send({ profile: updated });
+    ctx.send({ profile: await decorateProfileWithMentorStatus(strapi, updated, user.id) });
+  },
+
+  async becomeMentor(ctx) {
+    const user = await resolveUser(strapi, ctx);
+    if (!user) return ctx.unauthorized();
+    const profile = await findProfileForUser(strapi, user.id);
+    if (!profile) return ctx.notFound('Profile not found');
+
+    const eligibleCourses = await getMentorEligibleEnrollments(strapi, user.id);
+    if (!eligibleCourses.length) {
+      return ctx.forbidden('You become a mentor after completing and passing at least one course');
+    }
+
+    const updated = profile.isMentor
+      ? profile
+      : await strapi.entityService.update('api::entrep-profile.entrep-profile', profile.id, {
+          data: { isMentor: true },
+        });
+
+    ctx.send({ profile: await decorateProfileWithMentorStatus(strapi, updated, user.id) });
   },
 
   async saveJob(ctx) {
