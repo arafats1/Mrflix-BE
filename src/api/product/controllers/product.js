@@ -75,6 +75,45 @@ async function withSoldCount(strapi, product) {
   };
 }
 
+async function attachReviewSummary(strapi, products) {
+  const list = Array.isArray(products) ? products.filter(Boolean) : [products].filter(Boolean);
+  if (!list.length) return Array.isArray(products) ? [] : null;
+
+  const productIds = [...new Set(list.map((product) => String(product.documentId || product.id || '')).filter(Boolean))];
+  if (!productIds.length) return Array.isArray(products) ? list : list[0];
+
+  const reviews = await strapi.documents('api::product-review.product-review').findMany({
+    filters: {
+      productId: { $in: productIds },
+      status: 'approved',
+    },
+    status: 'published',
+  }).catch(() => []);
+
+  const summaryByProductId = reviews.reduce((acc, review) => {
+    const key = String(review.productId || '').trim();
+    if (!key) return acc;
+    acc[key] = acc[key] || { total: 0, count: 0 };
+    acc[key].total += Number(review.rating || 0);
+    acc[key].count += 1;
+    return acc;
+  }, {});
+
+  const enriched = list.map((product) => {
+    const key = String(product.documentId || product.id || '').trim();
+    const summary = summaryByProductId[key] || { total: 0, count: 0 };
+    const average = summary.count > 0 ? Math.round((summary.total / summary.count) * 10) / 10 : 0;
+
+    return {
+      ...product,
+      rating: average,
+      reviewsCount: summary.count,
+    };
+  });
+
+  return Array.isArray(products) ? enriched : enriched[0];
+}
+
 function sanitizeProductIdentifier(value) {
   return decodeURIComponent(String(value || '')).trim().split(/\s+/)[0] || '';
 }
@@ -126,7 +165,8 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
       status: 'published',
     });
 
-    return { data: await Promise.all(products.map((product) => withSoldCount(strapi, product))) };
+    const soldProducts = await Promise.all(products.map((product) => withSoldCount(strapi, product)));
+    return { data: await attachReviewSummary(strapi, soldProducts) };
   },
 
   /**
@@ -163,7 +203,7 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
       status: 'published',
     });
 
-    return { data: await withSoldCount(strapi, created) };
+    return { data: await attachReviewSummary(strapi, await withSoldCount(strapi, created)) };
   },
 
   /**
@@ -187,7 +227,8 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
       status: 'published',
     });
 
-    return { data: await Promise.all(products.map((product) => withSoldCount(strapi, product))) };
+    const soldProducts = await Promise.all(products.map((product) => withSoldCount(strapi, product)));
+    return { data: await attachReviewSummary(strapi, soldProducts) };
   },
 
   async findOne(ctx) {
@@ -201,6 +242,6 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
       return ctx.notFound('Product not found');
     }
 
-    return { data: await withSoldCount(strapi, product) };
+    return { data: await attachReviewSummary(strapi, await withSoldCount(strapi, product)) };
   },
 }));
