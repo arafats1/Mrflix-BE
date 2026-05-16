@@ -33,6 +33,10 @@ async function getProfile(strapi, userId) {
   return list?.[0] || null;
 }
 
+function getDisplayName(user, profile, fallback = 'A learner') {
+  return profile?.fullName || user?.fullName || user?.name || user?.username || user?.email || fallback;
+}
+
 function isAdminUser(user, profile) {
   return user?.role?.type === 'admin' || user?.role?.name === 'Admin' || profile?.role === 'admin';
 }
@@ -181,6 +185,7 @@ module.exports = createCoreController('api::entrep-assignment.entrep-assignment'
   async submit(ctx) {
     const user = await resolveUser(strapi, ctx);
     if (!user) return ctx.unauthorized();
+    const profile = await getProfile(strapi, user.id);
 
     const assignment = await strapi.entityService.findOne('api::entrep-assignment.entrep-assignment', ctx.params.id, {
       populate: {
@@ -244,7 +249,7 @@ module.exports = createCoreController('api::entrep-assignment.entrep-assignment'
         actorId: user.id,
         type: 'submission',
         title: `New submission for ${assignment.title}`,
-        message: `${user.username || user.email || 'A learner'} submitted work for ${assignment.course?.title || 'your course'}.`,
+        message: `${getDisplayName(user, profile)} submitted work for ${assignment.course?.title || 'your course'}.`,
         actionUrl: `/entrepreneur/trainer/courses/${assignment.course?.id || assignment.course}`,
         metadata: {
           submissionId: submission.id,

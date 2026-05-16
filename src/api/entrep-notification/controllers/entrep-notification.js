@@ -18,21 +18,34 @@ async function getProfilesByUserIds(strapi, userIds) {
   return new Map(profiles.map((profile) => [Number(profile.user?.id), profile]));
 }
 
+function normalizeSubmissionMessage(message, actorName) {
+  const raw = String(message || '').trim();
+  if (!raw || !actorName) return raw;
+
+  const suffixMatch = raw.match(/submitted work for\s+.+$/i);
+  if (!suffixMatch) return raw;
+
+  return `${actorName} ${suffixMatch[0]}`;
+}
+
 function serializeNotification(notification, profilesByUserId) {
   const actorUserId = Number(notification.actor?.id || notification.actor || 0);
   const actorProfile = profilesByUserId.get(actorUserId);
+  const actorName = actorProfile?.fullName || notification.actor?.username || notification.actor?.email || 'User';
   return {
     id: notification.id,
     type: notification.type || 'system',
     title: notification.title,
-    message: notification.message || '',
+    message: notification.type === 'submission'
+      ? normalizeSubmissionMessage(notification.message, actorProfile?.fullName)
+      : notification.message || '',
     actionUrl: notification.actionUrl || null,
     readAt: notification.readAt || null,
     createdAt: notification.createdAt,
     metadata: notification.metadata || {},
     actor: actorUserId ? {
       id: actorUserId,
-      name: actorProfile?.fullName || notification.actor?.username || notification.actor?.email || 'User',
+      name: actorName,
       photoUrl: actorProfile?.profilePhotoUrl || '',
     } : null,
   };
