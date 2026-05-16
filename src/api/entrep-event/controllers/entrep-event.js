@@ -102,12 +102,13 @@ module.exports = createCoreController('api::entrep-event.entrep-event', ({ strap
       populate: { course: true, liveSession: { populate: ['trainer'] }, mentorProfile: true, learner: true, mentorship: true },
     });
 
-    // Post-filter for trainers/experts: 
-    // If it's a live session event, they should only see it if they are the trainer.
+    // Post-filter for trainers/experts:
+    // Public live sessions should stay visible to everyone, while non-public
+    // live sessions remain scoped to the owning trainer.
     if (!adminUser && profile?.id && ['trainer', 'provider'].includes(profile.role)) {
       events = events.filter(event => {
         if (event.eventType === 'live_session' && event.liveSession) {
-          return event.liveSession.trainer?.id === profile.id;
+          return event.visibility === 'public' || event.liveSession.trainer?.id === profile.id;
         }
         return true;
       });
