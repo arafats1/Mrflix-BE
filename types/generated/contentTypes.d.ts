@@ -1441,7 +1441,7 @@ export interface ApiEntrepLiveSessionEntrepLiveSession
     description: Schema.Attribute.Text;
     durationMinutes: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<60>;
     endsAt: Schema.Attribute.DateTime;
-    hostRoomUrl: Schema.Attribute.String & Schema.Attribute.Private;
+    hostRoomUrl: Schema.Attribute.Text & Schema.Attribute.Private;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
       'oneToMany',
@@ -1451,7 +1451,7 @@ export interface ApiEntrepLiveSessionEntrepLiveSession
     provider: Schema.Attribute.Enumeration<['whereby', 'zoom', 'jitsi']> &
       Schema.Attribute.DefaultTo<'whereby'>;
     publishedAt: Schema.Attribute.DateTime;
-    recordingUrl: Schema.Attribute.String;
+    recordingUrl: Schema.Attribute.Text;
     startsAt: Schema.Attribute.DateTime & Schema.Attribute.Required;
     status: Schema.Attribute.Enumeration<
       ['scheduled', 'live', 'ended', 'cancelled']
@@ -1463,11 +1463,11 @@ export interface ApiEntrepLiveSessionEntrepLiveSession
       'manyToOne',
       'api::entrep-profile.entrep-profile'
     >;
-    transcriptUrl: Schema.Attribute.String;
+    transcriptUrl: Schema.Attribute.Text;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
-    viewerRoomUrl: Schema.Attribute.String;
+    viewerRoomUrl: Schema.Attribute.Text;
     wherebyMeetingId: Schema.Attribute.String & Schema.Attribute.Private;
   };
 }

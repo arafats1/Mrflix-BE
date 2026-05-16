@@ -35,11 +35,11 @@
       "enum": ["whereby", "zoom", "jitsi"],
       "default": "whereby"
     },
-    "hostRoomUrl": { "type": "string", "private": true },
-    "viewerRoomUrl": { "type": "string" },
+    "hostRoomUrl": { "type": "text", "private": true },
+    "viewerRoomUrl": { "type": "text" },
     "wherebyMeetingId": { "type": "string", "private": true },
-    "recordingUrl": { "type": "string" },
-    "transcriptUrl": { "type": "string" },
+    "recordingUrl": { "type": "text" },
+    "transcriptUrl": { "type": "text" },
     "status": {
       "type": "enumeration",
       "enum": ["scheduled", "live", "ended", "cancelled"],
