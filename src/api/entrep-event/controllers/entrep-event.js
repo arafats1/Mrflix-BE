@@ -43,6 +43,7 @@ function sanitizeEventForCalendar(event) {
   return {
     ...event,
     description: getMentorshipDescription(event.description, event.mentorProfile?.fullName),
+    color: event.color || '#dc2626',
   };
 }
 
@@ -137,6 +138,9 @@ module.exports = createCoreController('api::entrep-event.entrep-event', ({ strap
     }
     const b = ctx.request.body || {};
     if (!b.title || !b.startsAt) return ctx.badRequest('title and startsAt required');
+    const eventColor = profile.role === 'provider'
+      ? '#dc2626'
+      : (profile.preferredEventColor || '#2563eb');
     const event = await strapi.entityService.create('api::entrep-event.entrep-event', {
       data: {
         title: b.title,
@@ -146,7 +150,7 @@ module.exports = createCoreController('api::entrep-event.entrep-event', ({ strap
         endsAt: b.endsAt || b.startsAt,
         course: b.courseId || null,
         visibility: b.visibility || (b.courseId ? 'course' : 'public'),
-        color: b.color || '#dc2626',
+        color: b.color || eventColor,
       },
     });
     ctx.send({ event });

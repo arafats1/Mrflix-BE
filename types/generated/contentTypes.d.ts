@@ -1413,6 +1413,55 @@ export interface ApiEntrepLessonEntrepLesson
   };
 }
 
+export interface ApiEntrepLiveSessionRequestEntrepLiveSessionRequest
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'entrep_live_session_requests';
+  info: {
+    displayName: 'Entrep Live Session Request';
+    pluralName: 'entrep-live-session-requests';
+    singularName: 'entrep-live-session-request';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    course: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::entrep-course.entrep-course'
+    >;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    liveSession: Schema.Attribute.Relation<
+      'oneToOne',
+      'api::entrep-live-session.entrep-live-session'
+    >;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::entrep-live-session-request.entrep-live-session-request'
+    > &
+      Schema.Attribute.Private;
+    message: Schema.Attribute.Text;
+    publishedAt: Schema.Attribute.DateTime;
+    requester: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+    scheduledAt: Schema.Attribute.DateTime;
+    status: Schema.Attribute.Enumeration<['pending', 'accepted', 'rejected']> &
+      Schema.Attribute.DefaultTo<'pending'>;
+    topic: Schema.Attribute.String;
+    trainer: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::entrep-profile.entrep-profile'
+    >;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface ApiEntrepLiveSessionEntrepLiveSession
   extends Struct.CollectionTypeSchema {
   collectionName: 'entrep_live_sessions';
@@ -1637,6 +1686,7 @@ export interface ApiEntrepPostEntrepPost extends Struct.CollectionTypeSchema {
       'manyToOne',
       'api::entrep-discussion-group.entrep-discussion-group'
     >;
+    isAnonymous: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
     isExpert: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
     likedBy: Schema.Attribute.JSON & Schema.Attribute.DefaultTo<[]>;
     likesCount: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
@@ -1647,12 +1697,17 @@ export interface ApiEntrepPostEntrepPost extends Struct.CollectionTypeSchema {
     > &
       Schema.Attribute.Private;
     mediaUrls: Schema.Attribute.JSON & Schema.Attribute.DefaultTo<[]>;
+    postType: Schema.Attribute.Enumeration<
+      ['community', 'topic', 'noticeboard', 'suggestion']
+    > &
+      Schema.Attribute.DefaultTo<'community'>;
     publishedAt: Schema.Attribute.DateTime;
     status: Schema.Attribute.Enumeration<
       ['published', 'pending', 'rejected', 'hidden']
     > &
       Schema.Attribute.DefaultTo<'published'>;
     tags: Schema.Attribute.JSON & Schema.Attribute.DefaultTo<[]>;
+    title: Schema.Attribute.String;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -1731,6 +1786,7 @@ export interface ApiEntrepProfileEntrepProfile
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    dateOfBirth: Schema.Attribute.Date;
     educationLevel: Schema.Attribute.String;
     email: Schema.Attribute.String;
     experienceLevel: Schema.Attribute.String;
@@ -1753,6 +1809,8 @@ export interface ApiEntrepProfileEntrepProfile
       Schema.Attribute.DefaultTo<false>;
     phone: Schema.Attribute.String;
     portfolioUrls: Schema.Attribute.JSON & Schema.Attribute.DefaultTo<[]>;
+    preferredEventColor: Schema.Attribute.String &
+      Schema.Attribute.DefaultTo<'#2563eb'>;
     profilePhotoUrl: Schema.Attribute.String;
     publishedAt: Schema.Attribute.DateTime;
     role: Schema.Attribute.Enumeration<
@@ -1766,6 +1824,7 @@ export interface ApiEntrepProfileEntrepProfile
     >;
     sessionsHosted: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
     skills: Schema.Attribute.JSON & Schema.Attribute.DefaultTo<[]>;
+    socialMediaHandles: Schema.Attribute.JSON & Schema.Attribute.DefaultTo<[]>;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -1917,6 +1976,8 @@ export interface ApiEntrepSubmissionEntrepSubmission
       Schema.Attribute.DefaultTo<'text'>;
     submittedAt: Schema.Attribute.DateTime;
     textResponse: Schema.Attribute.Text;
+    trainerFileName: Schema.Attribute.String;
+    trainerMediaUrl: Schema.Attribute.String;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -3756,6 +3817,7 @@ declare module '@strapi/strapi' {
       'api::entrep-event.entrep-event': ApiEntrepEventEntrepEvent;
       'api::entrep-job.entrep-job': ApiEntrepJobEntrepJob;
       'api::entrep-lesson.entrep-lesson': ApiEntrepLessonEntrepLesson;
+      'api::entrep-live-session-request.entrep-live-session-request': ApiEntrepLiveSessionRequestEntrepLiveSessionRequest;
       'api::entrep-live-session.entrep-live-session': ApiEntrepLiveSessionEntrepLiveSession;
       'api::entrep-mentorship.entrep-mentorship': ApiEntrepMentorshipEntrepMentorship;
       'api::entrep-module.entrep-module': ApiEntrepModuleEntrepModule;

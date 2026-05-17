@@ -36,6 +36,7 @@
     "experienceLevel": { "type": "string" },
     "educationLevel": { "type": "string" },
     "age": { "type": "integer" },
+    "dateOfBirth": { "type": "date" },
     "gender": { "type": "string" },
     "location": { "type": "string" },
     "bio": { "type": "text" },
@@ -44,8 +45,10 @@
     "nationalId": { "type": "string" },
     "certifications": { "type": "json", "default": [] },
     "verificationDocumentUrls": { "type": "json", "default": [] },
+    "socialMediaHandles": { "type": "json", "default": [] },
     "profilePhotoUrl": { "type": "string" },
     "portfolioUrls": { "type": "json", "default": [] },
+    "preferredEventColor": { "type": "string", "default": "#2563eb" },
     "cluster": {
       "type": "relation",
       "relation": "manyToOne",

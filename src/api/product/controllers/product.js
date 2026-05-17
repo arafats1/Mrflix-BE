@@ -50,12 +50,16 @@ async function enrichSellerIdentity(strapi, product) {
   const sellerDisplayName = entrepreneurProfile?.fullName || product.seller?.fullName || product.seller?.shopName || product.seller?.username || product.seller?.email || null;
   const sellerLocation = entrepreneurProfile?.location || product.seller?.location || null;
   const sellerPhone = entrepreneurProfile?.phone || product.paymentPhone || product.seller?.phone || product.seller?.paymentPhone || null;
+  const sellerAge = entrepreneurProfile?.age || null;
+  const sellerProfilePhotoUrl = entrepreneurProfile?.profilePhotoUrl || null;
 
   return {
     ...product,
     sellerDisplayName,
     sellerLocation,
     sellerPhone,
+    sellerAge,
+    sellerProfilePhotoUrl,
   };
 }
 

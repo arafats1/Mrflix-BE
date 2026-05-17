@@ -18,6 +18,11 @@ async function getTrainerProfile(strapi, userId) {
   return list?.[0] || null;
 }
 
+function getSessionEventColor(profile) {
+  if (profile?.role === 'provider') return '#dc2626';
+  return profile?.preferredEventColor || '#2563eb';
+}
+
 function isMockSession(session) {
   return String(session?.wherebyMeetingId || '').startsWith('mock_')
     || String(session?.viewerRoomUrl || '').includes('movo-entrepreneur.whereby.com')
@@ -104,7 +109,7 @@ module.exports = createCoreController('api::entrep-live-session.entrep-live-sess
         course: courseId || null,
         liveSession: session.id,
         visibility: courseId ? 'course' : 'public',
-        color: '#dc2626',
+        color: getSessionEventColor(profile),
       },
     });
 

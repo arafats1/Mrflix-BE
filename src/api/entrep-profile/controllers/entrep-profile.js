@@ -11,6 +11,37 @@ function normalizePhone(phone) {
   return normalized;
 }
 
+function normalizePreferredEventColor(value, fallback = '#2563eb') {
+  const normalized = typeof value === 'string' ? value.trim() : '';
+  return /^#[0-9a-fA-F]{6}$/.test(normalized) ? normalized.toLowerCase() : fallback;
+}
+
+function normalizeDateOfBirth(value) {
+  const raw = typeof value === 'string' ? value.trim() : '';
+  if (!raw) return null;
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toISOString().slice(0, 10);
+}
+
+function calculateAgeFromDateOfBirth(value) {
+  const normalized = normalizeDateOfBirth(value);
+  if (!normalized) return null;
+  const birthDate = new Date(`${normalized}T00:00:00Z`);
+  const now = new Date();
+  let age = now.getUTCFullYear() - birthDate.getUTCFullYear();
+  const monthDiff = now.getUTCMonth() - birthDate.getUTCMonth();
+  const dayDiff = now.getUTCDate() - birthDate.getUTCDate();
+  if (monthDiff < 0 || (monthDiff === 0 && dayDiff < 0)) age -= 1;
+  return age >= 0 ? age : null;
+}
+
+function normalizeSocialMediaHandles(input) {
+  if (Array.isArray(input)) return input.map((item) => String(item || '').trim()).filter(Boolean);
+  if (typeof input === 'string') return input.split(/[\n,]+/).map((item) => item.trim()).filter(Boolean);
+  return [];
+}
+
 async function resolveUser(strapi, ctx) {
   if (ctx.state.user?.id) {
     return strapi.entityService.findOne('plugin::users-permissions.user', ctx.state.user.id, { populate: ['role'] });
@@ -139,6 +170,8 @@ module.exports = createCoreController('api::entrep-profile.entrep-profile', ({ s
       fullName: name,
       email: email.toLowerCase(),
       phone: body.phone || null,
+      dateOfBirth: normalizeDateOfBirth(body.dateOfBirth),
+      age: calculateAgeFromDateOfBirth(body.dateOfBirth),
       location: body.location || null,
       bio: body.bio || null,
       expertise: body.expertise || null,
@@ -146,7 +179,9 @@ module.exports = createCoreController('api::entrep-profile.entrep-profile', ({ s
       nationalId: body.nationalId || null,
       certifications: Array.isArray(body.certifications) ? body.certifications.filter(Boolean) : [],
       verificationDocumentUrls: Array.isArray(body.verificationDocumentUrls) ? body.verificationDocumentUrls.filter(Boolean) : [],
+      socialMediaHandles: normalizeSocialMediaHandles(body.socialMediaHandles),
       interestedRoles: Array.isArray(body.interestedRoles) ? body.interestedRoles.filter(Boolean) : [],
+      preferredEventColor: role === 'provider' ? '#dc2626' : normalizePreferredEventColor(body.preferredEventColor, '#2563eb'),
       role,
       isMentor: role === 'provider',
       onboardingComplete: role !== 'learner',
@@ -187,13 +222,25 @@ module.exports = createCoreController('api::entrep-profile.entrep-profile', ({ s
     if (!profile) return ctx.notFound('Profile not found');
 
     const allowed = [
-      'fullName', 'phone', 'age', 'gender', 'location', 'bio', 'expertise', 'yearsOfExperience',
-      'nationalId', 'certifications', 'verificationDocumentUrls', 'profilePhotoUrl', 'portfolioUrls', 'goal', 'interestedRoles',
-      'skills', 'experienceLevel', 'educationLevel',
+      'fullName', 'phone', 'age', 'dateOfBirth', 'gender', 'location', 'bio', 'expertise', 'yearsOfExperience',
+      'nationalId', 'certifications', 'verificationDocumentUrls', 'socialMediaHandles', 'profilePhotoUrl', 'portfolioUrls', 'goal', 'interestedRoles',
+      'skills', 'experienceLevel', 'educationLevel', 'preferredEventColor',
     ];
     const body = ctx.request.body || {};
     const patch = {};
     for (const k of allowed) if (k in body) patch[k] = body[k];
+    if ('preferredEventColor' in patch) {
+      patch.preferredEventColor = profile.role === 'provider'
+        ? '#dc2626'
+        : normalizePreferredEventColor(patch.preferredEventColor, profile.preferredEventColor || '#2563eb');
+    }
+    if ('socialMediaHandles' in patch) {
+      patch.socialMediaHandles = normalizeSocialMediaHandles(patch.socialMediaHandles);
+    }
+    if ('dateOfBirth' in patch) {
+      patch.dateOfBirth = normalizeDateOfBirth(patch.dateOfBirth);
+      patch.age = calculateAgeFromDateOfBirth(patch.dateOfBirth);
+    }
 
     const paymentPhone = typeof body.paymentPhone === 'string' ? body.paymentPhone.trim() : undefined;
     const paymentCode = typeof body.paymentCode === 'string' ? body.paymentCode.trim() : undefined;

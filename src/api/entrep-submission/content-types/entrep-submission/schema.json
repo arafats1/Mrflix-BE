@@ -36,6 +36,8 @@
     "fileName": { "type": "string" },
     "mediaUrl": { "type": "string" },
     "textResponse": { "type": "text" },
+    "trainerMediaUrl": { "type": "string" },
+    "trainerFileName": { "type": "string" },
     "submittedAt": { "type": "datetime" },
     "grade": { "type": "integer" },
     "feedback": { "type": "text" },

@@ -43,6 +43,9 @@ function serializePost(post, profilesByUserId) {
   const authorProfile = profilesByUserId.get(authorId);
   return {
     ...post,
+    title: post.title || '',
+    postType: post.postType || 'community',
+    isAnonymous: !!post.isAnonymous,
     authorPhotoUrl: authorProfile?.profilePhotoUrl || null,
     mediaUrls: serializeMedia(post.mediaUrls),
     discussionGroup: post.discussionGroup ? {
@@ -51,6 +54,14 @@ function serializePost(post, profilesByUserId) {
       courseId: post.discussionGroup.course?.id || null,
     } : null,
   };
+}
+
+function parsePostTypes(raw) {
+  const value = Array.isArray(raw) ? raw.join(',') : String(raw || '');
+  return value
+    .split(',')
+    .map((item) => item.trim())
+    .filter((item) => ['community', 'topic', 'noticeboard', 'suggestion'].includes(item));
 }
 
 async function resolveDiscussionGroupMembership(strapi, user, discussionGroupId) {
@@ -75,10 +86,18 @@ async function resolveDiscussionGroupMembership(strapi, user, discussionGroupId)
 module.exports = createCoreController('api::entrep-post.entrep-post', ({ strapi }) => ({
   async find(ctx) {
     const discussionGroupId = Number(ctx.query?.discussionGroupId);
+    const requestedPostTypes = parsePostTypes(ctx.query?.postTypes);
+    const mineOnly = String(ctx.query?.mine || '').toLowerCase() === 'true';
     const filters = {
       status: 'published',
       discussionGroup: { id: { $null: true } },
+      postType: requestedPostTypes.length ? { $in: requestedPostTypes } : { $in: ['community', 'topic', 'noticeboard'] },
     };
+
+    if (mineOnly) {
+      if (!ctx.state.user?.id) return ctx.unauthorized();
+      filters.author = ctx.state.user.id;
+    }
 
     if (Number.isFinite(discussionGroupId) && discussionGroupId > 0) {
       if (!ctx.state.user?.id) return ctx.unauthorized();
@@ -100,9 +119,19 @@ module.exports = createCoreController('api::entrep-post.entrep-post', ({ strapi 
   async createPost(ctx) {
     const { user, profile } = await getUserAndProfile(strapi, ctx);
     if (!user) return ctx.unauthorized();
-    const { content, tags = [], mediaUrls = [], discussionGroupId } = ctx.request.body || {};
+    const { content, tags = [], mediaUrls = [], discussionGroupId, title, postType = 'community', isAnonymous = false } = ctx.request.body || {};
     const normalizedMedia = serializeMedia(mediaUrls);
+    const normalizedPostType = ['community', 'topic', 'noticeboard', 'suggestion'].includes(postType) ? postType : 'community';
     if (!String(content || '').trim() && normalizedMedia.length === 0) return ctx.badRequest('content or media required');
+    if (['topic', 'noticeboard'].includes(normalizedPostType) && !String(title || '').trim()) {
+      return ctx.badRequest('title is required');
+    }
+    if (normalizedPostType === 'suggestion' && profile?.role !== 'learner') {
+      return ctx.forbidden('Only learners can submit suggestions');
+    }
+    if (normalizedPostType === 'noticeboard' && !['trainer', 'admin'].includes(profile?.role)) {
+      return ctx.forbidden('Only trainers and admins can publish noticeboard items');
+    }
 
     let discussionGroup = null;
     const parsedDiscussionGroupId = Number(discussionGroupId);
@@ -112,13 +141,17 @@ module.exports = createCoreController('api::entrep-post.entrep-post', ({ strapi 
       if (!discussionGroup) return ctx.notFound('Discussion group not found');
     }
 
+    const shouldHideName = normalizedPostType === 'suggestion' && Boolean(isAnonymous);
     const post = await strapi.entityService.create('api::entrep-post.entrep-post', {
       data: {
         author: user.id,
         discussionGroup: discussionGroup?.id || null,
-        authorName: profile?.fullName || user.username,
+        title: String(title || '').trim() || null,
+        authorName: shouldHideName ? 'Anonymous learner' : (profile?.fullName || user.username),
         authorRole: profile?.role || 'learner',
         content: String(content || '').trim(), tags, mediaUrls: normalizedMedia,
+        isAnonymous: shouldHideName,
+        postType: normalizedPostType,
         isExpert: profile?.isMentor || ['trainer','admin'].includes(profile?.role),
         status: 'published',
       },
