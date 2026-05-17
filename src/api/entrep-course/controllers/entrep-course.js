@@ -93,16 +93,18 @@ function serializeCluster(cluster) {
   };
 }
 
-function serializeMarketplaceProduct(product, sellerProfile) {
+function serializeMarketplaceProduct(product, sellerProfile, source = 'entrep') {
   return {
-    id: product.id,
+    id: `${source}-${product.id}`,
+    source,
     name: product.name || 'Product',
     category: product.category || '',
     priceUGX: Number(product.priceUGX || 0),
     status: product.status || 'approved',
-    sellerName: product.sellerName || sellerProfile?.fullName || 'Marketplace seller',
+    sellerName: product.sellerDisplayName || product.sellerName || sellerProfile?.fullName || product.seller?.fullName || product.seller?.username || 'Marketplace seller',
     createdAt: product.createdAt || null,
-    sellerProfileId: sellerProfile?.id || Number(product.seller?.id || product.seller) || null,
+    sellerProfileId: sellerProfile?.id || null,
+    sellerUserId: Number(product.seller?.id || product.seller || sellerProfile?.user?.id || sellerProfile?.user) || null,
     sellerRole: sellerProfile?.role || null,
     cluster: serializeCluster(sellerProfile?.cluster),
   };
@@ -275,7 +277,7 @@ module.exports = createCoreController('api::entrep-course.entrep-course', ({ str
     const profile = await getProfile(strapi, user.id);
     if (!hasOverviewAccess(user, profile)) return ctx.forbidden('Admin or M&E only');
 
-    const [profiles, courses, enrollments, jobs, posts, discussionGroups, sessions, allClusters, products] = await Promise.all([
+    const [profiles, courses, enrollments, jobs, posts, discussionGroups, sessions, allClusters, products, coreMarketplaceProducts] = await Promise.all([
       strapi.entityService.findMany('api::entrep-profile.entrep-profile', {
         sort: { createdAt: 'desc' },
         populate: ['user', 'cluster'],
@@ -314,18 +316,37 @@ module.exports = createCoreController('api::entrep-course.entrep-course', ({ str
         sort: { createdAt: 'desc' },
         populate: { seller: { populate: ['user', 'cluster'] } },
       }),
+      strapi.documents('api::product.product').findMany({
+        filters: { marketplaceSource: 'entrepreneur' },
+        populate: { seller: true },
+        sort: { createdAt: 'desc' },
+        status: 'published',
+      }).catch(() => []),
     ]);
 
     const profileByUserId = new Map(
       profiles.map((item) => [Number(item.user?.id), item]).filter(([userId]) => Boolean(userId))
     );
 
-    const productsBySellerProfileId = products.reduce((acc, product) => {
-      const sellerProfile = product.seller || null;
-      const key = Number(sellerProfile?.id || product.seller);
+    const allMarketplaceProducts = [
+      ...products.map((product) => ({
+        source: 'entrep',
+        product,
+        sellerProfile: product.seller || null,
+      })),
+      ...coreMarketplaceProducts.map((product) => ({
+        source: 'core',
+        product,
+        sellerProfile: profileByUserId.get(Number(product.seller?.id || product.seller)) || null,
+      })),
+    ];
+
+    const productsBySellerProfileId = allMarketplaceProducts.reduce((acc, entry) => {
+      const { product, sellerProfile, source } = entry;
+      const key = Number(sellerProfile?.id);
       if (!key) return acc;
       acc[key] = acc[key] || [];
-      acc[key].push(serializeMarketplaceProduct(product, sellerProfile));
+      acc[key].push(serializeMarketplaceProduct(product, sellerProfile, source));
       return acc;
     }, {});
 
@@ -494,7 +515,9 @@ module.exports = createCoreController('api::entrep-course.entrep-course', ({ str
         };
       });
 
-    const serializedProducts = products.map((product) => serializeMarketplaceProduct(product, product.seller || null));
+    const serializedProducts = allMarketplaceProducts.map(({ product, sellerProfile, source }) => (
+      serializeMarketplaceProduct(product, sellerProfile, source)
+    ));
 
     ctx.send({
       data: {
