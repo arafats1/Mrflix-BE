@@ -4,6 +4,18 @@ function uniqUserIds(values) {
   return [...new Set((Array.isArray(values) ? values : [values]).map((value) => Number(value)).filter(Boolean))];
 }
 
+function normalizeNotificationType(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return 'system';
+
+  if (raw === 'lesson_question') return 'submission';
+  if (raw === 'live_session_request') return 'live_session';
+
+  return ['assignment', 'live_session', 'submission', 'grade', 'mentorship', 'system'].includes(raw)
+    ? raw
+    : 'system';
+}
+
 async function createNotification(strapi, payload) {
   const recipientId = Number(payload?.recipientId);
   if (!recipientId) return null;
@@ -12,7 +24,7 @@ async function createNotification(strapi, payload) {
     data: {
       recipient: recipientId,
       actor: payload.actorId ? Number(payload.actorId) : null,
-      type: payload.type || 'system',
+      type: normalizeNotificationType(payload.type),
       title: String(payload.title || 'Notification').trim(),
       message: payload.message || '',
       actionUrl: payload.actionUrl || null,
