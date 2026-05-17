@@ -93,6 +93,24 @@ function serializeCluster(cluster) {
   };
 }
 
+function resolveMarketplaceProductImage(product) {
+  if (typeof product?.featuredImage === 'string' && product.featuredImage.trim()) {
+    return product.featuredImage.trim();
+  }
+
+  if (Array.isArray(product?.imageUrls)) {
+    const firstImage = product.imageUrls.find((value) => String(value || '').trim());
+    if (firstImage) return String(firstImage).trim();
+  }
+
+  if (Array.isArray(product?.images)) {
+    const firstImage = product.images.find((value) => String(value || '').trim());
+    if (firstImage) return String(firstImage).trim();
+  }
+
+  return '';
+}
+
 function serializeMarketplaceProduct(product, sellerProfile, source = 'entrep') {
   return {
     id: `${source}-${product.id}`,
@@ -101,7 +119,9 @@ function serializeMarketplaceProduct(product, sellerProfile, source = 'entrep') 
     category: product.category || '',
     priceUGX: Number(product.priceUGX || 0),
     status: product.status || 'approved',
+    imageUrl: resolveMarketplaceProductImage(product),
     sellerName: product.sellerDisplayName || product.sellerName || sellerProfile?.fullName || product.seller?.fullName || product.seller?.username || 'Marketplace seller',
+    sellerProfilePhotoUrl: sellerProfile?.profilePhotoUrl || product.sellerProfilePhotoUrl || '',
     createdAt: product.createdAt || null,
     sellerProfileId: sellerProfile?.id || null,
     sellerUserId: Number(product.seller?.id || product.seller || sellerProfile?.user?.id || sellerProfile?.user) || null,
@@ -374,6 +394,7 @@ module.exports = createCoreController('api::entrep-course.entrep-course', ({ str
         return {
           id: item.id,
           name: item.fullName,
+          profilePhotoUrl: item.profilePhotoUrl || '',
           email: item.email || item.user?.email || '',
           phone: item.phone || item.user?.phone || '',
           location: item.location || '',
@@ -411,6 +432,7 @@ module.exports = createCoreController('api::entrep-course.entrep-course', ({ str
         return {
           id: item.id,
           name: item.fullName,
+          profilePhotoUrl: item.profilePhotoUrl || '',
           email: item.email || item.user?.email || '',
           phone: item.phone || item.user?.phone || '',
           location: item.location || '',
@@ -441,6 +463,7 @@ module.exports = createCoreController('api::entrep-course.entrep-course', ({ str
         return {
           id: item.id,
           name: item.fullName,
+          profilePhotoUrl: item.profilePhotoUrl || '',
           email: item.email || item.user?.email || '',
           phone: item.phone || item.user?.phone || '',
           location: item.location || '',
@@ -486,6 +509,7 @@ module.exports = createCoreController('api::entrep-course.entrep-course', ({ str
         members: members.map((item) => ({
           id: item.id,
           name: item.fullName,
+          profilePhotoUrl: item.profilePhotoUrl || '',
           role: item.role,
           approvalStatus: item.approvalStatus,
           email: item.email || item.user?.email || '',
@@ -508,6 +532,7 @@ module.exports = createCoreController('api::entrep-course.entrep-course', ({ str
           cluster: serializeCluster(suggestionProfile?.cluster),
           learner: suggestionProfile ? {
             id: suggestionProfile.id,
+            profilePhotoUrl: suggestionProfile.profilePhotoUrl || '',
             email: suggestionProfile.email || suggestionProfile.user?.email || '',
             phone: suggestionProfile.phone || suggestionProfile.user?.phone || '',
             location: suggestionProfile.location || '',
