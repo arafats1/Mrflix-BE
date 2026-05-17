@@ -93,6 +93,21 @@ function serializeCluster(cluster) {
   };
 }
 
+function serializeMarketplaceProduct(product, sellerProfile) {
+  return {
+    id: product.id,
+    name: product.name || 'Product',
+    category: product.category || '',
+    priceUGX: Number(product.priceUGX || 0),
+    status: product.status || 'approved',
+    sellerName: product.sellerName || sellerProfile?.fullName || 'Marketplace seller',
+    createdAt: product.createdAt || null,
+    sellerProfileId: sellerProfile?.id || Number(product.seller?.id || product.seller) || null,
+    sellerRole: sellerProfile?.role || null,
+    cluster: serializeCluster(sellerProfile?.cluster),
+  };
+}
+
 module.exports = createCoreController('api::entrep-course.entrep-course', ({ strapi }) => ({
   /**
    * Default `find` enriched to deep-populate modules & lessons for the catalog.
@@ -260,7 +275,7 @@ module.exports = createCoreController('api::entrep-course.entrep-course', ({ str
     const profile = await getProfile(strapi, user.id);
     if (!hasOverviewAccess(user, profile)) return ctx.forbidden('Admin or M&E only');
 
-    const [profiles, courses, enrollments, jobs, posts, discussionGroups, sessions, allClusters] = await Promise.all([
+    const [profiles, courses, enrollments, jobs, posts, discussionGroups, sessions, allClusters, products] = await Promise.all([
       strapi.entityService.findMany('api::entrep-profile.entrep-profile', {
         sort: { createdAt: 'desc' },
         populate: ['user', 'cluster'],
@@ -295,7 +310,24 @@ module.exports = createCoreController('api::entrep-course.entrep-course', ({ str
       strapi.entityService.findMany('api::entrep-cluster.entrep-cluster', {
         sort: { createdAt: 'desc' },
       }),
+      strapi.entityService.findMany('api::entrep-product.entrep-product', {
+        sort: { createdAt: 'desc' },
+        populate: { seller: { populate: ['user', 'cluster'] } },
+      }),
     ]);
+
+    const profileByUserId = new Map(
+      profiles.map((item) => [Number(item.user?.id), item]).filter(([userId]) => Boolean(userId))
+    );
+
+    const productsBySellerProfileId = products.reduce((acc, product) => {
+      const sellerProfile = product.seller || null;
+      const key = Number(sellerProfile?.id || product.seller);
+      if (!key) return acc;
+      acc[key] = acc[key] || [];
+      acc[key].push(serializeMarketplaceProduct(product, sellerProfile));
+      return acc;
+    }, {});
 
     const enrollmentsByUserId = enrollments.reduce((acc, enrollment) => {
       const key = Number(enrollment.user?.id || enrollment.user);
@@ -317,14 +349,21 @@ module.exports = createCoreController('api::entrep-course.entrep-course', ({ str
       .filter((item) => item.role === 'learner')
       .map((item) => {
         const userEnrollments = enrollmentsByUserId[Number(item.user?.id)] || [];
+        const learnerProducts = productsBySellerProfileId[Number(item.id)] || [];
         return {
           id: item.id,
           name: item.fullName,
           email: item.email || item.user?.email || '',
           phone: item.phone || item.user?.phone || '',
           location: item.location || '',
+          address: item.location || '',
+          age: Number(item.age || 0) || null,
+          dateOfBirth: item.dateOfBirth || null,
+          registeredAt: item.createdAt || item.user?.createdAt || null,
           approvalStatus: item.approvalStatus,
           cluster: serializeCluster(item.cluster),
+          products: learnerProducts,
+          productsCount: learnerProducts.length,
           progress: userEnrollments.map((enrollment) => ({
             enrollmentId: enrollment.id,
             courseId: enrollment.course?.id || null,
@@ -337,49 +376,71 @@ module.exports = createCoreController('api::entrep-course.entrep-course', ({ str
             enrolledAt: enrollment.enrolledAt,
             completedAt: enrollment.completedAt,
           })),
+          statusSummary: {
+            activeCourses: userEnrollments.filter((enrollment) => enrollment.status === 'active').length,
+            completedCourses: userEnrollments.filter((enrollment) => enrollment.status === 'completed' || enrollment.certificateIssued).length,
+          },
         };
       });
 
     const trainers = profiles
       .filter((item) => item.role === 'trainer')
-      .map((item) => ({
-        id: item.id,
-        name: item.fullName,
-        email: item.email || item.user?.email || '',
-        phone: item.phone || item.user?.phone || '',
-        location: item.location || '',
-        approvalStatus: item.approvalStatus,
-        cluster: serializeCluster(item.cluster),
-        courses: (coursesByTrainerId[Number(item.id)] || []).map((course) => ({
-          id: course.id,
-          title: course.title,
-          status: course.status,
-          category: course.category || '',
-          level: course.level || 'Beginner',
-          enrollmentsCount: Number(course.enrollmentsCount || 0),
-          modulesCount: Array.isArray(course.modules) ? course.modules.length : 0,
-        })),
-      }));
+      .map((item) => {
+        const trainerProducts = productsBySellerProfileId[Number(item.id)] || [];
+        return {
+          id: item.id,
+          name: item.fullName,
+          email: item.email || item.user?.email || '',
+          phone: item.phone || item.user?.phone || '',
+          location: item.location || '',
+          address: item.location || '',
+          age: Number(item.age || 0) || null,
+          registeredAt: item.createdAt || item.user?.createdAt || null,
+          approvalStatus: item.approvalStatus,
+          cluster: serializeCluster(item.cluster),
+          products: trainerProducts,
+          productsCount: trainerProducts.length,
+          courses: (coursesByTrainerId[Number(item.id)] || []).map((course) => ({
+            id: course.id,
+            title: course.title,
+            status: course.status,
+            category: course.category || '',
+            level: course.level || 'Beginner',
+            enrollmentsCount: Number(course.enrollmentsCount || 0),
+            modulesCount: Array.isArray(course.modules) ? course.modules.length : 0,
+            createdAt: course.createdAt || null,
+          })),
+        };
+      });
 
     const experts = profiles
       .filter((item) => item.role === 'provider')
-      .map((item) => ({
-        id: item.id,
-        name: item.fullName,
-        email: item.email || item.user?.email || '',
-        phone: item.phone || item.user?.phone || '',
-        location: item.location || '',
-        approvalStatus: item.approvalStatus,
-        cluster: serializeCluster(item.cluster),
-        isMentor: !!item.isMentor,
-        mentorRating: Number(item.mentorRating || 0),
-        sessionsHosted: Number(item.sessionsHosted || 0),
-        courses: (coursesByTrainerId[Number(item.id)] || []).map((course) => ({
-          id: course.id,
-          title: course.title,
-          status: course.status,
-        })),
-      }));
+      .map((item) => {
+        const expertProducts = productsBySellerProfileId[Number(item.id)] || [];
+        return {
+          id: item.id,
+          name: item.fullName,
+          email: item.email || item.user?.email || '',
+          phone: item.phone || item.user?.phone || '',
+          location: item.location || '',
+          address: item.location || '',
+          age: Number(item.age || 0) || null,
+          registeredAt: item.createdAt || item.user?.createdAt || null,
+          approvalStatus: item.approvalStatus,
+          cluster: serializeCluster(item.cluster),
+          isMentor: !!item.isMentor,
+          mentorRating: Number(item.mentorRating || 0),
+          sessionsHosted: Number(item.sessionsHosted || 0),
+          products: expertProducts,
+          productsCount: expertProducts.length,
+          courses: (coursesByTrainerId[Number(item.id)] || []).map((course) => ({
+            id: course.id,
+            title: course.title,
+            status: course.status,
+            createdAt: course.createdAt || null,
+          })),
+        };
+      });
 
     const clusterSummaries = allClusters.map((cluster) => {
       const members = profiles.filter((item) => Number(item.cluster?.id || item.cluster) === Number(cluster.id));
@@ -407,9 +468,33 @@ module.exports = createCoreController('api::entrep-course.entrep-course', ({ str
           role: item.role,
           approvalStatus: item.approvalStatus,
           email: item.email || item.user?.email || '',
+          registeredAt: item.createdAt || item.user?.createdAt || null,
         })),
       };
     });
+
+    const suggestions = posts
+      .filter((post) => post.postType === 'suggestion')
+      .map((post) => {
+        const suggestionProfile = profileByUserId.get(Number(post.author?.id || post.author));
+        return {
+          id: post.id,
+          title: post.title || '',
+          content: post.content || '',
+          authorName: post.authorName || suggestionProfile?.fullName || 'Learner',
+          isAnonymous: !!post.isAnonymous,
+          createdAt: post.createdAt || null,
+          cluster: serializeCluster(suggestionProfile?.cluster),
+          learner: suggestionProfile ? {
+            id: suggestionProfile.id,
+            email: suggestionProfile.email || suggestionProfile.user?.email || '',
+            phone: suggestionProfile.phone || suggestionProfile.user?.phone || '',
+            location: suggestionProfile.location || '',
+          } : null,
+        };
+      });
+
+    const serializedProducts = products.map((product) => serializeMarketplaceProduct(product, product.seller || null));
 
     ctx.send({
       data: {
@@ -420,12 +505,14 @@ module.exports = createCoreController('api::entrep-course.entrep-course', ({ str
           clusters: clusterSummaries.length,
           pendingClusters: clusterSummaries.filter((item) => item.approvalStatus === 'pending').length,
           courses: courses.length,
+          products: serializedProducts.length,
+          suggestions: suggestions.length,
           activeEnrollments: enrollments.filter((item) => item.status === 'active').length,
           completedEnrollments: enrollments.filter((item) => item.status === 'completed' || item.certificateIssued).length,
           jobs: jobs.length,
           openJobs: jobs.filter((item) => item.status === 'open').length,
-          communityPosts: posts.length,
-          publishedPosts: posts.filter((item) => item.status === 'published').length,
+          communityPosts: posts.filter((item) => item.postType !== 'suggestion').length,
+          publishedPosts: posts.filter((item) => item.status === 'published' && item.postType !== 'suggestion').length,
           discussionGroups: discussionGroups.length,
           upcomingSessions: sessions.filter((item) => item.startsAt && new Date(item.startsAt).getTime() >= Date.now()).length,
         },
@@ -433,6 +520,8 @@ module.exports = createCoreController('api::entrep-course.entrep-course', ({ str
         trainers,
         experts,
         clusters: clusterSummaries,
+        products: serializedProducts,
+        suggestions,
         jobs: jobs.map(withPostedByName),
         posts: posts,
         discussionGroups: discussionGroups.map((group) => ({

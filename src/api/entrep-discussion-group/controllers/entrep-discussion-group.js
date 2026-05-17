@@ -1,6 +1,7 @@
 'use strict';
 
 const { createCoreController } = require('@strapi/strapi').factories;
+const whereby = require('../../../utils/whereby');
 
 async function resolveUser(strapi, ctx) {
   if (!ctx.state.user?.id) return null;
@@ -32,6 +33,17 @@ async function findGroupByCourseId(strapi, courseId) {
     limit: 1,
   });
   return list?.[0] || null;
+}
+
+async function findGroupById(strapi, groupId) {
+  if (!groupId) return null;
+  return strapi.entityService.findOne('api::entrep-discussion-group.entrep-discussion-group', groupId, {
+    populate: {
+      course: true,
+      members: true,
+      creator: true,
+    },
+  });
 }
 
 function serializeGroupPreview(course, group, userId) {
@@ -161,5 +173,41 @@ module.exports = createCoreController('api::entrep-discussion-group.entrep-discu
     });
 
     ctx.send({ group: serializeGroupPreview(created.course, created, user.id) });
+  },
+
+  async createMeetingLink(ctx) {
+    const user = await resolveUser(strapi, ctx);
+    if (!user) return ctx.unauthorized();
+
+    const groupId = Number(ctx.params.id);
+    if (!Number.isFinite(groupId) || groupId <= 0) return ctx.badRequest('Valid group id required');
+
+    const group = await findGroupById(strapi, groupId);
+    if (!group || group.status !== 'active') return ctx.notFound('Discussion group not found');
+
+    const memberIds = Array.isArray(group.members)
+      ? group.members.map((member) => Number(member?.id || member)).filter(Boolean)
+      : [];
+
+    if (!memberIds.includes(Number(user.id))) {
+      return ctx.forbidden('Join this discussion group before generating a meeting link');
+    }
+
+    const startsAt = new Date().toISOString();
+    const endsAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+    const meeting = await whereby.createMeeting({ startsAt, endsAt, roomMode: 'group' });
+
+    ctx.send({
+      meeting: {
+        provider: 'whereby',
+        startsAt,
+        endsAt,
+        roomUrl: meeting.viewerRoomUrl,
+        hostRoomUrl: meeting.hostRoomUrl,
+        meetingId: meeting.meetingId,
+        course: group.course ? { id: group.course.id, title: group.course.title || 'Course' } : null,
+        discussionGroupId: group.id,
+      },
+    });
   },
 }));
