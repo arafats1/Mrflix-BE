@@ -5,7 +5,7 @@
     "singularName": "entrep-profile",
     "pluralName": "entrep-profiles",
     "displayName": "Entrep Profile",
-    "description": "Profile for Movo Entrepreneur users (learner / trainer / cluster / provider)"
+    "description": "Profile for Movo Entrepreneur users (learner / trainer / cluster / provider / m&e)"
   },
   "options": { "draftAndPublish": false },
   "pluginOptions": {},
@@ -20,7 +20,7 @@
     "phone": { "type": "string" },
     "role": {
       "type": "enumeration",
-      "enum": ["learner", "trainer", "cluster", "provider", "admin"],
+      "enum": ["learner", "trainer", "cluster", "provider", "admin", "me"],
       "default": "learner",
       "required": true
     },

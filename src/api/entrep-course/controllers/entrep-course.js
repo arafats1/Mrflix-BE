@@ -20,6 +20,10 @@ function isAdminUser(user, profile) {
   return user?.role?.type === 'admin' || user?.role?.name === 'Admin' || profile?.role === 'admin';
 }
 
+function hasOverviewAccess(user, profile) {
+  return isAdminUser(user, profile) || profile?.role === 'me';
+}
+
 async function getManagedCourse(strapi, user, profile, courseId) {
   const course = await strapi.entityService.findOne('api::entrep-course.entrep-course', courseId, {
     populate: { trainer: true, modules: { populate: ['lessons', 'quiz'] } },
@@ -254,7 +258,7 @@ module.exports = createCoreController('api::entrep-course.entrep-course', ({ str
     if (!user) return ctx.unauthorized();
 
     const profile = await getProfile(strapi, user.id);
-    if (!isAdminUser(user, profile)) return ctx.forbidden('Admin only');
+    if (!hasOverviewAccess(user, profile)) return ctx.forbidden('Admin or M&E only');
 
     const [profiles, courses, enrollments, jobs, posts, discussionGroups, sessions, allClusters] = await Promise.all([
       strapi.entityService.findMany('api::entrep-profile.entrep-profile', {
@@ -379,14 +383,18 @@ module.exports = createCoreController('api::entrep-course.entrep-course', ({ str
 
     const clusterSummaries = allClusters.map((cluster) => {
       const members = profiles.filter((item) => Number(item.cluster?.id || item.cluster) === Number(cluster.id));
+      const clusterAdminProfile = members.find((item) => item.role === 'cluster');
       return {
         id: cluster.id,
+        profileId: clusterAdminProfile?.id || null,
         name: cluster.name || cluster.organizationName || 'Cluster',
         organizationName: cluster.organizationName || '',
         region: cluster.region || '',
         contactPerson: cluster.contactPerson || '',
         contactEmail: cluster.contactEmail || '',
         contactPhone: cluster.contactPhone || '',
+        approvalStatus: clusterAdminProfile?.approvalStatus || 'approved',
+        createdAt: cluster.createdAt || clusterAdminProfile?.createdAt || null,
         counts: {
           learners: members.filter((item) => item.role === 'learner').length,
           trainers: members.filter((item) => item.role === 'trainer').length,
@@ -410,6 +418,7 @@ module.exports = createCoreController('api::entrep-course.entrep-course', ({ str
           trainers: trainers.length,
           experts: experts.length,
           clusters: clusterSummaries.length,
+          pendingClusters: clusterSummaries.filter((item) => item.approvalStatus === 'pending').length,
           courses: courses.length,
           activeEnrollments: enrollments.filter((item) => item.status === 'active').length,
           completedEnrollments: enrollments.filter((item) => item.status === 'completed' || item.certificateIssued).length,

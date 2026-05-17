@@ -1763,7 +1763,7 @@ export interface ApiEntrepProfileEntrepProfile
   extends Struct.CollectionTypeSchema {
   collectionName: 'entrep_profiles';
   info: {
-    description: 'Profile for Movo Entrepreneur users (learner / trainer / cluster / provider)';
+    description: 'Profile for Movo Entrepreneur users (learner / trainer / cluster / provider / m&e)';
     displayName: 'Entrep Profile';
     pluralName: 'entrep-profiles';
     singularName: 'entrep-profile';
@@ -1814,7 +1814,7 @@ export interface ApiEntrepProfileEntrepProfile
     profilePhotoUrl: Schema.Attribute.String;
     publishedAt: Schema.Attribute.DateTime;
     role: Schema.Attribute.Enumeration<
-      ['learner', 'trainer', 'cluster', 'provider', 'admin']
+      ['learner', 'trainer', 'cluster', 'provider', 'admin', 'me']
     > &
       Schema.Attribute.Required &
       Schema.Attribute.DefaultTo<'learner'>;

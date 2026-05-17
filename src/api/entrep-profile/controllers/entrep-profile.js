@@ -2,6 +2,8 @@
 
 const { createCoreController } = require('@strapi/strapi').factories;
 
+const PHONE_PLACEHOLDER_EMAIL_DOMAIN = 'phone.movokids.local';
+
 function normalizePhone(phone) {
   const raw = typeof phone === 'string' ? phone.trim() : '';
   if (!raw) return '';
@@ -9,6 +11,21 @@ function normalizePhone(phone) {
   let normalized = raw.replace(/[\s()+-]/g, '');
   if (normalized.startsWith('0')) normalized = `256${normalized.slice(1)}`;
   return normalized;
+}
+
+function normalizeEmail(email) {
+  const raw = typeof email === 'string' ? email.trim().toLowerCase() : '';
+  return raw || '';
+}
+
+function buildPlaceholderEmail(phone) {
+  const normalizedPhone = normalizePhone(phone);
+  return normalizedPhone ? `${normalizedPhone}@${PHONE_PLACEHOLDER_EMAIL_DOMAIN}` : '';
+}
+
+function sanitizeOptionalEmail(email) {
+  const normalized = normalizeEmail(email);
+  return normalized.endsWith(`@${PHONE_PLACEHOLDER_EMAIL_DOMAIN}`) ? '' : normalized;
 }
 
 function normalizePreferredEventColor(value, fallback = '#2563eb') {
@@ -19,6 +36,23 @@ function normalizePreferredEventColor(value, fallback = '#2563eb') {
 function normalizeDateOfBirth(value) {
   const raw = typeof value === 'string' ? value.trim() : '';
   if (!raw) return null;
+  const slashMatch = raw.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})$/);
+  if (slashMatch) {
+    const [, dayText, monthText, yearText] = slashMatch;
+    const day = Number(dayText);
+    const month = Number(monthText);
+    const year = Number(yearText);
+    const parsedSlashDate = new Date(Date.UTC(year, month - 1, day));
+    if (
+      !Number.isNaN(parsedSlashDate.getTime()) &&
+      parsedSlashDate.getUTCFullYear() === year &&
+      parsedSlashDate.getUTCMonth() === month - 1 &&
+      parsedSlashDate.getUTCDate() === day
+    ) {
+      return `${yearText}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    }
+    return null;
+  }
   const parsed = new Date(raw);
   if (Number.isNaN(parsed.getTime())) return null;
   return parsed.toISOString().slice(0, 10);
@@ -63,12 +97,16 @@ async function findProfileForUser(strapi, userId) {
   return list?.[0] || null;
 }
 
+function isModerator(user, profile) {
+  return user?.role?.type === 'admin' || user?.role?.name === 'Admin' || ['admin', 'me'].includes(profile?.role);
+}
+
 function serializeEntrepUser(user) {
   if (!user) return null;
 
   return {
     id: user.id,
-    email: user.email,
+    email: sanitizeOptionalEmail(user.email) || null,
     username: user.username,
     paymentPhone: user.paymentPhone || null,
     paymentCode: user.paymentCode || null,
@@ -119,27 +157,37 @@ module.exports = createCoreController('api::entrep-profile.entrep-profile', ({ s
    */
   async register(ctx) {
     const body = ctx.request.body || {};
-    const { name, email, password, role = 'learner' } = body;
-    const allowedRoles = ['learner', 'trainer', 'cluster', 'provider', 'admin'];
-    if (!name || !email || !password) return ctx.badRequest('name, email and password are required');
+    const { name, password, role = 'learner' } = body;
+    const submittedEmail = normalizeEmail(body.email);
+    const normalizedPhone = normalizePhone(body.phone);
+    const effectiveEmail = submittedEmail || buildPlaceholderEmail(normalizedPhone);
+    const allowedRoles = ['learner', 'trainer', 'cluster', 'provider', 'admin', 'me'];
+    if (!name || !normalizedPhone || !password) return ctx.badRequest('name, phone and password are required');
     if (String(password).length < 6) return ctx.badRequest('Password must be at least 6 characters');
     if (!allowedRoles.includes(role)) return ctx.badRequest('Invalid entrepreneur role');
 
-    const existing = await strapi.query('plugin::users-permissions.user').findOne({ where: { email: email.toLowerCase() } });
-    if (existing) return ctx.badRequest('An account with this email already exists');
+    if (!effectiveEmail) return ctx.badRequest('A valid phone number is required');
+
+    if (submittedEmail) {
+      const existingByEmail = await strapi.query('plugin::users-permissions.user').findOne({ where: { email: submittedEmail } });
+      if (existingByEmail) return ctx.badRequest('An account with this email already exists');
+    }
+
+    const existingByPhone = await strapi.query('plugin::users-permissions.user').findOne({ where: { phone: normalizedPhone } });
+    if (existingByPhone) return ctx.badRequest('An account with this phone number already exists');
 
     const defaultRole = await strapi.query('plugin::users-permissions.role').findOne({ where: { type: 'authenticated' } });
 
     const user = await strapi.plugins['users-permissions'].services.user.add({
-      username: email.toLowerCase(),
-      email: email.toLowerCase(),
+      username: normalizedPhone || effectiveEmail,
+      email: effectiveEmail,
       password,
       provider: 'local',
       confirmed: true,
       blocked: false,
       role: defaultRole?.id,
       fullName: name,
-      phone: body.phone || null,
+      phone: normalizedPhone || null,
       location: body.location || null,
     });
 
@@ -156,8 +204,8 @@ module.exports = createCoreController('api::entrep-profile.entrep-profile', ({ s
           organizationName: String(clusterData.organizationName).trim(),
           region: String(clusterData.region).trim(),
           contactPerson: String(clusterData.contactPerson || name).trim(),
-          contactEmail: String(clusterData.contactEmail || email).toLowerCase(),
-          contactPhone: clusterData.contactPhone || body.phone || null,
+          contactEmail: normalizeEmail(clusterData.contactEmail || submittedEmail) || null,
+          contactPhone: normalizePhone(clusterData.contactPhone || normalizedPhone) || null,
           description: clusterData.description || null,
           industryCategory: clusterData.industryCategory || null,
           code: `CL-${Date.now().toString(36).toUpperCase()}`,
@@ -168,8 +216,8 @@ module.exports = createCoreController('api::entrep-profile.entrep-profile', ({ s
     const profileData = {
       user: user.id,
       fullName: name,
-      email: email.toLowerCase(),
-      phone: body.phone || null,
+      email: submittedEmail || null,
+      phone: normalizedPhone || null,
       dateOfBirth: normalizeDateOfBirth(body.dateOfBirth),
       age: calculateAgeFromDateOfBirth(body.dateOfBirth),
       location: body.location || null,
@@ -185,7 +233,7 @@ module.exports = createCoreController('api::entrep-profile.entrep-profile', ({ s
       role,
       isMentor: role === 'provider',
       onboardingComplete: role !== 'learner',
-      approvalStatus: ['trainer', 'provider'].includes(role) ? 'pending' : 'approved',
+      approvalStatus: ['trainer', 'provider', 'cluster'].includes(role) ? 'pending' : 'approved',
     };
 
     const clusterId = Number(body.clusterId);
@@ -209,7 +257,7 @@ module.exports = createCoreController('api::entrep-profile.entrep-profile', ({ s
     let profile = await findProfileForUser(strapi, user.id);
     if (!profile) {
       profile = await strapi.entityService.create('api::entrep-profile.entrep-profile', {
-        data: { user: user.id, fullName: user.username, email: user.email, role: 'learner', onboardingComplete: false },
+        data: { user: user.id, fullName: user.username, email: sanitizeOptionalEmail(user.email) || null, role: 'learner', onboardingComplete: false },
       });
     }
     ctx.send({ user: serializeEntrepUser(user), profile: await decorateProfileWithMentorStatus(strapi, profile, user.id) });
@@ -270,6 +318,34 @@ module.exports = createCoreController('api::entrep-profile.entrep-profile', ({ s
 
     const updated = await strapi.entityService.update('api::entrep-profile.entrep-profile', profile.id, { data: patch });
     ctx.send({ user: serializeEntrepUser(user), profile: await decorateProfileWithMentorStatus(strapi, updated, user.id) });
+  },
+
+  async updateApprovalStatus(ctx) {
+    const user = await resolveUser(strapi, ctx);
+    if (!user) return ctx.unauthorized();
+
+    const profile = await findProfileForUser(strapi, user.id);
+    if (!isModerator(user, profile)) return ctx.forbidden('Admin or M&E access required');
+
+    const targetId = Number(ctx.params.id);
+    if (!Number.isFinite(targetId) || targetId <= 0) return ctx.badRequest('Valid profile id is required');
+
+    const approvalStatus = String(ctx.request.body?.approvalStatus || '').trim().toLowerCase();
+    if (!['pending', 'approved', 'rejected', 'clarification'].includes(approvalStatus)) {
+      return ctx.badRequest('Invalid approval status');
+    }
+
+    const targetProfile = await strapi.entityService.findOne('api::entrep-profile.entrep-profile', targetId, {
+      populate: ['user', 'cluster'],
+    });
+    if (!targetProfile) return ctx.notFound('Profile not found');
+
+    const updatedProfile = await strapi.entityService.update('api::entrep-profile.entrep-profile', targetId, {
+      data: { approvalStatus },
+      populate: ['user', 'cluster'],
+    });
+
+    ctx.send({ profile: updatedProfile });
   },
 
   async completeOnboarding(ctx) {
