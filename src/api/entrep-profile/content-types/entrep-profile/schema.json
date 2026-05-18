@@ -49,6 +49,16 @@
     "profilePhotoUrl": { "type": "string" },
     "portfolioUrls": { "type": "json", "default": [] },
     "preferredEventColor": { "type": "string", "default": "#2563eb" },
+    "isAlumni": { "type": "boolean", "default": false },
+    "alumniMemberType": {
+      "type": "enumeration",
+      "enum": ["learner", "trainer", "cluster"],
+      "default": "learner"
+    },
+    "alumniCourseTitle": { "type": "string" },
+    "alumniCompletionDate": { "type": "date" },
+    "alumniCurrentBusiness": { "type": "string" },
+    "alumniJoinedAt": { "type": "datetime" },
     "cluster": {
       "type": "relation",
       "relation": "manyToOne",

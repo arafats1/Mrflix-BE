@@ -1,6 +1,7 @@
 'use strict';
 
 const { createCoreController } = require('@strapi/strapi').factories;
+const { notifyUsers } = require('../../../utils/entrep-notifications');
 
 const PHONE_PLACEHOLDER_EMAIL_DOMAIN = 'phone.movokids.local';
 
@@ -76,6 +77,34 @@ function normalizeSocialMediaHandles(input) {
   return [];
 }
 
+function normalizeOptionalString(value) {
+  return typeof value === 'string' ? value.trim() || null : null;
+}
+
+function normalizeAlumniMemberType(value, fallback = 'learner') {
+  const normalized = String(value || '').trim().toLowerCase();
+  return ['learner', 'trainer', 'cluster'].includes(normalized) ? normalized : fallback;
+}
+
+function getDefaultAlumniMemberType(role) {
+  return ['learner', 'trainer', 'cluster'].includes(role) ? role : 'learner';
+}
+
+async function resolveAlumniCourseTitle(strapi, courseId, fallbackTitle = null) {
+  const parsedCourseId = Number(courseId);
+  if (Number.isFinite(parsedCourseId) && parsedCourseId > 0) {
+    const course = await strapi.entityService.findOne('api::entrep-course.entrep-course', parsedCourseId, {
+      fields: ['title'],
+    });
+    if (!course) {
+      throw new Error('Selected alumni course was not found');
+    }
+    return normalizeOptionalString(course.title) || normalizeOptionalString(fallbackTitle);
+  }
+
+  return normalizeOptionalString(fallbackTitle);
+}
+
 async function resolveUser(strapi, ctx) {
   if (ctx.state.user?.id) {
     return strapi.entityService.findOne('plugin::users-permissions.user', ctx.state.user.id, { populate: ['role'] });
@@ -135,9 +164,48 @@ async function getMentorEligibleEnrollments(strapi, userId) {
   })).filter((item) => item.courseId);
 }
 
+async function getAlumniEligibleEnrollments(strapi, userId) {
+  const enrollments = await strapi.entityService.findMany('api::entrep-enrollment.entrep-enrollment', {
+    filters: {
+      user: userId,
+      status: 'completed',
+    },
+    populate: ['course'],
+    sort: { completedAt: 'desc' },
+  });
+
+  return enrollments.map((enrollment) => ({
+    enrollmentId: enrollment.id,
+    courseId: enrollment.course?.id || null,
+    courseTitle: enrollment.course?.title || 'Course',
+    completedAt: enrollment.completedAt || null,
+    finalScore: Math.round(Number(enrollment.overallScore || 0)),
+    certificateIssued: !!enrollment.certificateIssued,
+  })).filter((item) => item.courseId);
+}
+
+async function listAlumniRecipientIds(strapi, alumniMemberType, excludeUserId) {
+  const profiles = await strapi.entityService.findMany('api::entrep-profile.entrep-profile', {
+    filters: {
+      isAlumni: true,
+      alumniMemberType,
+      user: {
+        id: { $ne: Number(excludeUserId) || 0 },
+      },
+    },
+    populate: ['user'],
+    limit: 500,
+  });
+
+  return profiles
+    .map((entry) => Number(entry?.user?.id || entry?.user))
+    .filter(Boolean);
+}
+
 async function decorateProfileWithMentorStatus(strapi, profile, userId) {
   if (!profile || !userId) return profile;
   const eligibleCourses = await getMentorEligibleEnrollments(strapi, userId);
+  const alumniEligibleCourses = await getAlumniEligibleEnrollments(strapi, userId);
 
   return {
     ...profile,
@@ -146,13 +214,19 @@ async function decorateProfileWithMentorStatus(strapi, profile, userId) {
       activated: !!profile.isMentor,
       eligibleCourses,
     },
+    alumniEligibility: {
+      eligible: alumniEligibleCourses.length > 0,
+      activated: !!profile.isAlumni,
+      eligibleCourses: alumniEligibleCourses,
+      memberType: profile.alumniMemberType || getDefaultAlumniMemberType(profile.role),
+    },
   };
 }
 
 module.exports = createCoreController('api::entrep-profile.entrep-profile', ({ strapi }) => ({
   /**
    * POST /entrep/auth/register
-   * Body: { name, email, password, role?, phone?, location?, expertise?, bio?, yearsOfExperience?, nationalId?, certifications?, interestedRoles? }
+  * Body: { name, email, password, role?, phone?, location?, expertise?, bio?, yearsOfExperience?, nationalId?, certifications?, interestedRoles?, isAlumni?, alumniMemberType?, alumniCourseId?, alumniCourseTitle?, alumniCompletionDate?, alumniCurrentBusiness? }
    * Creates a users-permissions user + entrep-profile, returns { jwt, user, profile }.
    */
   async register(ctx) {
@@ -162,6 +236,8 @@ module.exports = createCoreController('api::entrep-profile.entrep-profile', ({ s
     const normalizedPhone = normalizePhone(body.phone);
     const effectiveEmail = submittedEmail || buildPlaceholderEmail(normalizedPhone);
     const allowedRoles = ['learner', 'trainer', 'cluster', 'provider', 'admin', 'me'];
+    const requestedAlumniMemberType = normalizeAlumniMemberType(body.alumniMemberType, getDefaultAlumniMemberType(role));
+    const isAlumniSignup = Boolean(body.isAlumni || body.alumniCourseTitle || body.alumniCompletionDate || body.alumniCurrentBusiness);
     if (!name || !normalizedPhone || !password) return ctx.badRequest('name, phone and password are required');
     if (String(password).length < 6) return ctx.badRequest('Password must be at least 6 characters');
     if (!allowedRoles.includes(role)) return ctx.badRequest('Invalid entrepreneur role');
@@ -213,6 +289,13 @@ module.exports = createCoreController('api::entrep-profile.entrep-profile', ({ s
       });
     }
 
+    let alumniCourseTitle = null;
+    try {
+      alumniCourseTitle = await resolveAlumniCourseTitle(strapi, body.alumniCourseId, body.alumniCourseTitle);
+    } catch (error) {
+      return ctx.badRequest(error.message || 'Selected alumni course was not found');
+    }
+
     const profileData = {
       user: user.id,
       fullName: name,
@@ -232,6 +315,12 @@ module.exports = createCoreController('api::entrep-profile.entrep-profile', ({ s
       preferredEventColor: role === 'provider' ? '#dc2626' : normalizePreferredEventColor(body.preferredEventColor, '#2563eb'),
       role,
       isMentor: role === 'provider',
+      isAlumni: isAlumniSignup,
+      alumniMemberType: requestedAlumniMemberType,
+      alumniCourseTitle,
+      alumniCompletionDate: normalizeDateOfBirth(body.alumniCompletionDate),
+      alumniCurrentBusiness: normalizeOptionalString(body.alumniCurrentBusiness),
+      alumniJoinedAt: isAlumniSignup ? new Date().toISOString() : null,
       onboardingComplete: role !== 'learner',
       approvalStatus: ['trainer', 'provider', 'cluster'].includes(role) ? 'pending' : 'approved',
     };
@@ -246,6 +335,23 @@ module.exports = createCoreController('api::entrep-profile.entrep-profile', ({ s
     const profile = await strapi.entityService.create('api::entrep-profile.entrep-profile', {
       data: profileData,
     });
+
+    if (profile.isAlumni) {
+      const alumniRecipientIds = await listAlumniRecipientIds(strapi, profile.alumniMemberType, user.id);
+      if (alumniRecipientIds.length) {
+        await notifyUsers(strapi, alumniRecipientIds, {
+          actorId: user.id,
+          type: 'system',
+          title: `${profile.fullName} joined the Alumni Network`,
+          message: `${profile.fullName} joined the ${profile.alumniMemberType} alumni network.`,
+          actionUrl: '/entrepreneur/alumni/network',
+          metadata: {
+            alumniMemberType: profile.alumniMemberType,
+            profileId: profile.id,
+          },
+        });
+      }
+    }
 
     const jwt = strapi.plugins['users-permissions'].services.jwt.issue({ id: user.id });
     ctx.send({ jwt, user: serializeEntrepUser(user), profile });
@@ -273,6 +379,7 @@ module.exports = createCoreController('api::entrep-profile.entrep-profile', ({ s
       'fullName', 'phone', 'age', 'dateOfBirth', 'gender', 'location', 'bio', 'expertise', 'yearsOfExperience',
       'nationalId', 'certifications', 'verificationDocumentUrls', 'socialMediaHandles', 'profilePhotoUrl', 'portfolioUrls', 'goal', 'interestedRoles',
       'skills', 'experienceLevel', 'educationLevel', 'preferredEventColor',
+      'isAlumni', 'alumniMemberType', 'alumniCourseId', 'alumniCourseTitle', 'alumniCompletionDate', 'alumniCurrentBusiness',
     ];
     const body = ctx.request.body || {};
     const patch = {};
@@ -288,6 +395,33 @@ module.exports = createCoreController('api::entrep-profile.entrep-profile', ({ s
     if ('dateOfBirth' in patch) {
       patch.dateOfBirth = normalizeDateOfBirth(patch.dateOfBirth);
       patch.age = calculateAgeFromDateOfBirth(patch.dateOfBirth);
+    }
+    if ('alumniMemberType' in patch) {
+      patch.alumniMemberType = normalizeAlumniMemberType(patch.alumniMemberType, profile.alumniMemberType || getDefaultAlumniMemberType(profile.role));
+    }
+    if ('alumniCompletionDate' in patch) {
+      patch.alumniCompletionDate = normalizeDateOfBirth(patch.alumniCompletionDate);
+    }
+    if ('alumniCourseId' in patch || 'alumniCourseTitle' in patch) {
+      try {
+        patch.alumniCourseTitle = await resolveAlumniCourseTitle(
+          strapi,
+          'alumniCourseId' in patch ? patch.alumniCourseId : null,
+          'alumniCourseTitle' in patch ? patch.alumniCourseTitle : profile.alumniCourseTitle
+        );
+      } catch (error) {
+        return ctx.badRequest(error.message || 'Selected alumni course was not found');
+      }
+      delete patch.alumniCourseId;
+    }
+    if ('alumniCurrentBusiness' in patch) {
+      patch.alumniCurrentBusiness = normalizeOptionalString(patch.alumniCurrentBusiness);
+    }
+    if ('isAlumni' in patch) {
+      patch.isAlumni = Boolean(patch.isAlumni);
+      patch.alumniJoinedAt = patch.isAlumni
+        ? (profile.alumniJoinedAt || new Date().toISOString())
+        : null;
     }
 
     const paymentPhone = typeof body.paymentPhone === 'string' ? body.paymentPhone.trim() : undefined;
@@ -378,6 +512,61 @@ module.exports = createCoreController('api::entrep-profile.entrep-profile', ({ s
       : await strapi.entityService.update('api::entrep-profile.entrep-profile', profile.id, {
           data: { isMentor: true },
         });
+
+    ctx.send({ profile: await decorateProfileWithMentorStatus(strapi, updated, user.id) });
+  },
+
+  async becomeAlumni(ctx) {
+    const user = await resolveUser(strapi, ctx);
+    if (!user) return ctx.unauthorized();
+    const profile = await findProfileForUser(strapi, user.id);
+    if (!profile) return ctx.notFound('Profile not found');
+
+    const eligibleCourses = await getAlumniEligibleEnrollments(strapi, user.id);
+    if (!eligibleCourses.length) {
+      return ctx.forbidden('You can join the alumni network after completing at least one course');
+    }
+
+    const requestedMemberType = normalizeAlumniMemberType(
+      ctx.request.body?.alumniMemberType,
+      profile.alumniMemberType || getDefaultAlumniMemberType(profile.role)
+    );
+    const latestCourse = eligibleCourses[0];
+    let alumniCourseTitle;
+    try {
+      alumniCourseTitle = await resolveAlumniCourseTitle(
+        strapi,
+        ctx.request.body?.alumniCourseId,
+        normalizeOptionalString(ctx.request.body?.alumniCourseTitle) || profile.alumniCourseTitle || latestCourse.courseTitle
+      );
+    } catch (error) {
+      return ctx.badRequest(error.message || 'Selected alumni course was not found');
+    }
+    const updated = await strapi.entityService.update('api::entrep-profile.entrep-profile', profile.id, {
+      data: {
+        isAlumni: true,
+        alumniMemberType: requestedMemberType,
+        alumniCourseTitle,
+        alumniCompletionDate: normalizeDateOfBirth(ctx.request.body?.alumniCompletionDate) || profile.alumniCompletionDate || latestCourse.completedAt,
+        alumniCurrentBusiness: normalizeOptionalString(ctx.request.body?.alumniCurrentBusiness) || profile.alumniCurrentBusiness || null,
+        alumniJoinedAt: profile.alumniJoinedAt || new Date().toISOString(),
+      },
+    });
+
+    const alumniRecipientIds = await listAlumniRecipientIds(strapi, requestedMemberType, user.id);
+    if (alumniRecipientIds.length) {
+      await notifyUsers(strapi, alumniRecipientIds, {
+        actorId: user.id,
+        type: 'system',
+        title: `${updated.fullName} joined the Alumni Network`,
+        message: `${updated.fullName} joined the ${requestedMemberType} alumni network.`,
+        actionUrl: '/entrepreneur/alumni/network',
+        metadata: {
+          alumniMemberType: requestedMemberType,
+          profileId: updated.id,
+        },
+      });
+    }
 
     ctx.send({ profile: await decorateProfileWithMentorStatus(strapi, updated, user.id) });
   },

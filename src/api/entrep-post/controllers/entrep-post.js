@@ -3,8 +3,24 @@
 const { createCoreController } = require('@strapi/strapi').factories;
 
 async function getUserAndProfile(strapi, ctx) {
-  if (!ctx.state.user?.id) return { user: null, profile: null };
-  const user = await strapi.entityService.findOne('plugin::users-permissions.user', ctx.state.user.id, { populate: ['role'] });
+  let userId = ctx.state.user?.id || null;
+
+  if (!userId) {
+    const authHeader = ctx.request.header?.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      try {
+        const token = authHeader.substring(7);
+        const verified = await strapi.plugins['users-permissions'].services.jwt.verify(token);
+        userId = verified?.id || null;
+      } catch (_) {
+        userId = null;
+      }
+    }
+  }
+
+  if (!userId) return { user: null, profile: null };
+
+  const user = await strapi.entityService.findOne('plugin::users-permissions.user', userId, { populate: ['role'] });
   const list = await strapi.entityService.findMany('api::entrep-profile.entrep-profile', {
     filters: { user: user.id }, limit: 1,
   });
@@ -45,6 +61,8 @@ function serializePost(post, profilesByUserId) {
     ...post,
     title: post.title || '',
     postType: post.postType || 'community',
+    audience: post.audience || 'public',
+    alumniAudience: post.alumniAudience || null,
     isAnonymous: !!post.isAnonymous,
     authorPhotoUrl: authorProfile?.profilePhotoUrl || null,
     mediaUrls: serializeMedia(post.mediaUrls),
@@ -62,6 +80,26 @@ function parsePostTypes(raw) {
     .split(',')
     .map((item) => item.trim())
     .filter((item) => ['community', 'topic', 'noticeboard', 'suggestion'].includes(item));
+}
+
+function normalizeAlumniAudience(value, fallback = null) {
+  const normalized = String(value || '').trim().toLowerCase();
+  return ['learner', 'trainer', 'cluster'].includes(normalized) ? normalized : fallback;
+}
+
+function normalizeAudience(value) {
+  return String(value || '').trim().toLowerCase() === 'alumni' ? 'alumni' : 'public';
+}
+
+function hasAlumniAccess(profile, alumniAudience) {
+  if (!profile?.isAlumni) return false;
+  return !alumniAudience || profile.alumniMemberType === alumniAudience;
+}
+
+function hasPostAccess(post, profile, isAdmin) {
+  if (isAdmin) return true;
+  if (post?.audience !== 'alumni') return true;
+  return hasAlumniAccess(profile, post?.alumniAudience || null);
 }
 
 async function resolveDiscussionGroupMembership(strapi, user, discussionGroupId) {
@@ -88,20 +126,45 @@ module.exports = createCoreController('api::entrep-post.entrep-post', ({ strapi 
     const discussionGroupId = Number(ctx.query?.discussionGroupId);
     const requestedPostTypes = parsePostTypes(ctx.query?.postTypes);
     const mineOnly = String(ctx.query?.mine || '').toLowerCase() === 'true';
+    const requestedAudience = normalizeAudience(ctx.query?.audience);
+    const { user, profile } = await getUserAndProfile(strapi, ctx);
+    const isAdmin = isAdminUser(user, profile);
     const filters = {
       status: 'published',
       discussionGroup: { id: { $null: true } },
       postType: requestedPostTypes.length ? { $in: requestedPostTypes } : { $in: ['community', 'topic', 'noticeboard'] },
     };
 
+    if (requestedAudience === 'alumni') {
+      if (!user) return ctx.unauthorized();
+      if (!profile?.isAlumni && !isAdmin) return ctx.forbidden('Join the alumni network to view alumni posts');
+
+      const requestedAlumniAudience = normalizeAlumniAudience(
+        ctx.query?.alumniAudience,
+        profile?.alumniMemberType || null
+      );
+      if (!isAdmin && requestedAlumniAudience && requestedAlumniAudience !== profile?.alumniMemberType) {
+        return ctx.forbidden('You can only view your own alumni network');
+      }
+
+      filters.alumniAudience = requestedAlumniAudience || profile?.alumniMemberType || null;
+      filters.$or = [
+        { audience: 'alumni' },
+        { audience: 'public' },
+        { audience: { $null: true } },
+      ];
+    } else {
+      filters.audience = { $in: ['public', null] };
+    }
+
     if (mineOnly) {
-      if (!ctx.state.user?.id) return ctx.unauthorized();
-      filters.author = ctx.state.user.id;
+      if (!user?.id) return ctx.unauthorized();
+      filters.author = user.id;
     }
 
     if (Number.isFinite(discussionGroupId) && discussionGroupId > 0) {
-      if (!ctx.state.user?.id) return ctx.unauthorized();
-      const group = await resolveDiscussionGroupMembership(strapi, ctx.state.user, discussionGroupId);
+      if (!user?.id) return ctx.unauthorized();
+      const group = await resolveDiscussionGroupMembership(strapi, user, discussionGroupId);
       if (group === false) return ctx.forbidden('Join this discussion group to view its posts');
       if (!group) return ctx.notFound('Discussion group not found');
       filters.discussionGroup = discussionGroupId;
@@ -114,14 +177,16 @@ module.exports = createCoreController('api::entrep-post.entrep-post', ({ strapi 
     });
     const authorIds = list.map((post) => Number(post.author?.id || post.author)).filter(Boolean);
     const profilesByUserId = await getProfilesByUserIds(strapi, authorIds);
-    ctx.send({ data: list.map((post) => serializePost(post, profilesByUserId)) });
+    ctx.send({ data: list.filter((post) => hasPostAccess(post, profile, isAdmin)).map((post) => serializePost(post, profilesByUserId)) });
   },
   async createPost(ctx) {
     const { user, profile } = await getUserAndProfile(strapi, ctx);
     if (!user) return ctx.unauthorized();
-    const { content, tags = [], mediaUrls = [], discussionGroupId, title, postType = 'community', isAnonymous = false } = ctx.request.body || {};
+    const { content, tags = [], mediaUrls = [], discussionGroupId, title, postType = 'community', isAnonymous = false, audience, alumniAudience } = ctx.request.body || {};
     const normalizedMedia = serializeMedia(mediaUrls);
     const normalizedPostType = ['community', 'topic', 'noticeboard', 'suggestion'].includes(postType) ? postType : 'community';
+    const normalizedAudience = normalizeAudience(audience);
+    const normalizedAlumniAudience = normalizeAlumniAudience(alumniAudience, profile?.alumniMemberType || null);
     if (!String(content || '').trim() && normalizedMedia.length === 0) return ctx.badRequest('content or media required');
     if (['topic', 'noticeboard'].includes(normalizedPostType) && !String(title || '').trim()) {
       return ctx.badRequest('title is required');
@@ -131,6 +196,9 @@ module.exports = createCoreController('api::entrep-post.entrep-post', ({ strapi 
     }
     if (normalizedPostType === 'noticeboard' && !['trainer', 'admin'].includes(profile?.role)) {
       return ctx.forbidden('Only trainers and admins can publish noticeboard items');
+    }
+    if (normalizedAudience === 'alumni' && !hasAlumniAccess(profile, normalizedAlumniAudience)) {
+      return ctx.forbidden('Only matching alumni members can publish into this alumni network');
     }
 
     let discussionGroup = null;
@@ -152,6 +220,8 @@ module.exports = createCoreController('api::entrep-post.entrep-post', ({ strapi 
         content: String(content || '').trim(), tags, mediaUrls: normalizedMedia,
         isAnonymous: shouldHideName,
         postType: normalizedPostType,
+        audience: normalizedAudience,
+        alumniAudience: normalizedAudience === 'alumni' ? normalizedAlumniAudience : null,
         isExpert: profile?.isMentor || ['trainer','admin'].includes(profile?.role),
         status: 'published',
       },
@@ -177,12 +247,15 @@ module.exports = createCoreController('api::entrep-post.entrep-post', ({ strapi 
     ctx.send({ success: true });
   },
   async likePost(ctx) {
-    const { user } = await getUserAndProfile(strapi, ctx);
+    const { user, profile } = await getUserAndProfile(strapi, ctx);
     if (!user) return ctx.unauthorized();
     const post = await strapi.entityService.findOne('api::entrep-post.entrep-post', ctx.params.id, {
       populate: ['discussionGroup'],
     });
     if (!post) return ctx.notFound();
+    if (!hasPostAccess(post, profile, isAdminUser(user, profile))) {
+      return ctx.forbidden('This post belongs to another alumni network');
+    }
     if (post.discussionGroup) {
       const discussionGroup = await resolveDiscussionGroupMembership(strapi, user, Number(post.discussionGroup.id || post.discussionGroup));
       if (discussionGroup === false) return ctx.forbidden('Join this discussion group before interacting');
@@ -204,6 +277,9 @@ module.exports = createCoreController('api::entrep-post.entrep-post', ({ strapi 
       populate: ['discussionGroup'],
     });
     if (!post) return ctx.notFound();
+    if (!hasPostAccess(post, profile, isAdminUser(user, profile))) {
+      return ctx.forbidden('This post belongs to another alumni network');
+    }
     if (post.discussionGroup) {
       const discussionGroup = await resolveDiscussionGroupMembership(strapi, user, Number(post.discussionGroup.id || post.discussionGroup));
       if (discussionGroup === false) return ctx.forbidden('Join this discussion group before commenting');
@@ -213,6 +289,7 @@ module.exports = createCoreController('api::entrep-post.entrep-post', ({ strapi 
     const comments = Array.isArray(post.comments) ? [...post.comments] : [];
     comments.push({
       id: `c_${Date.now()}`, userId: user.id, authorName: profile?.fullName || user.username,
+      authorPhotoUrl: profile?.profilePhotoUrl || null,
       text, createdAt: new Date().toISOString(),
     });
     const updated = await strapi.entityService.update('api::entrep-post.entrep-post', post.id, {

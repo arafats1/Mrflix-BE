@@ -47,6 +47,16 @@ function sanitizeEventForCalendar(event) {
   };
 }
 
+function normalizeAlumniAudience(value, fallback = null) {
+  const normalized = String(value || '').trim().toLowerCase();
+  return ['learner', 'trainer', 'cluster'].includes(normalized) ? normalized : fallback;
+}
+
+function hasAlumniAccess(profile, alumniAudience) {
+  if (!profile?.isAlumni) return false;
+  return !alumniAudience || profile.alumniMemberType === alumniAudience;
+}
+
 async function getProfile(strapi, userId) {
   const list = await strapi.entityService.findMany('api::entrep-profile.entrep-profile', {
     filters: { user: userId }, limit: 1, populate: ['cluster'],
@@ -108,6 +118,7 @@ module.exports = createCoreController('api::entrep-event.entrep-event', ({ strap
 
       events = events.filter((event) => {
         if (event.visibility === 'public') return true;
+        if (event.visibility === 'alumni') return hasAlumniAccess(profile, normalizeAlumniAudience(event.alumniAudience, null));
 
         const eventCourseId = event.course?.id;
         if (eventCourseId && visibleCourseIds.includes(eventCourseId)) return true;
@@ -138,6 +149,10 @@ module.exports = createCoreController('api::entrep-event.entrep-event', ({ strap
     }
     const b = ctx.request.body || {};
     if (!b.title || !b.startsAt) return ctx.badRequest('title and startsAt required');
+    const requestedAlumniAudience = normalizeAlumniAudience(b.alumniAudience, profile?.alumniMemberType || null);
+    if (b.visibility === 'alumni' && !hasAlumniAccess(profile, requestedAlumniAudience) && !isAdminUser(user, profile)) {
+      return ctx.forbidden('You can only create alumni events for your own network');
+    }
     const eventColor = profile.role === 'provider'
       ? '#dc2626'
       : (profile.preferredEventColor || '#2563eb');
@@ -150,7 +165,8 @@ module.exports = createCoreController('api::entrep-event.entrep-event', ({ strap
         endsAt: b.endsAt || b.startsAt,
         course: b.courseId || null,
         visibility: b.visibility || (b.courseId ? 'course' : 'public'),
-        color: b.color || eventColor,
+        alumniAudience: b.visibility === 'alumni' ? requestedAlumniAudience : null,
+        color: b.color || (b.visibility === 'alumni' ? '#16a34a' : eventColor),
       },
     });
     ctx.send({ event });

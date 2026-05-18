@@ -1261,6 +1261,9 @@ export interface ApiEntrepEventEntrepEvent extends Struct.CollectionTypeSchema {
     draftAndPublish: false;
   };
   attributes: {
+    alumniAudience: Schema.Attribute.Enumeration<
+      ['learner', 'trainer', 'cluster']
+    >;
     color: Schema.Attribute.String;
     course: Schema.Attribute.Relation<
       'manyToOne',
@@ -1310,7 +1313,7 @@ export interface ApiEntrepEventEntrepEvent extends Struct.CollectionTypeSchema {
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
     visibility: Schema.Attribute.Enumeration<
-      ['public', 'course', 'cluster', 'private']
+      ['public', 'course', 'cluster', 'private', 'alumni']
     > &
       Schema.Attribute.DefaultTo<'course'>;
   };
@@ -1475,7 +1478,14 @@ export interface ApiEntrepLiveSessionEntrepLiveSession
     draftAndPublish: false;
   };
   attributes: {
+    alumniAudience: Schema.Attribute.Enumeration<
+      ['learner', 'trainer', 'cluster']
+    >;
     attendees: Schema.Attribute.JSON & Schema.Attribute.DefaultTo<[]>;
+    audience: Schema.Attribute.Enumeration<
+      ['public', 'course', 'cluster', 'alumni']
+    > &
+      Schema.Attribute.DefaultTo<'public'>;
     cluster: Schema.Attribute.Relation<
       'manyToOne',
       'api::entrep-cluster.entrep-cluster'
@@ -1670,6 +1680,11 @@ export interface ApiEntrepPostEntrepPost extends Struct.CollectionTypeSchema {
     draftAndPublish: false;
   };
   attributes: {
+    alumniAudience: Schema.Attribute.Enumeration<
+      ['learner', 'trainer', 'cluster']
+    >;
+    audience: Schema.Attribute.Enumeration<['public', 'alumni']> &
+      Schema.Attribute.DefaultTo<'public'>;
     author: Schema.Attribute.Relation<
       'manyToOne',
       'plugin::users-permissions.user'
@@ -1773,6 +1788,14 @@ export interface ApiEntrepProfileEntrepProfile
   };
   attributes: {
     age: Schema.Attribute.Integer;
+    alumniCompletionDate: Schema.Attribute.Date;
+    alumniCourseTitle: Schema.Attribute.String;
+    alumniCurrentBusiness: Schema.Attribute.String;
+    alumniJoinedAt: Schema.Attribute.DateTime;
+    alumniMemberType: Schema.Attribute.Enumeration<
+      ['learner', 'trainer', 'cluster']
+    > &
+      Schema.Attribute.DefaultTo<'learner'>;
     approvalStatus: Schema.Attribute.Enumeration<
       ['pending', 'approved', 'rejected', 'clarification']
     > &
@@ -1795,6 +1818,7 @@ export interface ApiEntrepProfileEntrepProfile
     gender: Schema.Attribute.String;
     goal: Schema.Attribute.String;
     interestedRoles: Schema.Attribute.JSON & Schema.Attribute.DefaultTo<[]>;
+    isAlumni: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
     isMentor: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<

@@ -45,8 +45,12 @@
     },
     "visibility": {
       "type": "enumeration",
-      "enum": ["public", "course", "cluster", "private"],
+      "enum": ["public", "course", "cluster", "private", "alumni"],
       "default": "course"
+    },
+    "alumniAudience": {
+      "type": "enumeration",
+      "enum": ["learner", "trainer", "cluster"]
     },
     "color": { "type": "string" }
   }

@@ -45,6 +45,15 @@
       "enum": ["scheduled", "live", "ended", "cancelled"],
       "default": "scheduled"
     },
+    "audience": {
+      "type": "enumeration",
+      "enum": ["public", "course", "cluster", "alumni"],
+      "default": "public"
+    },
+    "alumniAudience": {
+      "type": "enumeration",
+      "enum": ["learner", "trainer", "cluster"]
+    },
     "attendees": { "type": "json", "default": [] }
   }
 }

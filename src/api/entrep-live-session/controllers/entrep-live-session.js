@@ -6,10 +6,50 @@ const whereby = require('../../../utils/whereby');
 const { listCourseLearnerIds, notifyUsers } = require('../../../utils/entrep-notifications');
 const { inferExtension, sanitizeKeySegment, toNodeReadableStream, uploadStreamToStorage } = require('../../../utils/storage');
 
+function normalizeAlumniAudience(value, fallback = null) {
+  const normalized = String(value || '').trim().toLowerCase();
+  return ['learner', 'trainer', 'cluster'].includes(normalized) ? normalized : fallback;
+}
+
+function hasAlumniAccess(profile, alumniAudience) {
+  if (!profile?.isAlumni) return false;
+  return !alumniAudience || profile.alumniMemberType === alumniAudience;
+}
+
+async function listAlumniRecipientIds(strapi, alumniAudience, excludeUserId) {
+  const profiles = await strapi.entityService.findMany('api::entrep-profile.entrep-profile', {
+    filters: {
+      isAlumni: true,
+      alumniMemberType: alumniAudience,
+      user: {
+        id: { $ne: Number(excludeUserId) || 0 },
+      },
+    },
+    populate: ['user'],
+    limit: 500,
+  });
+
+  return profiles.map((entry) => Number(entry?.user?.id || entry?.user)).filter(Boolean);
+}
+
 async function resolveUser(strapi, ctx) {
   if (ctx.state.user?.id) {
     return strapi.entityService.findOne('plugin::users-permissions.user', ctx.state.user.id, { populate: ['role'] });
   }
+
+  const authHeader = ctx.request.header?.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    try {
+      const token = authHeader.substring(7);
+      const verified = await strapi.plugins['users-permissions'].services.jwt.verify(token);
+      if (verified?.id) {
+        return strapi.entityService.findOne('plugin::users-permissions.user', verified.id, { populate: ['role'] });
+      }
+    } catch (_) {
+      return null;
+    }
+  }
+
   return null;
 }
 
@@ -64,12 +104,15 @@ function hasSessionAccess(session, access) {
   const courseId = Number(session?.course?.id || session?.course || 0);
   const clusterId = Number(session?.cluster?.id || session?.cluster || 0);
   const trainerUserId = Number(session?.trainer?.user?.id || 0);
+  const sessionAudience = String(session?.audience || '').toLowerCase();
+  const alumniAudience = normalizeAlumniAudience(session?.alumniAudience, null);
 
   if (!access?.user) {
-    return !courseId && !clusterId;
+    return sessionAudience !== 'alumni' && !courseId && !clusterId;
   }
 
   if (trainerUserId && trainerUserId === Number(access.user.id)) return true;
+  if (sessionAudience === 'alumni') return hasAlumniAccess(access.profile, alumniAudience);
   if (courseId && (access.enrolledCourseIds.includes(courseId) || access.managedCourseIds.includes(courseId))) return true;
   if (clusterId && Number(access.profile?.cluster?.id || 0) === clusterId) return true;
   if (!courseId && !clusterId) return true;
@@ -269,7 +312,8 @@ async function syncRecordingForMeeting(strapi, details) {
   return updated;
 }
 
-function getSessionEventColor(profile) {
+function getSessionEventColor(profile, audience) {
+  if (audience === 'alumni') return '#16a34a';
   if (profile?.role === 'provider') return '#dc2626';
   return profile?.preferredEventColor || '#2563eb';
 }
@@ -318,12 +362,18 @@ module.exports = createCoreController('api::entrep-live-session.entrep-live-sess
     const user = await resolveUser(strapi, ctx);
     if (!user) return ctx.unauthorized();
     const profile = await getTrainerProfile(strapi, user.id);
-    if (!profile || !['trainer', 'admin', 'provider'].includes(profile.role)) {
-      return ctx.forbidden('Only trainers, providers or admins can schedule sessions');
+    if (!profile || (!['trainer', 'admin', 'provider'].includes(profile.role) && !profile.isAlumni)) {
+      return ctx.forbidden('Only trainers, providers, admins or alumni members can schedule sessions');
     }
 
-    const { title, description, topic, startsAt, endsAt, durationMinutes = 60, courseId, clusterId } = ctx.request.body || {};
+    const { title, description, topic, startsAt, endsAt, durationMinutes = 60, courseId, clusterId, alumniAudience } = ctx.request.body || {};
     if (!title || !startsAt) return ctx.badRequest('title and startsAt are required');
+
+    const requestedAlumniAudience = normalizeAlumniAudience(alumniAudience, profile?.alumniMemberType || null);
+    const isAlumniSession = Boolean(requestedAlumniAudience);
+    if (isAlumniSession && !hasAlumniAccess(profile, requestedAlumniAudience) && !isAdminUser(user, profile)) {
+      return ctx.forbidden('You can only schedule sessions for your own alumni network');
+    }
 
     const meeting = await whereby.createMeeting({
       startsAt,
@@ -339,13 +389,15 @@ module.exports = createCoreController('api::entrep-live-session.entrep-live-sess
         endsAt: endsAt || meeting.endsAt,
         durationMinutes,
         trainer: profile.id,
-        course: courseId || null,
-        cluster: clusterId || null,
+        course: isAlumniSession ? null : (courseId || null),
+        cluster: isAlumniSession ? null : (clusterId || null),
         provider: 'whereby',
         hostRoomUrl: meeting.hostRoomUrl,
         viewerRoomUrl: meeting.viewerRoomUrl,
         wherebyMeetingId: meeting.meetingId,
         status: 'scheduled',
+        audience: isAlumniSession ? 'alumni' : (courseId ? 'course' : (clusterId ? 'cluster' : 'public')),
+        alumniAudience: isAlumniSession ? requestedAlumniAudience : null,
       },
     });
 
@@ -357,14 +409,48 @@ module.exports = createCoreController('api::entrep-live-session.entrep-live-sess
         eventType: 'live_session',
         startsAt,
         endsAt: endsAt || meeting.endsAt,
-        course: courseId || null,
+        course: isAlumniSession ? null : (courseId || null),
         liveSession: session.id,
-        visibility: courseId ? 'course' : 'public',
-        color: getSessionEventColor(profile),
+        visibility: isAlumniSession ? 'alumni' : (courseId ? 'course' : 'public'),
+        alumniAudience: isAlumniSession ? requestedAlumniAudience : null,
+        color: getSessionEventColor(profile, isAlumniSession ? 'alumni' : 'public'),
       },
     });
 
-    if (courseId) {
+    if (isAlumniSession) {
+      const alumniRecipientIds = await listAlumniRecipientIds(strapi, requestedAlumniAudience, user.id);
+      if (alumniRecipientIds.length) {
+        await notifyUsers(strapi, alumniRecipientIds, {
+          actorId: user.id,
+          type: 'live_session',
+          title: `New alumni live session: ${title}`,
+          message: 'A live session has been scheduled in your alumni network.',
+          actionUrl: `/entrepreneur/sessions/${session.id}`,
+          metadata: {
+            sessionId: session.id,
+            alumniAudience: requestedAlumniAudience,
+          },
+        });
+      }
+
+      await strapi.entityService.create('api::entrep-post.entrep-post', {
+        data: {
+          author: user.id,
+          title: `Live session: ${title}`,
+          authorName: profile?.fullName || user.username,
+          authorRole: profile?.role || 'learner',
+          content: String(description || topic || 'A new alumni live session has been scheduled.').trim(),
+          mediaUrls: [],
+          tags: [],
+          isAnonymous: false,
+          postType: 'community',
+          audience: 'alumni',
+          alumniAudience: requestedAlumniAudience,
+          isExpert: profile?.isMentor || ['trainer', 'admin'].includes(profile?.role),
+          status: 'published',
+        },
+      });
+    } else if (courseId) {
       const learnerUserIds = await listCourseLearnerIds(strapi, courseId);
       await notifyUsers(strapi, learnerUserIds, {
         actorId: user.id,
@@ -397,7 +483,19 @@ module.exports = createCoreController('api::entrep-live-session.entrep-live-sess
   async upcoming(ctx) {
     const user = await resolveUser(strapi, ctx);
     const access = await buildSessionAccessContext(strapi, user);
-    const sessions = await listVisibleSessions(strapi, access, { onlyUpcoming: true });
+    const requestedAudience = String(ctx.query?.audience || '').trim().toLowerCase();
+    const requestedAlumniAudience = normalizeAlumniAudience(ctx.query?.alumniAudience, null);
+    let sessions = await listVisibleSessions(strapi, access, { onlyUpcoming: true });
+
+    if (requestedAudience === 'alumni') {
+      sessions = sessions.filter((session) => String(session?.audience || '').toLowerCase() === 'alumni');
+      if (requestedAlumniAudience) {
+        sessions = sessions.filter((session) => normalizeAlumniAudience(session?.alumniAudience, null) === requestedAlumniAudience);
+      }
+    } else if (requestedAudience === 'public' || requestedAudience === 'course' || requestedAudience === 'cluster') {
+      sessions = sessions.filter((session) => String(session?.audience || '').toLowerCase() === requestedAudience);
+    }
+
     ctx.send({ data: sessions });
   },
 

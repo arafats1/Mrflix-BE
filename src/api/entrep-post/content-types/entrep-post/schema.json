@@ -35,6 +35,15 @@
       "enum": ["community", "topic", "noticeboard", "suggestion"],
       "default": "community"
     },
+    "audience": {
+      "type": "enumeration",
+      "enum": ["public", "alumni"],
+      "default": "public"
+    },
+    "alumniAudience": {
+      "type": "enumeration",
+      "enum": ["learner", "trainer", "cluster"]
+    },
     "status": {
       "type": "enumeration",
       "enum": ["published", "pending", "rejected", "hidden"],

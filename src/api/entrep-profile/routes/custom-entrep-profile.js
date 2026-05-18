@@ -7,6 +7,7 @@ module.exports = {
     { method: 'PUT',  path: '/entrep/me',                  handler: 'entrep-profile.updateMe' },
     { method: 'PATCH', path: '/entrep/admin/profiles/:id/approval', handler: 'entrep-profile.updateApprovalStatus' },
     { method: 'POST', path: '/entrep/me/become-mentor',    handler: 'entrep-profile.becomeMentor' },
+    { method: 'POST', path: '/entrep/me/become-alumni',    handler: 'entrep-profile.becomeAlumni' },
     { method: 'POST', path: '/entrep/me/complete-onboarding', handler: 'entrep-profile.completeOnboarding' },
     { method: 'POST', path: '/entrep/me/save-job/:id',     handler: 'entrep-profile.saveJob' },
     { method: 'DELETE', path: '/entrep/me/save-job/:id',   handler: 'entrep-profile.unsaveJob' },
