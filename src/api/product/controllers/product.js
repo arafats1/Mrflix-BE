@@ -411,7 +411,11 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
     }
 
     const merchantReference = `SRV_${ctx.state.user.id}_${Date.now()}_${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
-    const purchase = await strapi.documents('api::purchase.purchase').create({
+
+    // Create via the low-level db query so relations are guaranteed to attach
+    // by numeric id. The documents() API has been observed to silently drop
+    // manyToOne relations passed as a bare numeric id in Strapi 5.x.
+    const createdRow = await strapi.db.query('api::purchase.purchase').create({
       data: {
         product: product.id,
         buyer: ctx.state.user.id,
@@ -425,8 +429,33 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
         deliveryPhone,
         contactName,
         serviceDate,
+        publishedAt: new Date(),
+      },
+      populate: {
+        product: { populate: ['seller'] },
+        buyer: true,
       },
     });
+
+    strapi.log.info(`bookService: purchase ${createdRow?.id} created with product=${createdRow?.product?.id || 'NULL'} seller=${createdRow?.product?.seller?.id || 'NULL'} buyer=${createdRow?.buyer?.id || 'NULL'} date=${serviceDate}`);
+
+    // Defensive: ensure the product/buyer relations actually persisted.
+    if (!createdRow?.product?.id || !createdRow?.buyer?.id) {
+      try {
+        await strapi.db.query('api::purchase.purchase').update({
+          where: { id: createdRow.id },
+          data: {
+            product: product.id,
+            buyer: ctx.state.user.id,
+          },
+        });
+        strapi.log.warn(`bookService: reattached product/buyer relations for purchase ${createdRow.id}`);
+      } catch (err) {
+        strapi.log.error(`bookService: failed to reattach relations for purchase ${createdRow.id}: ${err.message}`);
+      }
+    }
+
+    const purchase = { documentId: createdRow.documentId, id: createdRow.id };
 
     const updatedProduct = await strapi.documents('api::product.product').update({
       documentId: product.documentId,

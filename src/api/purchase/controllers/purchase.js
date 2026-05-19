@@ -346,6 +346,48 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
       return purchase?.product?.seller?.id === requestUser.id;
     });
 
+    // Diagnostic: log any orphaned service purchases (have serviceDate but
+    // no product relation) so a missing customer-details card has a clear
+    // root cause when troubleshooting.
+    const orphanServicePurchases = (purchases || []).filter((purchase) => {
+      return purchase?.serviceDate && !purchase?.product?.id;
+    });
+    if (orphanServicePurchases.length) {
+      strapi.log.warn(`sellerOrders: ${orphanServicePurchases.length} service purchase(s) have no product relation; ids=${orphanServicePurchases.map((p) => p.id).join(',')}`);
+
+      // Attempt to repair orphan service purchases by matching their
+      // serviceDate against any of this seller's service products with that
+      // date in serviceBookedDates. This recovers bookings that were saved
+      // before the bookService relation fix.
+      const sellerServices = await strapi.documents('api::product.product').findMany({
+        filters: {
+          itemType: 'service',
+          seller: { id: requestUser.id },
+        },
+        populate: { seller: true },
+        status: 'published',
+      });
+
+      for (const orphan of orphanServicePurchases) {
+        const match = sellerServices.find((service) => (
+          Array.isArray(service.serviceBookedDates) && service.serviceBookedDates.includes(orphan.serviceDate)
+        ));
+        if (!match) continue;
+        try {
+          await strapi.db.query('api::purchase.purchase').update({
+            where: { id: orphan.id },
+            data: { product: match.id },
+          });
+          strapi.log.info(`sellerOrders: repaired orphan purchase ${orphan.id} -> product ${match.id} (${match.name})`);
+          // Refresh in-memory representation so it surfaces this request.
+          orphan.product = { ...match, seller: { id: requestUser.id } };
+          sellerPurchases.push(orphan);
+        } catch (err) {
+          strapi.log.error(`sellerOrders: repair failed for purchase ${orphan.id}: ${err.message}`);
+        }
+      }
+    }
+
     return {
       data: sellerPurchases.map((purchase) => ({
         ...purchase,
