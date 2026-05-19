@@ -36,6 +36,14 @@
       "type": "string",
       "required": true
     },
+    "itemType": {
+      "type": "enumeration",
+      "enum": [
+        "product",
+        "service"
+      ],
+      "default": "product"
+    },
     "ageRange": {
       "type": "string"
     },

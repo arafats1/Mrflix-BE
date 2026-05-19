@@ -175,7 +175,11 @@ module.exports = createCoreController('api::entrep-enrollment.entrep-enrollment'
     });
     const updated = syncResult.enrollment;
 
-    ctx.send({ enrollment: updated, lessonProgress: lessonProgress[idStr] });
+    ctx.send({
+      enrollment: updated,
+      lessonProgress: lessonProgress[idStr],
+      certificate: syncResult.certificate || null,
+    });
   },
 
   /**

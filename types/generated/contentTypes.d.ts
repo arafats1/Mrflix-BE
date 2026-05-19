@@ -2403,6 +2403,8 @@ export interface ApiProductProduct extends Struct.CollectionTypeSchema {
       >;
     featuredImage: Schema.Attribute.String & Schema.Attribute.Required;
     images: Schema.Attribute.JSON & Schema.Attribute.Required;
+    itemType: Schema.Attribute.Enumeration<['product', 'service']> &
+      Schema.Attribute.DefaultTo<'product'>;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
       'oneToMany',

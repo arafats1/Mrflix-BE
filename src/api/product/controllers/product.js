@@ -24,12 +24,17 @@ function withSellerPaymentFallback(product) {
     deliveryAreas: normalizeDeliveryAreas(product.deliveryAreas),
     paymentPhone: product.paymentPhone || product.seller?.paymentPhone || null,
     paymentCode: product.paymentCode || product.seller?.paymentCode || null,
+    itemType: product.itemType === 'service' ? 'service' : 'product',
     marketplaceSource: product.marketplaceSource || 'core',
   };
 }
 
 function normalizeMarketplaceSource(value) {
   return value === 'entrepreneur' ? 'entrepreneur' : 'core';
+}
+
+function normalizeItemType(value) {
+  return value === 'service' ? 'service' : 'product';
 }
 
 async function getEntrepreneurProfileForUser(strapi, userId) {
@@ -190,6 +195,7 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
         category: input.category,
         images: Array.isArray(input.images) ? input.images : [],
         featuredImage: input.featuredImage,
+        itemType: normalizeItemType(input.itemType),
         ageRange: input.ageRange,
         audience: input.audience || 'children',
         discountPercent: input.discountPercent,
