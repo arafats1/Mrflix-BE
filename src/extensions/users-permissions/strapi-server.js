@@ -428,7 +428,7 @@ module.exports = (plugin) => {
           throw new ValidationError('Religion is required for religious providers');
         }
 
-        if (wantsProvider && providerType && !location) {
+        if (wantsProvider && providerType && providerType !== 'seller' && !location) {
           throw new ValidationError('Location is required for provider accounts');
         }
 
