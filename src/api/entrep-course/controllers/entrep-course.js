@@ -36,6 +36,77 @@ async function getManagedCourse(strapi, user, profile, courseId) {
   return course;
 }
 
+async function replaceCourseModules(strapi, courseId, modules, coursePassMark) {
+  const existingModules = await strapi.entityService.findMany('api::entrep-module.entrep-module', {
+    filters: { course: courseId },
+    populate: ['lessons', 'quiz'],
+    sort: { order: 'asc' },
+  });
+
+  for (const moduleEntity of existingModules) {
+    const lessons = Array.isArray(moduleEntity?.lessons) ? moduleEntity.lessons : [];
+    for (const lesson of lessons) {
+      await strapi.entityService.delete('api::entrep-lesson.entrep-lesson', lesson.id);
+    }
+
+    if (moduleEntity?.quiz?.id) {
+      await strapi.entityService.delete('api::entrep-quiz.entrep-quiz', moduleEntity.quiz.id);
+    }
+
+    await strapi.entityService.delete('api::entrep-module.entrep-module', moduleEntity.id);
+  }
+
+  if (!Array.isArray(modules)) return;
+
+  for (let mi = 0; mi < modules.length; mi++) {
+    const m = modules[mi];
+    let quizEntity = null;
+    if (m.quiz && Array.isArray(m.quiz.questions) && m.quiz.questions.length) {
+      quizEntity = await strapi.entityService.create('api::entrep-quiz.entrep-quiz', {
+        data: {
+          title: m.quiz.title || `${m.title} quiz`,
+          instructions: m.quiz.instructions,
+          passMark: m.quiz.passMark || coursePassMark || 80,
+          maxAttempts: m.quiz.maxAttempts || 3,
+          timeLimitMinutes: m.quiz.timeLimitMinutes || 0,
+          questions: m.quiz.questions.map((q, i) => ({ id: q.id || `q${mi}_${i}`, ...q })),
+          course: courseId,
+        },
+      });
+    }
+
+    const moduleEntity = await strapi.entityService.create('api::entrep-module.entrep-module', {
+      data: {
+        title: m.title,
+        description: m.description,
+        order: mi,
+        course: courseId,
+        quiz: quizEntity?.id || null,
+      },
+    });
+
+    if (Array.isArray(m.lessons)) {
+      for (let li = 0; li < m.lessons.length; li++) {
+        const l = m.lessons[li];
+        await strapi.entityService.create('api::entrep-lesson.entrep-lesson', {
+          data: {
+            title: l.title,
+            description: l.description,
+            order: li,
+            lessonType: l.lessonType || 'video',
+            videoUrl: l.videoUrl,
+            pdfUrl: l.pdfUrl,
+            imageUrl: l.imageUrl,
+            bodyText: l.bodyText,
+            durationMin: l.durationMin || 0,
+            module: moduleEntity.id,
+          },
+        });
+      }
+    }
+  }
+}
+
 async function listCourseEnrollments(strapi, courseId) {
   return strapi.entityService.findMany('api::entrep-enrollment.entrep-enrollment', {
     filters: { course: courseId },
@@ -197,58 +268,53 @@ module.exports = createCoreController('api::entrep-course.entrep-course', ({ str
       },
     });
 
-    // Modules + lessons + quiz
-    if (Array.isArray(b.modules)) {
-      for (let mi = 0; mi < b.modules.length; mi++) {
-        const m = b.modules[mi];
-        let quizEntity = null;
-        if (m.quiz && Array.isArray(m.quiz.questions) && m.quiz.questions.length) {
-          quizEntity = await strapi.entityService.create('api::entrep-quiz.entrep-quiz', {
-            data: {
-              title: m.quiz.title || `${m.title} quiz`,
-              instructions: m.quiz.instructions,
-              passMark: m.quiz.passMark || b.passMark || 80,
-              maxAttempts: m.quiz.maxAttempts || 3,
-              timeLimitMinutes: m.quiz.timeLimitMinutes || 0,
-              questions: m.quiz.questions.map((q, i) => ({ id: q.id || `q${mi}_${i}`, ...q })),
-              course: course.id,
-            },
-          });
-        }
-        const moduleEntity = await strapi.entityService.create('api::entrep-module.entrep-module', {
-          data: {
-            title: m.title,
-            description: m.description,
-            order: mi,
-            course: course.id,
-            quiz: quizEntity?.id || null,
-          },
-        });
-        if (Array.isArray(m.lessons)) {
-          for (let li = 0; li < m.lessons.length; li++) {
-            const l = m.lessons[li];
-            await strapi.entityService.create('api::entrep-lesson.entrep-lesson', {
-              data: {
-                title: l.title,
-                description: l.description,
-                order: li,
-                lessonType: l.lessonType || 'video',
-                videoUrl: l.videoUrl,
-                pdfUrl: l.pdfUrl,
-                imageUrl: l.imageUrl,
-                bodyText: l.bodyText,
-                durationMin: l.durationMin || 0,
-                module: moduleEntity.id,
-              },
-            });
-          }
-        }
-      }
-    }
+    await replaceCourseModules(strapi, course.id, b.modules, b.passMark || 80);
 
     const populated = await strapi.entityService.findOne('api::entrep-course.entrep-course', course.id, {
       populate: { modules: { populate: ['lessons', 'quiz'] } },
     });
+    ctx.send({ course: populated });
+  },
+
+  async updateAuthoredCourse(ctx) {
+    const user = await resolveUser(strapi, ctx);
+    if (!user) return ctx.unauthorized();
+    const profile = await getProfile(strapi, user.id);
+    const adminUser = isAdminUser(user, profile);
+    const course = await getManagedCourse(strapi, user, profile, ctx.params.id);
+    if (!course) return ctx.notFound('Course not found');
+    if (course === false) return ctx.forbidden('You can only edit your own courses');
+
+    const b = ctx.request.body || {};
+    if (!b.title) return ctx.badRequest('title is required');
+
+    const updated = await strapi.entityService.update('api::entrep-course.entrep-course', course.id, {
+      data: {
+        title: b.title,
+        shortDescription: b.shortDescription,
+        description: b.description,
+        category: b.category,
+        level: b.level || 'Beginner',
+        skills: b.skills || [],
+        durationWeeks: b.durationWeeks || 0,
+        coverUrl: b.coverUrl,
+        previewVideoUrl: b.previewVideoUrl,
+        coverGradient: b.coverGradient,
+        accent: b.accent,
+        priceUGX: b.priceUGX || 0,
+        passMark: b.passMark || 80,
+        providerName: b.providerName || course.providerName || profile?.fullName || user.username || user.email,
+        trainer: course.trainer?.id || profile?.id || null,
+        status: adminUser ? (b.status || course.status || 'approved') : (course.status || 'pending_review'),
+      },
+    });
+
+    await replaceCourseModules(strapi, course.id, b.modules, b.passMark || updated.passMark || 80);
+
+    const populated = await strapi.entityService.findOne('api::entrep-course.entrep-course', course.id, {
+      populate: { trainer: true, modules: { populate: ['lessons', 'quiz'] } },
+    });
+
     ctx.send({ course: populated });
   },
 
