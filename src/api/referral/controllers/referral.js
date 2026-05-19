@@ -10,6 +10,27 @@ function generateReferralCode() {
   return crypto.randomBytes(4).toString('hex').toUpperCase();
 }
 
+function normalizeProviderTypes(input) {
+  if (Array.isArray(input)) {
+    return input.map((item) => String(item || '').trim().toLowerCase()).filter(Boolean);
+  }
+  if (typeof input === 'string') {
+    return input
+      .split(',')
+      .map((item) => item.trim().toLowerCase())
+      .filter(Boolean);
+  }
+  return [];
+}
+
+function isSellerReferralUser(user) {
+  if (!user) return false;
+  const accountType = String(user.accountType || '').trim().toLowerCase();
+  const providerType = String(user.providerType || '').trim().toLowerCase();
+  const providerTypes = normalizeProviderTypes(user.providerTypes || user.providerType);
+  return providerType === 'seller' || providerTypes.includes('seller') || user.isSeller === true || accountType === 'provider' && providerType === 'seller' || accountType === 'both' && providerTypes.includes('seller');
+}
+
 module.exports = createCoreController('api::referral.referral', ({ strapi }) => ({
   // GET /referrals/my-code — Get or create user's referral code
   async myCode(ctx) {
@@ -63,7 +84,14 @@ module.exports = createCoreController('api::referral.referral', ({ strapi }) => 
         referrer: { id: userId },
         status: { $in: ['activated', 'rewarded'] },
       },
+      populate: {
+        referred: {
+          fields: ['username', 'email', 'accountType', 'providerType', 'providerTypes'],
+        },
+      },
     });
+
+    const totalSellerReferred = activatedReferrals.filter((referral) => isSellerReferralUser(referral?.referred)).length;
 
     // Check if user has applied someone else's code
     const appliedCode = await strapi.entityService.findMany('api::referral.referral', {
@@ -87,6 +115,7 @@ module.exports = createCoreController('api::referral.referral', ({ strapi }) => 
         code,
         link: `${frontendUrl}/auth/register?ref=${code}`,
         totalReferred: activatedReferrals.length,
+        totalSellerReferred,
         rewardMovies,
         hasAppliedCode: appliedCode.length > 0,
         freeMoviesRemaining: credits,
