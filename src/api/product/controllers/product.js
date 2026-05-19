@@ -16,12 +16,40 @@ function normalizeDeliveryAreas(input = []) {
   return [...new Set(values.map((value) => String(value || '').trim()).filter(Boolean))];
 }
 
+function normalizeServiceDate(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+
+  const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!match) return '';
+
+  const normalized = `${match[1]}-${match[2]}-${match[3]}`;
+  const date = new Date(`${normalized}T00:00:00.000Z`);
+  return Number.isNaN(date.getTime()) ? '' : normalized;
+}
+
+function normalizeServiceDateList(input = []) {
+  const values = Array.isArray(input)
+    ? input
+    : typeof input === 'string'
+      ? input.split(/[\n,]+/)
+      : [];
+
+  return [...new Set(values.map(normalizeServiceDate).filter(Boolean))].sort();
+}
+
 function withSellerPaymentFallback(product) {
   if (!product) return product;
 
   return {
     ...product,
     deliveryAreas: normalizeDeliveryAreas(product.deliveryAreas),
+    serviceAvailabilityDates: product.itemType === 'service'
+      ? normalizeServiceDateList(product.serviceAvailabilityDates)
+      : [],
+    serviceBookedDates: product.itemType === 'service'
+      ? normalizeServiceDateList(product.serviceBookedDates)
+      : [],
     paymentPhone: product.paymentPhone || product.seller?.paymentPhone || null,
     paymentCode: product.paymentCode || product.seller?.paymentCode || null,
     itemType: product.itemType === 'service' ? 'service' : 'product',
@@ -154,6 +182,66 @@ async function findProductByIdentifier(strapi, id) {
   return products?.[0] || null;
 }
 
+function getDiscountedProductAmount(product) {
+  const basePrice = Number(product?.priceUGX || 0);
+  const discountPercent = Math.min(100, Math.max(0, Number(product?.discountPercent || 0)));
+
+  if (discountPercent <= 0) {
+    return basePrice;
+  }
+
+  const savings = Math.round(basePrice * (discountPercent / 100));
+  return Math.max(basePrice - savings, 0);
+}
+
+function canManageProduct(ctx, product) {
+  if (!ctx.state.user?.id || !product?.seller?.id) return false;
+  return product.seller.id === ctx.state.user.id;
+}
+
+function buildProductPayload(input = {}, existingProduct = null) {
+  const nextItemType = Object.prototype.hasOwnProperty.call(input, 'itemType')
+    ? normalizeItemType(input.itemType)
+    : normalizeItemType(existingProduct?.itemType);
+
+  const nextBookedDates = nextItemType === 'service'
+    ? normalizeServiceDateList(
+        Object.prototype.hasOwnProperty.call(input, 'serviceBookedDates')
+          ? input.serviceBookedDates
+          : existingProduct?.serviceBookedDates
+      )
+    : [];
+
+  const nextAvailabilityDates = nextItemType === 'service'
+    ? normalizeServiceDateList(
+        Object.prototype.hasOwnProperty.call(input, 'serviceAvailabilityDates')
+          ? input.serviceAvailabilityDates
+          : existingProduct?.serviceAvailabilityDates
+      ).filter((date) => !nextBookedDates.includes(date))
+    : [];
+
+  return {
+    ...(Object.prototype.hasOwnProperty.call(input, 'name') ? { name: input.name } : {}),
+    ...(Object.prototype.hasOwnProperty.call(input, 'description') ? { description: input.description } : {}),
+    ...(Object.prototype.hasOwnProperty.call(input, 'priceUGX') ? { priceUGX: input.priceUGX } : {}),
+    ...(Object.prototype.hasOwnProperty.call(input, 'category') ? { category: input.category } : {}),
+    ...(Object.prototype.hasOwnProperty.call(input, 'images') ? { images: Array.isArray(input.images) ? input.images : [] } : {}),
+    ...(Object.prototype.hasOwnProperty.call(input, 'featuredImage') ? { featuredImage: input.featuredImage } : {}),
+    ...(Object.prototype.hasOwnProperty.call(input, 'itemType') ? { itemType: nextItemType } : {}),
+    ...(Object.prototype.hasOwnProperty.call(input, 'ageRange') ? { ageRange: input.ageRange } : {}),
+    ...(Object.prototype.hasOwnProperty.call(input, 'audience') ? { audience: nextItemType === 'service' ? 'adults' : (input.audience || 'children') } : {}),
+    ...(Object.prototype.hasOwnProperty.call(input, 'discountPercent') ? { discountPercent: input.discountPercent } : {}),
+    ...(Object.prototype.hasOwnProperty.call(input, 'stockQuantity') ? { stockQuantity: nextItemType === 'service' ? 1 : input.stockQuantity } : {}),
+    ...(Object.prototype.hasOwnProperty.call(input, 'deliveryAreas') ? { deliveryAreas: normalizeDeliveryAreas(input.deliveryAreas) } : {}),
+    ...(Object.prototype.hasOwnProperty.call(input, 'paymentPhone') ? { paymentPhone: input.paymentPhone } : {}),
+    ...(Object.prototype.hasOwnProperty.call(input, 'paymentCode') ? { paymentCode: input.paymentCode } : {}),
+    ...(Object.prototype.hasOwnProperty.call(input, 'marketplaceSource') ? { marketplaceSource: normalizeMarketplaceSource(input.marketplaceSource) } : {}),
+    ...(Object.prototype.hasOwnProperty.call(input, 'status') ? { status: input.status || 'active' } : {}),
+    ...(nextItemType === 'service' || Object.prototype.hasOwnProperty.call(input, 'serviceAvailabilityDates') ? { serviceAvailabilityDates: nextAvailabilityDates } : {}),
+    ...(nextItemType === 'service' || Object.prototype.hasOwnProperty.call(input, 'serviceBookedDates') ? { serviceBookedDates: nextBookedDates } : {}),
+  };
+}
+
 module.exports = createCoreController('api::product.product', ({ strapi }) => ({
   /**
    * Get products owned by the current user.
@@ -187,24 +275,16 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
     }
 
     const input = ctx.request.body?.data || {};
+    const payload = buildProductPayload({
+      ...input,
+      audience: input.itemType === 'service' ? 'adults' : (input.audience || 'children'),
+      stockQuantity: input.itemType === 'service' ? 1 : input.stockQuantity,
+      serviceBookedDates: [],
+    });
+
     const created = await strapi.documents('api::product.product').create({
       data: {
-        name: input.name,
-        description: input.description,
-        priceUGX: input.priceUGX,
-        category: input.category,
-        images: Array.isArray(input.images) ? input.images : [],
-        featuredImage: input.featuredImage,
-        itemType: normalizeItemType(input.itemType),
-        ageRange: input.ageRange,
-        audience: input.audience || 'children',
-        discountPercent: input.discountPercent,
-        stockQuantity: input.stockQuantity,
-        deliveryAreas: normalizeDeliveryAreas(input.deliveryAreas),
-        paymentPhone: input.paymentPhone,
-        paymentCode: input.paymentCode,
-        marketplaceSource: normalizeMarketplaceSource(input.marketplaceSource),
-        status: input.status || 'active',
+        ...payload,
         seller: ctx.state.user.id,
       },
       populate: {
@@ -241,6 +321,33 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
     return { data: await attachReviewSummary(strapi, soldProducts) };
   },
 
+  async update(ctx) {
+    if (!ctx.state.user) {
+      return ctx.unauthorized('You must be logged in to update a product');
+    }
+
+    const existingProduct = await findProductByIdentifier(strapi, ctx.params.id);
+    if (!existingProduct) {
+      return ctx.notFound('Product not found');
+    }
+
+    if (!canManageProduct(ctx, existingProduct)) {
+      return ctx.forbidden('You can only update your own products');
+    }
+
+    const input = ctx.request.body?.data || {};
+    const updated = await strapi.documents('api::product.product').update({
+      documentId: existingProduct.documentId,
+      data: buildProductPayload(input, existingProduct),
+      populate: {
+        seller: true,
+      },
+      status: 'published',
+    });
+
+    return { data: await attachReviewSummary(strapi, await withSoldCount(strapi, updated)) };
+  },
+
   async findOne(ctx) {
     const product = await findProductByIdentifier(strapi, ctx.params.id);
 
@@ -253,5 +360,92 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
     }
 
     return { data: await attachReviewSummary(strapi, await withSoldCount(strapi, product)) };
+  },
+
+  async bookService(ctx) {
+    if (!ctx.state.user) {
+      return ctx.unauthorized('You must be logged in to book a service');
+    }
+
+    const product = await findProductByIdentifier(strapi, ctx.params.id);
+    if (!product) {
+      return ctx.notFound('Service not found');
+    }
+
+    if (product.itemType !== 'service') {
+      return ctx.badRequest('Only services can be booked');
+    }
+
+    if (product.status !== 'active') {
+      return ctx.badRequest('This service is not available for booking right now.');
+    }
+
+    const payload = ctx.request.body?.data || ctx.request.body || {};
+    const serviceDate = normalizeServiceDate(payload.serviceDate);
+    const contactName = String(payload.contactName || '').trim();
+    const deliveryPhone = String(payload.deliveryPhone || '').trim();
+    const deliveryAddress = String(payload.deliveryAddress || '').trim();
+
+    if (!serviceDate) {
+      return ctx.badRequest('Select a valid booking date.');
+    }
+
+    if (!contactName || !deliveryPhone || !deliveryAddress) {
+      return ctx.badRequest('Name, phone number, and address are required to book a service.');
+    }
+
+    const availableDates = normalizeServiceDateList(product.serviceAvailabilityDates);
+    const bookedDates = normalizeServiceDateList(product.serviceBookedDates);
+
+    if (!availableDates.includes(serviceDate)) {
+      return ctx.badRequest('That date is not available for booking.');
+    }
+
+    if (bookedDates.includes(serviceDate)) {
+      return ctx.badRequest('That date has already been booked.');
+    }
+
+    const amount = getDiscountedProductAmount(product);
+    if (amount <= 0) {
+      return ctx.badRequest('This service is not available for booking right now.');
+    }
+
+    const merchantReference = `SRV_${ctx.state.user.id}_${Date.now()}_${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+    const purchase = await strapi.documents('api::purchase.purchase').create({
+      data: {
+        product: product.id,
+        buyer: ctx.state.user.id,
+        amount,
+        paymentMethod: 'pay_on_delivery',
+        transactionId: merchantReference,
+        status: 'pending',
+        deliveryStatus: 'pending_delivery',
+        isPayOnDelivery: true,
+        deliveryAddress,
+        deliveryPhone,
+        contactName,
+        serviceDate,
+      },
+    });
+
+    const updatedProduct = await strapi.documents('api::product.product').update({
+      documentId: product.documentId,
+      data: {
+        serviceAvailabilityDates: availableDates.filter((date) => date !== serviceDate),
+        serviceBookedDates: [...bookedDates, serviceDate].sort(),
+      },
+      populate: {
+        seller: true,
+      },
+      status: 'published',
+    });
+
+    return {
+      data: {
+        purchaseId: purchase.documentId,
+        serviceDate,
+        product: await attachReviewSummary(strapi, await withSoldCount(strapi, updatedProduct)),
+      },
+    };
   },
 }));

@@ -96,6 +96,12 @@
     },
     "deliveryAreas": {
       "type": "json"
+    },
+    "serviceAvailabilityDates": {
+      "type": "json"
+    },
+    "serviceBookedDates": {
+      "type": "json"
     }
   }
 }

@@ -2422,6 +2422,8 @@ export interface ApiProductProduct extends Struct.CollectionTypeSchema {
       'manyToOne',
       'plugin::users-permissions.user'
     >;
+    serviceAvailabilityDates: Schema.Attribute.JSON;
+    serviceBookedDates: Schema.Attribute.JSON;
     status: Schema.Attribute.Enumeration<
       ['active', 'out_of_stock', 'discontinued']
     > &
@@ -2671,6 +2673,7 @@ export interface ApiPurchasePurchase extends Struct.CollectionTypeSchema {
     savingsDepositApplied: Schema.Attribute.Boolean &
       Schema.Attribute.DefaultTo<false>;
     seasonNumber: Schema.Attribute.Integer;
+    serviceDate: Schema.Attribute.Date;
     status: Schema.Attribute.Enumeration<['pending', 'completed', 'failed']> &
       Schema.Attribute.Required &
       Schema.Attribute.DefaultTo<'pending'>;

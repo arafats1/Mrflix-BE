@@ -31,6 +31,12 @@ module.exports = {
       config: {},
     },
     {
+      method: 'POST',
+      path: '/products/:id/book-service',
+      handler: 'product.bookService',
+      config: {},
+    },
+    {
       method: 'PUT',
       path: '/products/:id',
       handler: 'product.update',

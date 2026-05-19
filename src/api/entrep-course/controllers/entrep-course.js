@@ -588,21 +588,22 @@ module.exports = createCoreController('api::entrep-course.entrep-course', ({ str
       .filter((post) => post.postType === 'suggestion')
       .map((post) => {
         const suggestionProfile = profileByUserId.get(Number(post.author?.id || post.author));
+        const isAnonymousSuggestion = !!post.isAnonymous;
         return {
           id: post.id,
           title: post.title || '',
           content: post.content || '',
-          authorName: post.authorName || suggestionProfile?.fullName || 'Learner',
-          isAnonymous: !!post.isAnonymous,
+          authorName: isAnonymousSuggestion ? 'Anonymous learner' : (post.authorName || suggestionProfile?.fullName || 'Learner'),
+          isAnonymous: isAnonymousSuggestion,
           createdAt: post.createdAt || null,
-          cluster: serializeCluster(suggestionProfile?.cluster),
-          learner: suggestionProfile ? {
+          cluster: isAnonymousSuggestion ? null : serializeCluster(suggestionProfile?.cluster),
+          learner: isAnonymousSuggestion || !suggestionProfile ? null : {
             id: suggestionProfile.id,
             profilePhotoUrl: suggestionProfile.profilePhotoUrl || '',
             email: suggestionProfile.email || suggestionProfile.user?.email || '',
             phone: suggestionProfile.phone || suggestionProfile.user?.phone || '',
             location: suggestionProfile.location || '',
-          } : null,
+          },
         };
       });
 
