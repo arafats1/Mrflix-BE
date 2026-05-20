@@ -82,7 +82,7 @@ module.exports = createCoreController('api::entrep-job.entrep-job', ({ strapi })
     if (!ctx.state.user?.id) return ctx.unauthorized();
 
     const list = await strapi.entityService.findMany('api::entrep-job.entrep-job', {
-      filters: { postedBy: ctx.state.user.id },
+      filters: { postedBy: { id: ctx.state.user.id } },
       sort: { createdAt: 'desc' },
       populate: {
         postedBy: true,
