@@ -346,6 +346,7 @@ module.exports = (plugin) => {
             savingsLifetimeDepositedUGX: Number(c.savingsLifetimeDepositedUGX || 0),
           }))
         : [],
+      avatarUrl: userWithRole.avatarUrl || null,
       isKeypUser: !!userWithRole.isKeypUser,
       keypActivatedAt: userWithRole.keypActivatedAt,
       lastSeenAt: userWithRole.lastSeenAt || null,

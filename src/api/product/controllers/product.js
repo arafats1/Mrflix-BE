@@ -84,7 +84,7 @@ async function enrichSellerIdentity(strapi, product) {
   const sellerLocation = entrepreneurProfile?.location || product.seller?.location || null;
   const sellerPhone = entrepreneurProfile?.phone || product.paymentPhone || product.seller?.phone || product.seller?.paymentPhone || null;
   const sellerAge = entrepreneurProfile?.age || null;
-  const sellerProfilePhotoUrl = entrepreneurProfile?.profilePhotoUrl || null;
+  const sellerProfilePhotoUrl = entrepreneurProfile?.profilePhotoUrl || product.seller?.avatarUrl || null;
 
   return {
     ...product,
