@@ -1334,11 +1334,15 @@ export interface ApiEntrepJobEntrepJob extends Struct.CollectionTypeSchema {
     applicationsCount: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
     closingAt: Schema.Attribute.DateTime;
     company: Schema.Attribute.String;
+    companyLogo: Schema.Attribute.String;
     contactEmail: Schema.Attribute.String;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
     description: Schema.Attribute.Text;
+    experienceLevel: Schema.Attribute.String;
+    industry: Schema.Attribute.String;
+    jobFunction: Schema.Attribute.String;
     jobType: Schema.Attribute.Enumeration<
       ['Full-time', 'Part-time', 'Internship', 'Contract', 'Freelance']
     > &

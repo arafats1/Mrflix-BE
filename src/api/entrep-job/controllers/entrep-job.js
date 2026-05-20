@@ -13,6 +13,42 @@ function withPostedByName(job) {
   };
 }
 
+function cleanString(value) {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function buildPublicFilters(query = {}) {
+  const filters = {
+    status: 'open',
+    $or: [
+      { closingAt: { $null: true } },
+      { closingAt: { $gte: new Date().toISOString() } }
+    ],
+  };
+
+  const jobFunction = cleanString(query.jobFunction);
+  const industry = cleanString(query.industry);
+  const location = cleanString(query.location);
+  const experienceLevel = cleanString(query.experienceLevel);
+  const search = cleanString(query.search);
+
+  if (jobFunction) filters.jobFunction = jobFunction;
+  if (industry) filters.industry = industry;
+  if (location) filters.location = location;
+  if (experienceLevel) filters.experienceLevel = experienceLevel;
+  if (search) {
+    filters.$and = [{
+      $or: [
+        { title: { $containsi: search } },
+        { company: { $containsi: search } },
+        { description: { $containsi: search } },
+      ],
+    }];
+  }
+
+  return filters;
+}
+
 async function resolveUser(strapi, ctx) {
   if (!ctx.state.user?.id) return null;
   return strapi.entityService.findOne('plugin::users-permissions.user', ctx.state.user.id, { populate: ['role'] });
@@ -33,13 +69,20 @@ function isAdminUser(user, profile) {
 module.exports = createCoreController('api::entrep-job.entrep-job', ({ strapi }) => ({
   async find(ctx) {
     const list = await strapi.entityService.findMany('api::entrep-job.entrep-job', {
-      filters: {
-        status: 'open',
-        $or: [
-          { closingAt: { $null: true } },
-          { closingAt: { $gte: new Date().toISOString() } }
-        ]
+      filters: buildPublicFilters(ctx.query || {}),
+      sort: { createdAt: 'desc' },
+      populate: {
+        postedBy: true,
+        postedByProfile: true
       },
+    });
+    ctx.send({ data: list.map(withPostedByName) });
+  },
+  async mine(ctx) {
+    if (!ctx.state.user?.id) return ctx.unauthorized();
+
+    const list = await strapi.entityService.findMany('api::entrep-job.entrep-job', {
+      filters: { postedBy: ctx.state.user.id },
       sort: { createdAt: 'desc' },
       populate: {
         postedBy: true,
@@ -62,6 +105,10 @@ module.exports = createCoreController('api::entrep-job.entrep-job', ({ strapi })
       data: {
         title: b.title,
         company: b.company,
+        companyLogo: b.companyLogo,
+        jobFunction: b.jobFunction,
+        industry: b.industry,
+        experienceLevel: b.experienceLevel,
         location: b.location,
         jobType: b.jobType || 'Full-time',
         salary: b.salary,
@@ -95,6 +142,10 @@ module.exports = createCoreController('api::entrep-job.entrep-job', ({ strapi })
       data: {
         title: b.title,
         company: b.company,
+        companyLogo: b.companyLogo,
+        jobFunction: b.jobFunction,
+        industry: b.industry,
+        experienceLevel: b.experienceLevel,
         location: b.location,
         jobType: b.jobType,
         salary: b.salary,
@@ -132,8 +183,16 @@ module.exports = createCoreController('api::entrep-job.entrep-job', ({ strapi })
     const job = await strapi.entityService.findOne('api::entrep-job.entrep-job', jobId);
     if (!job) return ctx.notFound();
     const b = ctx.request.body || {};
+    const applicant = await strapi.entityService.findOne('plugin::users-permissions.user', ctx.state.user.id);
     const application = await strapi.entityService.create('api::entrep-application.entrep-application', {
-      data: { job: jobId, applicant: ctx.state.user.id, coverLetter: b.coverLetter, resumeUrl: b.resumeUrl, status: 'submitted' },
+      data: {
+        job: jobId,
+        applicant: ctx.state.user.id,
+        applicantName: applicant?.fullName || applicant?.username || b.applicantName || 'Applicant',
+        coverNote: b.coverNote || b.coverLetter || '',
+        portfolioUrls: Array.isArray(b.portfolioUrls) ? b.portfolioUrls : [],
+        status: 'submitted'
+      },
     });
     await strapi.entityService.update('api::entrep-job.entrep-job', jobId, {
       data: { applicationsCount: (job.applicationsCount || 0) + 1 },

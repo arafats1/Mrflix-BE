@@ -10,6 +10,10 @@
   "attributes": {
     "title": { "type": "string", "required": true },
     "company": { "type": "string" },
+    "companyLogo": { "type": "string" },
+    "jobFunction": { "type": "string" },
+    "industry": { "type": "string" },
+    "experienceLevel": { "type": "string" },
     "location": { "type": "string" },
     "jobType": {
       "type": "enumeration",
