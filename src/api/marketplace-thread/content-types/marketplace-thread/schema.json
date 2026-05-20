@@ -1,0 +1,49 @@
+{
+  "kind": "collectionType",
+  "collectionName": "marketplace_threads",
+  "info": {
+    "singularName": "marketplace-thread",
+    "pluralName": "marketplace-threads",
+    "displayName": "Marketplace Thread",
+    "description": "Chat thread between a buyer and a seller, optionally tied to a product"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "buyer": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user"
+    },
+    "seller": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user"
+    },
+    "product": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::product.product"
+    },
+    "messages": {
+      "type": "json",
+      "default": []
+    },
+    "lastMessageAt": {
+      "type": "datetime"
+    },
+    "lastMessageText": {
+      "type": "string"
+    },
+    "buyerUnread": {
+      "type": "integer",
+      "default": 0
+    },
+    "sellerUnread": {
+      "type": "integer",
+      "default": 0
+    }
+  }
+}

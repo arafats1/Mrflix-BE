@@ -200,6 +200,10 @@ module.exports = (plugin) => {
     mappedBy: 'provider',
   };
 
+  plugin.contentTypes.user.schema.attributes.lastSeenAt = {
+    type: 'datetime',
+  };
+
   // Override the me controller to populate role.
   // `plugin.controllers.user` is a plain object (not a factory), so direct
   // property assignment is the correct override pattern here.
@@ -211,6 +215,23 @@ module.exports = (plugin) => {
     if (!user) {
       return ctx.unauthorized();
     }
+
+    // Update lastSeenAt on every /users/me call (throttled to once per minute to avoid write storms)
+    const nowIso = new Date().toISOString();
+    try {
+      const existing = await strapi.db.query('plugin::users-permissions.user').findOne({
+        where: { id: user.id },
+        select: ['lastSeenAt'],
+      });
+      const lastSeen = existing?.lastSeenAt ? new Date(existing.lastSeenAt) : null;
+      const diffMs = lastSeen ? Date.now() - lastSeen.getTime() : Infinity;
+      if (diffMs > 60_000) {
+        await strapi.db.query('plugin::users-permissions.user').update({
+          where: { id: user.id },
+          data: { lastSeenAt: nowIso },
+        });
+      }
+    } catch (_) { /* non-fatal */ }
 
     const isKeypClient = ['true', '1', 'web', 'mrkeyp'].includes(String(ctx.request.header['x-mrkeyp-client'] || '').toLowerCase());
 
@@ -323,6 +344,7 @@ module.exports = (plugin) => {
         : [],
       isKeypUser: !!userWithRole.isKeypUser,
       keypActivatedAt: userWithRole.keypActivatedAt,
+      lastSeenAt: userWithRole.lastSeenAt || null,
       createdAt: userWithRole.createdAt,
       updatedAt: userWithRole.updatedAt,
       isPremium: activeSub && activeSub.length > 0,

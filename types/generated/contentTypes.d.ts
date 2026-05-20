@@ -2105,6 +2105,49 @@ export interface ApiFreeTrialWatchFreeTrialWatch
   };
 }
 
+export interface ApiMarketplaceThreadMarketplaceThread
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'marketplace_threads';
+  info: {
+    description: 'Chat thread between a buyer and a seller, optionally tied to a product';
+    displayName: 'Marketplace Thread';
+    pluralName: 'marketplace-threads';
+    singularName: 'marketplace-thread';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    buyer: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+    buyerUnread: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    lastMessageAt: Schema.Attribute.DateTime;
+    lastMessageText: Schema.Attribute.String;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::marketplace-thread.marketplace-thread'
+    > &
+      Schema.Attribute.Private;
+    messages: Schema.Attribute.JSON & Schema.Attribute.DefaultTo<[]>;
+    product: Schema.Attribute.Relation<'manyToOne', 'api::product.product'>;
+    publishedAt: Schema.Attribute.DateTime;
+    seller: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+    sellerUnread: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface ApiMovieRequestMovieRequest
   extends Struct.CollectionTypeSchema {
   collectionName: 'movie_requests';
@@ -3745,6 +3788,7 @@ export interface PluginUsersPermissionsUser
     isKeypUser: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
     isParent: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<true>;
     keypActivatedAt: Schema.Attribute.DateTime;
+    lastSeenAt: Schema.Attribute.DateTime;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
       'oneToMany',
@@ -3859,6 +3903,7 @@ declare module '@strapi/strapi' {
       'api::entrep-submission.entrep-submission': ApiEntrepSubmissionEntrepSubmission;
       'api::exclusive-subscription.exclusive-subscription': ApiExclusiveSubscriptionExclusiveSubscription;
       'api::free-trial-watch.free-trial-watch': ApiFreeTrialWatchFreeTrialWatch;
+      'api::marketplace-thread.marketplace-thread': ApiMarketplaceThreadMarketplaceThread;
       'api::movie-request.movie-request': ApiMovieRequestMovieRequest;
       'api::movie.movie': ApiMovieMovie;
       'api::music.music': ApiMusicMusic;
