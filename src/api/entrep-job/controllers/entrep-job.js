@@ -81,15 +81,12 @@ module.exports = createCoreController('api::entrep-job.entrep-job', ({ strapi })
   async mine(ctx) {
     if (!ctx.state.user?.id) return ctx.unauthorized();
 
-    const list = await strapi.entityService.findMany('api::entrep-job.entrep-job', {
-      filters: { postedBy: { id: ctx.state.user.id } },
-      sort: { createdAt: 'desc' },
-      populate: {
-        postedBy: true,
-        postedByProfile: true
-      },
+    const list = await strapi.db.query('api::entrep-job.entrep-job').findMany({
+      where: { postedBy: ctx.state.user.id },
+      orderBy: { createdAt: 'desc' },
+      populate: { postedBy: true, postedByProfile: true },
     });
-    ctx.send({ data: list.map(withPostedByName) });
+    ctx.send({ data: (list || []).map(withPostedByName) });
   },
   async createJob(ctx) {
     if (!ctx.state.user?.id) return ctx.unauthorized();
