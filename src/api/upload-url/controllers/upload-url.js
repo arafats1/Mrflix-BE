@@ -35,7 +35,7 @@ async function requireUploadUser(ctx) {
   return user;
 }
 
-const OPEN_UPLOAD_FOLDERS = ['stories', 'entrep-documents', 'entrep-course-media', 'entrep-community-media', 'entrep-profile-media', 'entrep-assignments', 'entrep-lesson-question-responses', 'marketplace-chat'];
+const OPEN_UPLOAD_FOLDERS = ['stories', 'entrep-documents', 'entrep-course-media', 'entrep-community-media', 'entrep-profile-media', 'entrep-assignments', 'entrep-lesson-question-responses', 'marketplace-chat', 'profile-pictures'];
 const PROVIDER_UPLOAD_FOLDERS = ['provider-materials', 'product-images'];
 
 function folderMatchesPrefix(folder, prefix) {

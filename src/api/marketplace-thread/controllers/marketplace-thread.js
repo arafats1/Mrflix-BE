@@ -17,7 +17,7 @@ async function resolveUser(ctx) {
     const payload = await strapi.plugins['users-permissions'].services.jwt.verify(token);
     const user = await strapi.db.query('plugin::users-permissions.user').findOne({
       where: { id: payload.id },
-      select: ['id', 'documentId', 'fullName', 'username', 'lastSeenAt'],
+      select: ['id', 'documentId', 'fullName', 'username', 'lastSeenAt', 'avatarUrl'],
     });
     return user || null;
   } catch {
@@ -41,8 +41,8 @@ module.exports = createCoreController('api::marketplace-thread.marketplace-threa
       },
       orderBy: { lastMessageAt: 'desc' },
       populate: {
-        buyer: { select: ['id', 'documentId', 'fullName', 'username', 'lastSeenAt'] },
-        seller: { select: ['id', 'documentId', 'fullName', 'username', 'lastSeenAt'] },
+        buyer: { select: ['id', 'documentId', 'fullName', 'username', 'lastSeenAt', 'avatarUrl'] },
+        seller: { select: ['id', 'documentId', 'fullName', 'username', 'lastSeenAt', 'avatarUrl'] },
         product: { select: ['id', 'documentId', 'name', 'featuredImage', 'priceUGX', 'itemType'] },
       },
     });
@@ -58,8 +58,8 @@ module.exports = createCoreController('api::marketplace-thread.marketplace-threa
     const thread = await strapi.db.query('api::marketplace-thread.marketplace-thread').findOne({
       where: { documentId: ctx.params.id },
       populate: {
-        buyer: { select: ['id', 'documentId', 'fullName', 'username', 'lastSeenAt'] },
-        seller: { select: ['id', 'documentId', 'fullName', 'username', 'lastSeenAt'] },
+        buyer: { select: ['id', 'documentId', 'fullName', 'username', 'lastSeenAt', 'avatarUrl'] },
+        seller: { select: ['id', 'documentId', 'fullName', 'username', 'lastSeenAt', 'avatarUrl'] },
         product: { select: ['id', 'documentId', 'name', 'featuredImage', 'priceUGX', 'itemType'] },
       },
     });
@@ -88,7 +88,7 @@ module.exports = createCoreController('api::marketplace-thread.marketplace-threa
     // Resolve seller
     const seller = await strapi.db.query('plugin::users-permissions.user').findOne({
       where: { documentId: sellerId },
-      select: ['id', 'documentId', 'fullName', 'username', 'lastSeenAt'],
+      select: ['id', 'documentId', 'fullName', 'username', 'lastSeenAt', 'avatarUrl'],
     });
     if (!seller) return ctx.notFound('Seller not found');
     if (seller.id === user.id) return ctx.badRequest('Cannot chat with yourself');
@@ -109,8 +109,8 @@ module.exports = createCoreController('api::marketplace-thread.marketplace-threa
         seller: { id: seller.id },
       },
       populate: {
-        buyer: { select: ['id', 'documentId', 'fullName', 'username', 'lastSeenAt'] },
-        seller: { select: ['id', 'documentId', 'fullName', 'username', 'lastSeenAt'] },
+        buyer: { select: ['id', 'documentId', 'fullName', 'username', 'lastSeenAt', 'avatarUrl'] },
+        seller: { select: ['id', 'documentId', 'fullName', 'username', 'lastSeenAt', 'avatarUrl'] },
         product: { select: ['id', 'documentId', 'name', 'featuredImage', 'priceUGX', 'itemType'] },
       },
       orderBy: { createdAt: 'desc' },
@@ -132,8 +132,8 @@ module.exports = createCoreController('api::marketplace-thread.marketplace-threa
         sellerUnread: 0,
       },
       populate: {
-        buyer: { select: ['id', 'documentId', 'fullName', 'username', 'lastSeenAt'] },
-        seller: { select: ['id', 'documentId', 'fullName', 'username', 'lastSeenAt'] },
+        buyer: { select: ['id', 'documentId', 'fullName', 'username', 'lastSeenAt', 'avatarUrl'] },
+        seller: { select: ['id', 'documentId', 'fullName', 'username', 'lastSeenAt', 'avatarUrl'] },
         product: { select: ['id', 'documentId', 'name', 'featuredImage', 'priceUGX', 'itemType'] },
       },
     });
@@ -149,8 +149,8 @@ module.exports = createCoreController('api::marketplace-thread.marketplace-threa
     const thread = await strapi.db.query('api::marketplace-thread.marketplace-thread').findOne({
       where: { documentId: ctx.params.id },
       populate: {
-        buyer: { select: ['id', 'documentId', 'fullName', 'username', 'lastSeenAt'] },
-        seller: { select: ['id', 'documentId', 'fullName', 'username', 'lastSeenAt'] },
+        buyer: { select: ['id', 'documentId', 'fullName', 'username', 'lastSeenAt', 'avatarUrl'] },
+        seller: { select: ['id', 'documentId', 'fullName', 'username', 'lastSeenAt', 'avatarUrl'] },
         product: { select: ['id', 'documentId', 'name', 'featuredImage', 'priceUGX', 'itemType'] },
       },
     });
@@ -186,8 +186,8 @@ module.exports = createCoreController('api::marketplace-thread.marketplace-threa
         sellerUnread: isBuyer ? (thread.sellerUnread || 0) + 1 : 0,
       },
       populate: {
-        buyer: { select: ['id', 'documentId', 'fullName', 'username', 'lastSeenAt'] },
-        seller: { select: ['id', 'documentId', 'fullName', 'username', 'lastSeenAt'] },
+        buyer: { select: ['id', 'documentId', 'fullName', 'username', 'lastSeenAt', 'avatarUrl'] },
+        seller: { select: ['id', 'documentId', 'fullName', 'username', 'lastSeenAt', 'avatarUrl'] },
         product: { select: ['id', 'documentId', 'name', 'featuredImage', 'priceUGX', 'itemType'] },
       },
     });
@@ -199,7 +199,7 @@ module.exports = createCoreController('api::marketplace-thread.marketplace-threa
   async sellerStatus(ctx) {
     const seller = await strapi.db.query('plugin::users-permissions.user').findOne({
       where: { documentId: ctx.params.sellerId },
-      select: ['id', 'documentId', 'fullName', 'username', 'lastSeenAt'],
+      select: ['id', 'documentId', 'fullName', 'username', 'lastSeenAt', 'avatarUrl'],
     });
 
     if (!seller) return ctx.notFound();
@@ -251,6 +251,7 @@ function sanitizeThread(thread, viewerUserId) {
       id: buyer.id,
       documentId: buyer.documentId,
       name: buyer.fullName || buyer.username || 'Buyer',
+      avatarUrl: buyer.avatarUrl || null,
       lastSeenAt: buyer.lastSeenAt || null,
       isOnline: isOnline(buyer.lastSeenAt),
     } : null,
@@ -258,6 +259,7 @@ function sanitizeThread(thread, viewerUserId) {
       id: seller.id,
       documentId: seller.documentId,
       name: seller.fullName || seller.username || 'Seller',
+      avatarUrl: seller.avatarUrl || null,
       lastSeenAt: seller.lastSeenAt || null,
       isOnline: isOnline(seller.lastSeenAt),
     } : null,

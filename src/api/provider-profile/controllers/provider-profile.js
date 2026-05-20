@@ -56,10 +56,13 @@ module.exports = {
     const subjectsTaught = normalizeSubjectsTaught(body.subjectsTaught);
     const paymentPhone = typeof body.paymentPhone === 'string' ? body.paymentPhone.trim() : '';
     const paymentCode = typeof body.paymentCode === 'string' ? body.paymentCode.trim() : '';
+    const avatarUrl = typeof body.avatarUrl === 'string' ? body.avatarUrl.trim() : null;
 
     if (!fullName) return ctx.badRequest('Full name is required');
 
     const updateData = { fullName };
+
+    if (avatarUrl) updateData.avatarUrl = avatarUrl;
 
     if (requestedProviderType === 'teacher') {
       if (!schoolName) return ctx.badRequest('School is required for teacher accounts');

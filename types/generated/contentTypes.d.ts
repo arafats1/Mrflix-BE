@@ -3754,6 +3754,7 @@ export interface PluginUsersPermissionsUser
   attributes: {
     accountType: Schema.Attribute.Enumeration<['parent', 'provider', 'both']> &
       Schema.Attribute.DefaultTo<'parent'>;
+    avatarUrl: Schema.Attribute.String;
     blocked: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
     bookLibraryAccessGrantedAt: Schema.Attribute.DateTime;
     childProfiles: Schema.Attribute.Relation<

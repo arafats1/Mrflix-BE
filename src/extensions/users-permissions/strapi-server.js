@@ -204,6 +204,10 @@ module.exports = (plugin) => {
     type: 'datetime',
   };
 
+  plugin.contentTypes.user.schema.attributes.avatarUrl = {
+    type: 'string',
+  };
+
   // Override the me controller to populate role.
   // `plugin.controllers.user` is a plain object (not a factory), so direct
   // property assignment is the correct override pattern here.
