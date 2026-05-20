@@ -32,5 +32,11 @@ module.exports = {
       handler: 'marketplace-thread.sellerStatus',
       config: { auth: false, middlewares: [] },
     },
+    {
+      method: 'DELETE',
+      path: '/marketplace-threads/:id',
+      handler: 'marketplace-thread.deleteThread',
+      config: { auth: false },
+    },
   ],
 };

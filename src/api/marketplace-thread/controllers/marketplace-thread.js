@@ -214,6 +214,26 @@ module.exports = createCoreController('api::marketplace-thread.marketplace-threa
       },
     };
   },
+
+  // DELETE /marketplace-threads/:id — only buyer or seller may delete
+  async deleteThread(ctx) {
+    const user = await resolveUser(ctx);
+    if (!user) return ctx.unauthorized();
+
+    const thread = await strapi.db.query('api::marketplace-thread.marketplace-thread').findOne({
+      where: { documentId: ctx.params.id },
+      populate: { buyer: { select: ['id'] }, seller: { select: ['id'] } },
+    });
+
+    if (!thread) return ctx.notFound();
+
+    const isParticipant = thread.buyer?.id === user.id || thread.seller?.id === user.id;
+    if (!isParticipant) return ctx.forbidden();
+
+    await strapi.db.query('api::marketplace-thread.marketplace-thread').delete({ where: { id: thread.id } });
+
+    ctx.body = { data: { deleted: true } };
+  },
 }));
 
 function isOnline(lastSeenAt) {
