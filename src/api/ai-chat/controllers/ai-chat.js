@@ -28,24 +28,74 @@ module.exports = {
       const messageLower = normalizedMessage.toLowerCase();
       const asksForLuganda = /(\bluganda\b|\btranslated\b|\blocal language\b|\bin luganda\b|\buganda\b)/i.test(normalizedMessage);
 
-      // Fetch available movies for context (filter to Luganda-only if requested)
-      // Movo Kids: ALWAYS restrict the AI catalog to animated content only,
-      // regardless of which genre the user asks for.
       const isLugandaMode = luganda === true || luganda === 'true' || asksForLuganda;
-      const filters = {
+      const movieFilters = {
         isAvailable: true,
         genres: { $containsi: 'animation' },
         ...(isLugandaMode && { isLuganda: true }),
       };
-      strapi.log.info(`AI Chat: luganda=${luganda}, asksForLuganda=${asksForLuganda}, isLugandaMode=${isLugandaMode}, filters=${JSON.stringify(filters)}`);
-      const movies = await strapi.entityService.findMany('api::movie.movie', {
-        filters,
-        fields: ['title', 'overview', 'genres', 'type', 'rating', 'releaseDate', 'countryOfOrigin', 'priceUGX', 'seasons', 'trailerUrl', 'isLuganda', 'vjName', 'isAdult'],
-        sort: 'createdAt:desc',
-        limit: 200,
-      });
 
-      // Build movie catalog summary
+      // Fetch a representative slice from every section so the assistant can
+      // help users across the whole platform (movies + marketplace + books +
+      // music + jobs + courses + education materials + stories).
+      const safe = async (p) => {
+        try { return await p; } catch (e) { strapi.log.warn('AI Chat fetch failed:', e?.message || e); return []; }
+      };
+
+      const [
+        movies,
+        products,
+        books,
+        tracks,
+        jobs,
+        entrepCourses,
+        eduMaterials,
+      ] = await Promise.all([
+        safe(strapi.entityService.findMany('api::movie.movie', {
+          filters: movieFilters,
+          fields: ['title', 'overview', 'genres', 'type', 'rating', 'releaseDate', 'countryOfOrigin', 'priceUGX', 'seasons', 'trailerUrl', 'isLuganda', 'vjName', 'isAdult'],
+          sort: 'createdAt:desc',
+          limit: 150,
+        })),
+        safe(strapi.entityService.findMany('api::product.product', {
+          filters: { status: 'active' },
+          fields: ['name', 'description', 'priceUGX', 'category', 'itemType', 'audience', 'ageRange', 'discountPercent'],
+          sort: 'createdAt:desc',
+          limit: 40,
+        })),
+        safe(strapi.entityService.findMany('api::book.book', {
+          filters: { isPublished: true },
+          fields: ['title', 'author', 'description', 'category', 'format', 'audienceType', 'educationLevel', 'subject', 'classLabel'],
+          sort: 'createdAt:desc',
+          limit: 40,
+        })),
+        safe(strapi.entityService.findMany('api::music.music', {
+          filters: { isPublished: true },
+          fields: ['title', 'artist', 'description', 'mediaType', 'genres', 'religiousCategory', 'childAgeGroup', 'isExclusive'],
+          sort: 'createdAt:desc',
+          limit: 40,
+        })),
+        safe(strapi.entityService.findMany('api::entrep-job.entrep-job', {
+          filters: { status: 'active' },
+          fields: ['title', 'company', 'jobFunction', 'industry', 'experienceLevel', 'location', 'jobType', 'salary'],
+          sort: 'createdAt:desc',
+          limit: 30,
+        })),
+        safe(strapi.entityService.findMany('api::entrep-course.entrep-course', {
+          filters: { status: 'published' },
+          fields: ['title', 'shortDescription', 'category', 'level', 'durationWeeks', 'priceUGX', 'providerName'],
+          sort: 'createdAt:desc',
+          limit: 30,
+        })),
+        safe(strapi.entityService.findMany('api::provider-material.provider-material', {
+          filters: { status: 'approved' },
+          fields: ['title', 'description', 'providerType', 'contentCategory', 'educationLevel', 'religion', 'ageRange', 'priceUGX', 'mediaType'],
+          sort: 'createdAt:desc',
+          limit: 40,
+        })),
+      ]);
+
+      // Build movie catalog summary (kept for mentionedMovies linking + request flow)
       const catalog = movies.map(/** @param {any} m */ (m) => {
         const parts = [`"${m.title}" (${m.type})`];
         if (m.genres?.length) parts.push(`Genres: ${Array.isArray(m.genres) ? m.genres.join(', ') : m.genres}`);
@@ -59,50 +109,136 @@ module.exports = {
         return parts.join(' | ');
       }).join('\n');
 
+      // Build compact catalogs for the other sections
+      const productCatalog = products.map(/** @param {any} p */ (p) => {
+        const parts = [`"${p.name}"`];
+        if (p.category) parts.push(`Category: ${p.category}`);
+        if (p.itemType) parts.push(`Type: ${p.itemType}`);
+        if (p.audience) parts.push(`For: ${p.audience}`);
+        if (p.priceUGX) parts.push(`UGX ${p.priceUGX}${p.discountPercent ? ` (-${p.discountPercent}%)` : ''}`);
+        if (p.description) parts.push(String(p.description).substring(0, 120));
+        return parts.join(' | ');
+      }).join('\n');
+
+      const bookCatalog = books.map(/** @param {any} b */ (b) => {
+        const parts = [`"${b.title}"`];
+        if (b.author) parts.push(`by ${b.author}`);
+        if (b.category) parts.push(`Category: ${b.category}`);
+        if (b.format) parts.push(`Format: ${b.format}`);
+        if (b.audienceType) parts.push(`Audience: ${b.audienceType}`);
+        if (b.educationLevel) parts.push(`Level: ${b.educationLevel}${b.classLabel ? ` ${b.classLabel}` : ''}`);
+        if (b.subject) parts.push(`Subject: ${b.subject}`);
+        if (b.description) parts.push(String(b.description).substring(0, 120));
+        return parts.join(' | ');
+      }).join('\n');
+
+      const musicCatalog = tracks.map(/** @param {any} t */ (t) => {
+        const parts = [`"${t.title}"`];
+        if (t.artist) parts.push(`by ${t.artist}`);
+        if (t.genres?.length) parts.push(`Genres: ${Array.isArray(t.genres) ? t.genres.join(', ') : t.genres}`);
+        if (t.religiousCategory) parts.push(`Religion: ${t.religiousCategory}`);
+        if (t.mediaType) parts.push(`Media: ${t.mediaType}`);
+        return parts.join(' | ');
+      }).join('\n');
+
+      const jobCatalog = jobs.map(/** @param {any} j */ (j) => {
+        const parts = [`"${j.title}"`];
+        if (j.company) parts.push(`at ${j.company}`);
+        if (j.location) parts.push(`Location: ${j.location}`);
+        if (j.jobType) parts.push(`Type: ${j.jobType}`);
+        if (j.experienceLevel) parts.push(`Level: ${j.experienceLevel}`);
+        if (j.industry) parts.push(`Industry: ${j.industry}`);
+        if (j.salary) parts.push(`Salary: ${j.salary}`);
+        return parts.join(' | ');
+      }).join('\n');
+
+      const courseCatalog = entrepCourses.map(/** @param {any} c */ (c) => {
+        const parts = [`"${c.title}"`];
+        if (c.providerName) parts.push(`by ${c.providerName}`);
+        if (c.category) parts.push(`Category: ${c.category}`);
+        if (c.level) parts.push(`Level: ${c.level}`);
+        if (c.durationWeeks) parts.push(`${c.durationWeeks} weeks`);
+        if (c.priceUGX != null) parts.push(`UGX ${c.priceUGX}`);
+        if (c.shortDescription) parts.push(String(c.shortDescription).substring(0, 120));
+        return parts.join(' | ');
+      }).join('\n');
+
+      const eduCatalog = eduMaterials.map(/** @param {any} m */ (m) => {
+        const parts = [`"${m.title}"`];
+        if (m.providerType) parts.push(`Provider: ${m.providerType}`);
+        if (m.contentCategory) parts.push(`Category: ${m.contentCategory}`);
+        if (m.educationLevel) parts.push(`Level: ${m.educationLevel}`);
+        if (m.religion) parts.push(`Religion: ${m.religion}`);
+        if (m.ageRange) parts.push(`Age: ${m.ageRange}`);
+        if (m.mediaType) parts.push(`Media: ${m.mediaType}`);
+        if (m.priceUGX != null) parts.push(`UGX ${m.priceUGX}`);
+        return parts.join(' | ');
+      }).join('\n');
+
+      const sectionsBlock = `
+=========================
+ANIMATED MOVIES & SERIES (Movo Kids — section URL: /browse, watch at /watch/{id})
+${catalog || '(no titles loaded)'}
+
+=========================
+MARKETPLACE PRODUCTS (section URL: /marketplace)
+${productCatalog || '(no products loaded)'}
+
+=========================
+BOOKS LIBRARY (section URL: /books)
+${bookCatalog || '(no books loaded)'}
+
+=========================
+MUSIC TRACKS (section URL: /music)
+${musicCatalog || '(no tracks loaded)'}
+
+=========================
+JOBS BOARD (section URL: /jobs)
+${jobCatalog || '(no jobs loaded)'}
+
+=========================
+ENTREPRENEUR COURSES (section URL: /entrepreneur)
+${courseCatalog || '(no courses loaded)'}
+
+=========================
+EDUCATION / PROVIDER MATERIALS (section URL: /education)
+${eduCatalog || '(no materials loaded)'}
+`.trim();
+
+      strapi.log.info(`AI Chat: luganda=${luganda} movies=${movies.length} products=${products.length} books=${books.length} music=${tracks.length} jobs=${jobs.length} courses=${entrepCourses.length} edu=${eduMaterials.length}`);
+
+      const sharedPlatformRules = `
+You are MOVO AI — the friendly assistant for the MOVO platform (a Uganda-based multi-section service). You can help users discover and navigate ANY of these sections:
+
+1. Movo Kids — animated movies & series for kids/families (URL: /browse, watch /watch/{id})
+2. Marketplace — products and services for sale (URL: /marketplace)
+3. Books — readable & audio books library (URL: /books)
+4. Music — music tracks & videos (URL: /music)
+5. Jobs — jobs board where users can find work or post jobs (URL: /jobs)
+6. Entrepreneur Academy — online courses, mentorship, events (URL: /entrepreneur)
+7. Education / Provider Materials — school, religious, and tutor materials (URL: /education)
+8. Luganda — Luganda-translated movies (URL: /luganda)
+
+GENERAL RULES — STRICTLY FOLLOW:
+- You have access to the catalogs below. ONLY recommend titles/items that actually appear in the catalogs. NEVER invent titles, prices, courses, jobs, products, or books from your training data — if it is not listed, it does not exist on this platform.
+- Detect what the user is asking about (movies, products, books, music, jobs, courses, education materials) and answer from the matching section. If the user is vague, ask a brief clarifying question.
+- You can also recommend across sections — e.g. if a user asks about "kids", you can mention animated movies, kids books, and kids music together.
+- Be conversational, friendly, and concise (2-4 sentences per recommendation). Recommend up to 5 items at a time.
+- When recommending, use the EXACT title from the catalog and tell the user which section to find it in (and the URL where helpful).
+- If the user asks for something specific (e.g. "Frozen", "a plumber in Kampala", "a Math S4 textbook") and it is NOT in any catalog, politely say it's not available yet. For movies specifically, you may offer: "Would you like me to submit a request to have it added? Just say yes and I'll handle it." Do NOT offer this request flow for non-movie sections.
+- NEVER recommend or mention adult, XXX, or porn content. If asked, redirect: "For our XXX Rated exclusive collection, subscribe to our **Monthly Exclusive** package! 👉 [Subscribe here](/subscribe)"
+- Some movies are marked "Adult 18+". Only recommend these when the user explicitly asks for adult content (non-XXX).
+- Respond in English but understand if users mix Luganda or other local languages.
+- When a user confirms a movie request (says yes, sure, please), respond with EXACTLY: "Great! I'll need your name and WhatsApp number so we can notify you when it's available." Do NOT submit anything yourself.
+
+CATALOGS (the ONLY items available on the platform — recommend strictly from these):
+${sectionsBlock}`;
+
       const systemPrompt = isLugandaMode
-        ? `You are Mr.Flix AI, a friendly movie assistant for the Mr.Flix Luganda streaming platform in Uganda.
+        ? `${sharedPlatformRules}
 
-CRITICAL RULE — STRICTLY FOLLOW:
-You have access to EXACTLY ${movies.length} Luganda-translated movies/series listed below. These are the ONLY titles that exist on this platform. Do NOT recommend, suggest, or mention ANY movie or series that is NOT in the list below. Do NOT make up titles. Do NOT recommend popular movies you know from your training data. If a title is not listed below, it does NOT exist on this platform.
-
-IMPORTANT RULES:
-- ONLY recommend titles from the catalog listed below. Double-check every title you mention against the catalog.
-- When a user asks for a specific genre (e.g. "action", "comedy", "horror"), search the catalog genres carefully. If you find ANY titles that match or are close to the requested genre, recommend those. Include titles with related genres (e.g. for "action", also include thriller, adventure, crime).
-- If the user asks for a general category and you have titles that could fit, ALWAYS recommend them rather than saying you don't have them. Be creative in matching — most movies fit multiple genres.
-- ONLY say "We don't have that in Luganda yet" when the user asks for a SPECIFIC movie title by name that is not in the catalog, OR when you have genuinely searched the entire catalog and found absolutely nothing relevant.
-- If the catalog is small but has titles, suggest what IS available when the user's request doesn't match exactly. Say something like: "We don't have [specific genre] yet, but here are some great Luganda titles you might enjoy!"
-- Be conversational, fun, and brief (2-4 sentences per recommendation)
-- When recommending, use the EXACT title from the catalog. Mention the VJ (voice-over artist) if available.
-- You can recommend up to 5 movies at a time
-- If the user's request is vague, ask a clarifying question
-- All content here has Luganda voice-over translation
-- Some movies are marked as "Adult 18+" in the catalog. Only recommend these when the user explicitly asks for adult content.
-- NEVER mention or reveal any XXX Rated exclusive movies.
-- When users ask for XXX/porn content, respond with: "For our full XXX Rated exclusive collection, subscribe to our **Monthly Exclusive** package! 👉 [Subscribe to Exclusive here](/subscribe)"
-- Respond in English but understand Luganda and other local languages
-- When a user confirms they want to submit a request, respond with: "Great! I'll need your name and WhatsApp number so we can notify you when it's available."
-
-COMPLETE CATALOG (${movies.length} titles — ONLY recommend from this list):
-${catalog}`
-        : `You are Movo Kids AI, a friendly and knowledgeable movie assistant for the Movo Kids streaming platform in Uganda — a kids-only animated streaming service. You help users discover ANIMATED movies and series from our catalog.
-
-IMPORTANT RULES:
-- Movo Kids ONLY offers ANIMATED movies and series. The catalog below contains exclusively animated titles. No matter what genre the user asks for (action, romance, drama, horror, etc.), you must ONLY recommend animated titles from the catalog below.
-- If a user asks for a non-animated genre, recommend animated titles that match the closest mood/theme (e.g., "action" → animated action/adventure; "romance" → family-friendly animated stories with a love theme; "horror" → spooky/Halloween animations). Briefly mention all our titles are animated and family-friendly.
-- Only recommend movies/series that exist in our catalog below
-- If a user asks for a specific title not in our catalog, politely say it's not available yet. Mention the exact title they asked for so they know. Then say: "Would you like me to submit a request to have it added? Just say yes and I'll handle it for you!"
-- Be conversational, fun, and brief (2-4 sentences per recommendation). Use a kid-friendly, upbeat tone.
-- When recommending, mention the title, genre, and a brief why they'd enjoy it
-- You can recommend up to 5 movies at a time
-- If the user's request is vague, ask a clarifying question
-- You understand natural language like "something funny", "adventure cartoons", "for my 5 year old", "something to watch with family"
-- CRITICAL FOR LUGANDA: Some titles in the catalog are marked with "Luganda Translated". When a user asks for Luganda movies, you MUST ONLY recommend titles that have the "Luganda Translated" tag.
-- Movo Kids is a SAFE, FAMILY-FRIENDLY platform. NEVER recommend or mention adult, XXX, or any non-kids content. If a user asks for adult content, kindly redirect them: "Movo Kids is a family-friendly animated streaming platform — we only have safe, kid-friendly animated movies and series here."
-- Respond in English but understand if users mix in local languages
-- When a user confirms they want to submit a request (says yes, sure, please, etc.), respond with exactly this format: "Great! I'll need your name and WhatsApp number so we can notify you when it's available." Do NOT submit anything yourself.
-
-OUR ANIMATED CATALOG:
-${catalog}`;
+LUGANDA MODE ACTIVE: The user is browsing the Luganda section. When recommending movies, ONLY recommend titles marked "Luganda Translated" in the movies catalog above, and mention the VJ if listed. You can still help with other sections (marketplace, books, music, jobs, courses, education) normally.`
+        : sharedPlatformRules;
 
       // Build conversation messages
       const messages = [{ role: 'system', content: systemPrompt }];
