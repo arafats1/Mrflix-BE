@@ -394,12 +394,7 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
       return ctx.badRequest('Name, phone number, and address are required to book a service.');
     }
 
-    const availableDates = normalizeServiceDateList(product.serviceAvailabilityDates);
     const bookedDates = normalizeServiceDateList(product.serviceBookedDates);
-
-    if (!availableDates.includes(serviceDate)) {
-      return ctx.badRequest('That date is not available for booking.');
-    }
 
     if (bookedDates.includes(serviceDate)) {
       return ctx.badRequest('That date has already been booked.');
@@ -460,7 +455,6 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
     const updatedProduct = await strapi.documents('api::product.product').update({
       documentId: product.documentId,
       data: {
-        serviceAvailabilityDates: availableDates.filter((date) => date !== serviceDate),
         serviceBookedDates: [...bookedDates, serviceDate].sort(),
       },
       populate: {
