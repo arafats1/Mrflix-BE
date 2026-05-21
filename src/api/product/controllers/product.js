@@ -65,6 +65,11 @@ function normalizeItemType(value) {
   return value === 'service' ? 'service' : 'product';
 }
 
+function parsePositiveInteger(value, fallback) {
+  const parsed = parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
 async function getEntrepreneurProfileForUser(strapi, userId) {
   if (!userId) return null;
 
@@ -304,21 +309,49 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
       ...(ctx.query.filters || {}),
     };
 
+    const pagination = ctx.query.pagination || {};
+    const page = parsePositiveInteger(
+      pagination.page ?? ctx.query.page,
+      1
+    );
+    const pageSize = parsePositiveInteger(
+      pagination.pageSize ?? ctx.query.pageSize,
+      25
+    );
+
     if (!ctx.state.user) {
       filters.status = 'active';
     }
 
-    const products = await strapi.documents('api::product.product').findMany({
-      filters,
-      populate: {
-        seller: true,
-      },
-      sort: ctx.query.sort || { createdAt: 'desc' },
-      status: 'published',
-    });
+    const [products, total] = await Promise.all([
+      strapi.documents('api::product.product').findMany({
+        filters,
+        populate: {
+          seller: true,
+        },
+        sort: ctx.query.sort || { createdAt: 'desc' },
+        start: (page - 1) * pageSize,
+        limit: pageSize,
+        status: 'published',
+      }),
+      strapi.documents('api::product.product').count({
+        filters,
+        status: 'published',
+      }),
+    ]);
 
     const soldProducts = await Promise.all(products.map((product) => withSoldCount(strapi, product)));
-    return { data: await attachReviewSummary(strapi, soldProducts) };
+    return {
+      data: await attachReviewSummary(strapi, soldProducts),
+      meta: {
+        pagination: {
+          page,
+          pageSize,
+          pageCount: Math.ceil(total / pageSize),
+          total,
+        },
+      },
+    };
   },
 
   async update(ctx) {
