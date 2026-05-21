@@ -17,13 +17,30 @@ function cleanString(value) {
   return typeof value === 'string' ? value.trim() : '';
 }
 
-function buildPublicFilters(query = {}) {
-  const filters = {
-    status: 'open',
+function getNowIso() {
+  return new Date().toISOString();
+}
+
+function buildActiveClosingFilter(nowIso = getNowIso()) {
+  return {
     $or: [
       { closingAt: { $null: true } },
-      { closingAt: { $gte: new Date().toISOString() } }
+      { closingAt: { $gte: nowIso } },
     ],
+  };
+}
+
+function isExpiredJob(job, now = Date.now()) {
+  if (!job?.closingAt) return false;
+  const closingAt = new Date(job.closingAt).getTime();
+  return Number.isFinite(closingAt) && closingAt < now;
+}
+
+function buildPublicFilters(query = {}) {
+  const nowIso = getNowIso();
+  const filters = {
+    status: 'open',
+    ...buildActiveClosingFilter(nowIso),
   };
 
   const jobFunction = cleanString(query.jobFunction);
@@ -82,7 +99,10 @@ module.exports = createCoreController('api::entrep-job.entrep-job', ({ strapi })
     if (!ctx.state.user?.id) return ctx.unauthorized();
 
     const list = await strapi.db.query('api::entrep-job.entrep-job').findMany({
-      where: { postedBy: ctx.state.user.id },
+      where: {
+        postedBy: ctx.state.user.id,
+        ...buildActiveClosingFilter(),
+      },
       orderBy: { createdAt: 'desc' },
       populate: { postedBy: true, postedByProfile: true },
     });
@@ -179,6 +199,9 @@ module.exports = createCoreController('api::entrep-job.entrep-job', ({ strapi })
     const jobId = Number(ctx.params.id);
     const job = await strapi.entityService.findOne('api::entrep-job.entrep-job', jobId);
     if (!job) return ctx.notFound();
+    if (job.status !== 'open' || isExpiredJob(job)) {
+      return ctx.badRequest('This job is no longer accepting applications');
+    }
     const b = ctx.request.body || {};
     const applicant = await strapi.entityService.findOne('plugin::users-permissions.user', ctx.state.user.id);
     const application = await strapi.entityService.create('api::entrep-application.entrep-application', {

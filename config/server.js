@@ -12,6 +12,29 @@ module.exports = ({ env }) => ({
   cron: {
     enabled: true,
     tasks: {
+      // Delete expired job-board posts every 12 hours.
+      '0 */12 * * *': async ({ strapi }) => {
+        try {
+          const nowIso = new Date().toISOString();
+          const expiredJobs = await strapi.db.query('api::entrep-job.entrep-job').findMany({
+            where: {
+              closingAt: { $lt: nowIso },
+            },
+            select: ['id'],
+          });
+
+          if (!expiredJobs.length) return;
+
+          for (const job of expiredJobs) {
+            await strapi.entityService.delete('api::entrep-job.entrep-job', job.id);
+          }
+
+          strapi.log.info(`[Cron] Deleted ${expiredJobs.length} expired job(s)`);
+        } catch (err) {
+          strapi.log.error('[Cron] Expired job cleanup failed:', err.message);
+        }
+      },
+
       // Check for expired subscriptions every day at 8 AM
       '0 8 * * *': async ({ strapi }) => {
         try {
