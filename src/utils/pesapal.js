@@ -25,6 +25,12 @@ const CONSUMER_SECRET = process.env.PESAPAL_CONSUMER_SECRET;
 let cachedToken = null;
 let tokenExpiry = 0;
 
+function createPesapalError(message, details = {}) {
+  const error = new Error(message);
+  Object.assign(error, details);
+  return error;
+}
+
 /**
  * Authenticate with Pesapal and get an access token.
  * Tokens are cached until they expire.
@@ -49,6 +55,12 @@ async function getAccessToken() {
   }
 
   const data = await res.json();
+  if (!data?.token) {
+    throw createPesapalError('Pesapal auth succeeded without an access token.', {
+      code: data?.error?.code || 'PESAPAL_AUTH_MISSING_TOKEN',
+      raw: data,
+    });
+  }
   cachedToken = data.token;
   // Expire 5 minutes before actual expiry for safety
   tokenExpiry = Date.now() + (data.expiryDate ? new Date(data.expiryDate).getTime() - Date.now() - 5 * 60 * 1000 : 4 * 60 * 1000);
@@ -81,6 +93,12 @@ async function registerIPN(callbackUrl) {
   }
 
   const data = await res.json();
+  if (!data?.ipn_id) {
+    throw createPesapalError('Pesapal IPN registration succeeded without an IPN ID.', {
+      code: data?.error?.code || 'PESAPAL_IPN_MISSING_ID',
+      raw: data,
+    });
+  }
   return data.ipn_id;
 }
 
@@ -137,7 +155,26 @@ async function submitOrder({
     throw new Error(`Pesapal order submission failed (${res.status}): ${text}`);
   }
 
-  return res.json();
+  const data = await res.json();
+
+  if (data?.error) {
+    throw createPesapalError(
+      data.error?.message || 'Pesapal order submission failed.',
+      {
+        code: data.error?.code || data.error?.error_type || 'PESAPAL_ORDER_ERROR',
+        raw: data,
+      }
+    );
+  }
+
+  if (!data?.redirect_url || !data?.order_tracking_id) {
+    throw createPesapalError('Pesapal order submission returned no payment URL.', {
+      code: 'PESAPAL_ORDER_MISSING_REDIRECT',
+      raw: data,
+    });
+  }
+
+  return data;
 }
 
 /**

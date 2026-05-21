@@ -12,6 +12,34 @@ const dgateway = require('./dgateway');
 const yoPayments = require('./yo-payments');
 const { normalizePaymentMethod } = require('./payment-methods');
 
+function getPesapalIpnCallbackUrl() {
+  if (!process.env.PUBLIC_URL) {
+    throw new Error('PUBLIC_URL is required to register Pesapal IPN callbacks.');
+  }
+
+  return new URL('/api/pesapal/ipn', process.env.PUBLIC_URL).toString();
+}
+
+async function refreshPesapalIpnId(strapi) {
+  const settings = await strapi.entityService.findMany('api::site-setting.site-setting');
+
+  if (!settings?.id) {
+    throw new Error('Site settings are required before refreshing the Pesapal IPN ID.');
+  }
+
+  const ipnId = await pesapal.registerIPN(getPesapalIpnCallbackUrl());
+
+  await strapi.entityService.update('api::site-setting.site-setting', settings.id, {
+    data: { pesapalIpnId: ipnId },
+  });
+
+  if (strapi?.log?.info) {
+    strapi.log.info(`[Pesapal] Registered a fresh IPN ID for the current credentials: ${ipnId}`);
+  }
+
+  return ipnId;
+}
+
 /**
  * Get the active payment gateway name from site settings.
  * @param {object} strapi – strapi instance
@@ -120,14 +148,33 @@ async function submitPayment(strapi, params) {
   }
 
   // Default: Pesapal
-  const pesapalOrder = await pesapal.submitOrder({
+  const submitPesapalOrder = (ipnId) => pesapal.submitOrder({
     merchantReference: params.merchantReference,
     amount: params.amount,
     description: params.description,
     callbackUrl: params.callbackUrl,
-    ipnId: params.ipnId,
+    ipnId,
     billingAddress: params.billingAddress,
   });
+
+  let pesapalOrder;
+
+  try {
+    pesapalOrder = await submitPesapalOrder(params.ipnId);
+  } catch (error) {
+    const invalidIpnId = error?.code === 'InvalidIpnId' || /invalid ipn id/i.test(error?.message || '');
+
+    if (!invalidIpnId) {
+      throw error;
+    }
+
+    if (strapi?.log?.warn) {
+      strapi.log.warn('[Pesapal] Stored IPN ID was rejected for the current credentials. Registering a fresh IPN ID and retrying order submission.');
+    }
+
+    const refreshedIpnId = await refreshPesapalIpnId(strapi);
+    pesapalOrder = await submitPesapalOrder(refreshedIpnId);
+  }
 
   return {
     gateway: 'pesapal',
