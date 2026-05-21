@@ -76,19 +76,19 @@ module.exports = {
           limit: 40,
         })),
         safe(strapi.entityService.findMany('api::entrep-job.entrep-job', {
-          filters: { status: 'active' },
+          filters: { status: { $in: ['open', 'active'] } },
           fields: ['title', 'company', 'jobFunction', 'industry', 'experienceLevel', 'location', 'jobType', 'salary'],
           sort: 'createdAt:desc',
           limit: 30,
         })),
         safe(strapi.entityService.findMany('api::entrep-course.entrep-course', {
-          filters: { status: 'published' },
+          filters: { status: { $in: ['approved', 'published'] } },
           fields: ['title', 'shortDescription', 'category', 'level', 'durationWeeks', 'priceUGX', 'providerName'],
           sort: 'createdAt:desc',
           limit: 30,
         })),
         safe(strapi.entityService.findMany('api::provider-material.provider-material', {
-          filters: { status: 'approved' },
+          filters: { status: { $in: ['published', 'approved'] } },
           fields: ['title', 'description', 'providerType', 'contentCategory', 'educationLevel', 'religion', 'ageRange', 'priceUGX', 'mediaType'],
           sort: 'createdAt:desc',
           limit: 40,
@@ -220,6 +220,7 @@ You are MOVO AI — the friendly assistant for the MOVO platform (a Uganda-based
 8. Luganda — Luganda-translated movies (URL: /luganda)
 
 GENERAL RULES — STRICTLY FOLLOW:
+- LINKS / URLS: NEVER use any absolute domain like "movo.com", "movobrands.com", "https://...", or "www....". ALWAYS use root-relative paths only (e.g. /marketplace, /jobs, /books). When you include a link in markdown, write it as [text](/marketplace) — the path MUST start with a single "/" and contain NO domain. The platform will resolve the correct domain automatically.
 - You have access to the catalogs below. ONLY recommend titles/items that actually appear in the catalogs. NEVER invent titles, prices, courses, jobs, products, or books from your training data — if it is not listed, it does not exist on this platform.
 - Detect what the user is asking about (movies, products, books, music, jobs, courses, education materials) and answer from the matching section. If the user is vague, ask a brief clarifying question.
 - You can also recommend across sections — e.g. if a user asks about "kids", you can mention animated movies, kids books, and kids music together.
@@ -278,6 +279,14 @@ LUGANDA MODE ACTIVE: The user is browsing the Luganda section. When recommending
 
       const data = await response.json();
       let reply = data.choices?.[0]?.message?.content || 'Sorry, I could not generate a response. Please try again.';
+
+      // Sanitize any hallucinated absolute domains the model may have emitted.
+      // We always want links to be root-relative so the browser uses the
+      // current host (e.g. movobrands.com, dev domains, preview deployments).
+      reply = reply.replace(
+        /(https?:\/\/(?:www\.)?(?:movo|movobrands|movokids|mrflix)[a-z0-9.-]*)(\/[^\s)\]]*)?/gi,
+        (_match, _origin, path) => path || '/'
+      );
 
       // Safety net: if Luganda mode has catalog items but model says none available,
       // return concrete alternatives from the catalog instead of false negatives.
