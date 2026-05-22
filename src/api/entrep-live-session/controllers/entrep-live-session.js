@@ -12,8 +12,11 @@ function normalizeAlumniAudience(value, fallback = null) {
 }
 
 function hasAlumniAccess(profile, alumniAudience) {
-  if (!profile?.isAlumni) return false;
-  return !alumniAudience || profile.alumniMemberType === alumniAudience;
+  if (!profile) return false;
+  if (profile?.isAlumni) return !alumniAudience || profile.alumniMemberType === alumniAudience;
+  // allow current learners to view learner alumni sessions
+  if (profile?.role === 'learner') return !alumniAudience || alumniAudience === 'learner';
+  return false;
 }
 
 async function listAlumniRecipientIds(strapi, alumniAudience, excludeUserId) {

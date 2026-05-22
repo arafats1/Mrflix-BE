@@ -92,8 +92,12 @@ function normalizeAudience(value) {
 }
 
 function hasAlumniAccess(profile, alumniAudience) {
-  if (!profile?.isAlumni) return false;
-  return !alumniAudience || profile.alumniMemberType === alumniAudience;
+  if (!profile) return false;
+  // Alumni members may access their matching alumni networks
+  if (profile?.isAlumni) return !alumniAudience || profile.alumniMemberType === alumniAudience;
+  // Allow current learners (students) to view the learner alumni network
+  if (profile?.role === 'learner') return !alumniAudience || alumniAudience === 'learner';
+  return false;
 }
 
 function hasPostAccess(post, profile, isAdmin) {
@@ -137,17 +141,18 @@ module.exports = createCoreController('api::entrep-post.entrep-post', ({ strapi 
 
     if (requestedAudience === 'alumni') {
       if (!user) return ctx.unauthorized();
-      if (!profile?.isAlumni && !isAdmin) return ctx.forbidden('Join the alumni network to view alumni posts');
+      const isLearner = profile?.role === 'learner';
+      if (!profile?.isAlumni && !isAdmin && !isLearner) return ctx.forbidden('Join the alumni network to view alumni posts');
 
       const requestedAlumniAudience = normalizeAlumniAudience(
         ctx.query?.alumniAudience,
         profile?.alumniMemberType || null
       );
-      if (!isAdmin && requestedAlumniAudience && requestedAlumniAudience !== profile?.alumniMemberType) {
+      if (!isAdmin && requestedAlumniAudience && requestedAlumniAudience !== profile?.alumniMemberType && !(isLearner && requestedAlumniAudience === 'learner')) {
         return ctx.forbidden('You can only view your own alumni network');
       }
 
-      filters.alumniAudience = requestedAlumniAudience || profile?.alumniMemberType || null;
+      filters.alumniAudience = requestedAlumniAudience || profile?.alumniMemberType || (isLearner ? 'learner' : null);
       filters.$or = [
         { audience: 'alumni' },
         { audience: 'public' },
