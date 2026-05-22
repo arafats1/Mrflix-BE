@@ -3,6 +3,7 @@
 const pesapal = require('../../../utils/pesapal');
 const { normalizePaymentMethod } = require('../../../utils/payment-methods');
 const { recordProviderMaterialSale } = require('../../../utils/provider-material-sales');
+const { activatePromotionByFilter, failPromotionByFilter } = require('../../../utils/marketplace-promotions');
 
 module.exports = {
   /**
@@ -77,6 +78,9 @@ module.exports = {
               strapi.log.info(`[Pesapal IPN] Exclusive subscription ${exclSub.id} activated for ref ${ref}, method: ${paymentMethod}`);
             }
           }
+        } else if (ref.startsWith('PROMO_')) {
+          await activatePromotionByFilter(strapi, { transactionId: ref }, paymentMethod);
+          strapi.log.info(`[Pesapal IPN] Marketplace promotion activated for ref ${ref}`);
         } else {
           // Purchase(s) — could be single (PUR_) or cart (CART_)
           const purchases = await strapi.db.query('api::purchase.purchase').findMany({
@@ -124,6 +128,8 @@ module.exports = {
               });
             }
           }
+        } else if (ref.startsWith('PROMO_')) {
+          await failPromotionByFilter(strapi, { transactionId: ref });
         } else {
           const purchases = await strapi.db.query('api::purchase.purchase').findMany({
             where: { transactionId: ref },

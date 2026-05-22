@@ -67,6 +67,9 @@ function withSellerPaymentFallback(product) {
     paymentCode: product.paymentCode || product.seller?.paymentCode || null,
     itemType: product.itemType === 'service' ? 'service' : 'product',
     marketplaceSource: product.marketplaceSource || 'core',
+    promotedUntil: product.promotedUntil || null,
+    promotionKind: product.promotionKind || null,
+    promotionBadgeLabel: product.promotionBadgeLabel || null,
     productVideoLikes: Math.max(0, Number(product.productVideoLikes || 0)),
     productVideoComments: normalizeProductVideoComments(product.productVideoComments),
   };
@@ -83,6 +86,22 @@ function normalizeItemType(value) {
 function parsePositiveInteger(value, fallback) {
   const parsed = parseInt(value, 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+async function clearExpiredProductPromotions(strapi) {
+  const now = new Date().toISOString();
+  await strapi.db.query('api::product.product').updateMany({
+    where: {
+      promotedUntil: { $lt: now },
+    },
+    data: {
+      promotedUntil: null,
+      promotionKind: null,
+      promotionBadgeLabel: null,
+    },
+  }).catch((error) => {
+    strapi.log.warn(`Failed to clear expired product promotions: ${error.message}`);
+  });
 }
 
 async function getEntrepreneurProfileForUser(strapi, userId) {
@@ -337,6 +356,8 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
    * Only return 'active' products by default for public users.
    */
   async find(ctx) {
+    await clearExpiredProductPromotions(strapi);
+
     const filters = {
       ...(ctx.query.filters || {}),
     };
@@ -361,7 +382,7 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
         populate: {
           seller: true,
         },
-        sort: ctx.query.sort || { createdAt: 'desc' },
+        sort: ctx.query.sort || [{ promotedUntil: 'desc' }, { createdAt: 'desc' }],
         start: (page - 1) * pageSize,
         limit: pageSize,
         status: 'published',

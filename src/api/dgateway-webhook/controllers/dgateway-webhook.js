@@ -2,6 +2,7 @@
 
 const { normalizePaymentMethod } = require('../../../utils/payment-methods');
 const { recordProviderMaterialSale } = require('../../../utils/provider-material-sales');
+const { activatePromotionByFilter, failPromotionByFilter } = require('../../../utils/marketplace-promotions');
 
 const crypto = require('crypto');
 const dgateway = require('../../../utils/dgateway');
@@ -148,6 +149,18 @@ module.exports = {
         }
       }
 
+      if (purchaseType === 'unknown') {
+        try {
+          const promotions = await strapi.entityService.findMany('api::marketplace-promotion.marketplace-promotion', {
+            filters: { dgatewayReference: reference },
+            limit: 1,
+          });
+          if (promotions && promotions.length > 0) purchaseType = 'marketplace_promotion';
+        } catch (dbErr) {
+          strapi.log.error(`[DGateway Verify] Promotion query failed:`, dbErr?.message || dbErr);
+        }
+      }
+
       return {
         data: {
           status: normalizedStatus,
@@ -232,6 +245,8 @@ async function activateByReference(reference, paymentMethod) {
       strapi.log.info(`[DGateway Webhook] Exclusive subscription ${exclSub.id} activated for ref ${reference}`);
     }
   }
+
+  await activatePromotionByFilter(strapi, { dgatewayReference: reference }, paymentMethod);
 }
 
 /**
@@ -273,4 +288,6 @@ async function failByReference(reference) {
       });
     }
   }
+
+  await failPromotionByFilter(strapi, { dgatewayReference: reference });
 }

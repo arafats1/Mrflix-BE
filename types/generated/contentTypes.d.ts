@@ -2109,6 +2109,73 @@ export interface ApiFreeTrialWatchFreeTrialWatch
   };
 }
 
+export interface ApiMarketplacePromotionMarketplacePromotion
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'marketplace_promotions';
+  info: {
+    description: 'Paid marketplace product and seller promotions';
+    displayName: 'Marketplace Promotion';
+    pluralName: 'marketplace-promotions';
+    singularName: 'marketplace-promotion';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    amount: Schema.Attribute.Integer &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<0>;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    dgatewayReference: Schema.Attribute.String;
+    durationDays: Schema.Attribute.Integer &
+      Schema.Attribute.Required &
+      Schema.Attribute.SetMinMax<
+        {
+          max: 30;
+          min: 1;
+        },
+        number
+      > &
+      Schema.Attribute.DefaultTo<1>;
+    endDate: Schema.Attribute.DateTime;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::marketplace-promotion.marketplace-promotion'
+    > &
+      Schema.Attribute.Private;
+    paymentMethod: Schema.Attribute.Enumeration<
+      ['mtn_momo', 'airtel_money', 'pesapal', 'dgateway', 'yo', 'admin_granted']
+    > &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<'pesapal'>;
+    paymentPhone: Schema.Attribute.String;
+    pesapalTrackingId: Schema.Attribute.String;
+    product: Schema.Attribute.Relation<'manyToOne', 'api::product.product'>;
+    promotionType: Schema.Attribute.Enumeration<['product', 'seller']> &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<'product'>;
+    publishedAt: Schema.Attribute.DateTime;
+    seller: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+    startDate: Schema.Attribute.DateTime;
+    status: Schema.Attribute.Enumeration<
+      ['pending', 'active', 'expired', 'cancelled']
+    > &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<'pending'>;
+    transactionId: Schema.Attribute.String;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    yoReference: Schema.Attribute.String;
+  };
+}
+
 export interface ApiMarketplaceThreadMarketplaceThread
   extends Struct.CollectionTypeSchema {
   collectionName: 'marketplace_threads';
@@ -2475,6 +2542,9 @@ export interface ApiProductProduct extends Struct.CollectionTypeSchema {
       Schema.Attribute.DefaultTo<0>;
     productVideoThumbnailUrl: Schema.Attribute.String;
     productVideoUrl: Schema.Attribute.String;
+    promotedUntil: Schema.Attribute.DateTime;
+    promotionBadgeLabel: Schema.Attribute.String;
+    promotionKind: Schema.Attribute.Enumeration<['product', 'seller']>;
     publishedAt: Schema.Attribute.DateTime;
     seller: Schema.Attribute.Relation<
       'manyToOne',
@@ -2919,6 +2989,10 @@ export interface ApiSiteSettingSiteSetting extends Struct.SingleTypeSchema {
       'api::site-setting.site-setting'
     > &
       Schema.Attribute.Private;
+    marketplacePromotionDailyPrice: Schema.Attribute.Integer &
+      Schema.Attribute.DefaultTo<5000>;
+    marketplacePromotionMonthlyPrice: Schema.Attribute.Integer &
+      Schema.Attribute.DefaultTo<100000>;
     mobileApkDownloadCount: Schema.Attribute.Integer &
       Schema.Attribute.DefaultTo<0>;
     mobileApkSize: Schema.Attribute.String;
@@ -3919,6 +3993,7 @@ declare module '@strapi/strapi' {
       'api::entrep-submission.entrep-submission': ApiEntrepSubmissionEntrepSubmission;
       'api::exclusive-subscription.exclusive-subscription': ApiExclusiveSubscriptionExclusiveSubscription;
       'api::free-trial-watch.free-trial-watch': ApiFreeTrialWatchFreeTrialWatch;
+      'api::marketplace-promotion.marketplace-promotion': ApiMarketplacePromotionMarketplacePromotion;
       'api::marketplace-thread.marketplace-thread': ApiMarketplaceThreadMarketplaceThread;
       'api::movie-request.movie-request': ApiMovieRequestMovieRequest;
       'api::movie.movie': ApiMovieMovie;

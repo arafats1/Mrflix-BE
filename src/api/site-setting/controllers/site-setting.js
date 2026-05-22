@@ -35,6 +35,7 @@ module.exports = createCoreController('api::site-setting.site-setting', ({ strap
       purchaseRevenueRows,
       subscriptionRevenueRows,
       exclusiveRevenueRows,
+      promotionRevenueRows,
     ] = await Promise.all([
       strapi.db.query('api::movie.movie').count({ where: { type: 'movie' } }),
       strapi.db.query('api::movie.movie').count({ where: { type: 'series' } }),
@@ -68,11 +69,19 @@ module.exports = createCoreController('api::site-setting.site-setting', ({ strap
         },
         select: ['amount'],
       }),
+      strapi.db.query('api::marketplace-promotion.marketplace-promotion').findMany({
+        where: {
+          status: { $in: ['active', 'expired'] },
+          createdAt: { $gte: revenueStartIso },
+        },
+        select: ['amount'],
+      }).catch(() => []),
     ]);
 
     const purchaseRevenue = (purchaseRevenueRows || []).reduce((sum, entry) => sum + (entry.amount || 0), 0);
     const subscriptionRevenue = (subscriptionRevenueRows || []).reduce((sum, entry) => sum + (entry.amount || 0), 0);
     const exclusiveRevenue = (exclusiveRevenueRows || []).reduce((sum, entry) => sum + (entry.amount || 0), 0);
+    const promotionRevenue = (promotionRevenueRows || []).reduce((sum, entry) => sum + (entry.amount || 0), 0);
 
     return {
       data: {
@@ -81,7 +90,7 @@ module.exports = createCoreController('api::site-setting.site-setting', ({ strap
         totalPurchases,
         pendingRequests,
         totalRequests,
-        totalRevenue: purchaseRevenue + subscriptionRevenue + exclusiveRevenue,
+        totalRevenue: purchaseRevenue + subscriptionRevenue + exclusiveRevenue + promotionRevenue,
         totalUsers,
         activeSubscriptions,
         totalSubscriptions,
@@ -89,6 +98,7 @@ module.exports = createCoreController('api::site-setting.site-setting', ({ strap
         activeExclusiveSubscriptions,
         totalExclusiveSubscriptions,
         exclusiveRevenue,
+        promotionRevenue,
         apkDownloadCount: settings?.apkDownloadCount || 0,
         newMessages,
       },
@@ -110,6 +120,8 @@ module.exports = createCoreController('api::site-setting.site-setting', ({ strap
           storageFreeTierGB: 1,
           storagePricePerMonth: 7000,
           storageEnabled: true,
+          marketplacePromotionDailyPrice: 5000,
+          marketplacePromotionMonthlyPrice: 100000,
           paymentGateway: 'pesapal',
         },
       };

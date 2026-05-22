@@ -1,0 +1,77 @@
+{
+  "kind": "collectionType",
+  "collectionName": "marketplace_promotions",
+  "info": {
+    "singularName": "marketplace-promotion",
+    "pluralName": "marketplace-promotions",
+    "displayName": "Marketplace Promotion",
+    "description": "Paid marketplace product and seller promotions"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "seller": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user"
+    },
+    "product": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::product.product"
+    },
+    "promotionType": {
+      "type": "enumeration",
+      "enum": ["product", "seller"],
+      "required": true,
+      "default": "product"
+    },
+    "durationDays": {
+      "type": "integer",
+      "required": true,
+      "default": 1,
+      "min": 1,
+      "max": 30
+    },
+    "amount": {
+      "type": "integer",
+      "required": true,
+      "default": 0
+    },
+    "paymentMethod": {
+      "type": "enumeration",
+      "enum": ["mtn_momo", "airtel_money", "pesapal", "dgateway", "yo", "admin_granted"],
+      "required": true,
+      "default": "pesapal"
+    },
+    "paymentPhone": {
+      "type": "string"
+    },
+    "transactionId": {
+      "type": "string"
+    },
+    "pesapalTrackingId": {
+      "type": "string"
+    },
+    "dgatewayReference": {
+      "type": "string"
+    },
+    "yoReference": {
+      "type": "string"
+    },
+    "status": {
+      "type": "enumeration",
+      "enum": ["pending", "active", "expired", "cancelled"],
+      "required": true,
+      "default": "pending"
+    },
+    "startDate": {
+      "type": "datetime"
+    },
+    "endDate": {
+      "type": "datetime"
+    }
+  }
+}

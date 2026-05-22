@@ -140,6 +140,14 @@
       "type": "boolean",
       "default": true
     },
+    "marketplacePromotionDailyPrice": {
+      "type": "integer",
+      "default": 5000
+    },
+    "marketplacePromotionMonthlyPrice": {
+      "type": "integer",
+      "default": 100000
+    },
     "aboutPageContent": {
       "type": "json"
     }

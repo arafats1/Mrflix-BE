@@ -116,6 +116,19 @@
     },
     "serviceBookedDates": {
       "type": "json"
+    },
+    "promotedUntil": {
+      "type": "datetime"
+    },
+    "promotionKind": {
+      "type": "enumeration",
+      "enum": [
+        "product",
+        "seller"
+      ]
+    },
+    "promotionBadgeLabel": {
+      "type": "string"
     }
   }
 }
