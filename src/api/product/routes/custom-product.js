@@ -37,6 +37,20 @@ module.exports = {
       config: {},
     },
     {
+      method: 'POST',
+      path: '/products/:id/video-like',
+      handler: 'product.likeVideo',
+      config: {
+        auth: false,
+      },
+    },
+    {
+      method: 'POST',
+      path: '/products/:id/video-comments',
+      handler: 'product.commentVideo',
+      config: {},
+    },
+    {
       method: 'PUT',
       path: '/products/:id',
       handler: 'product.update',

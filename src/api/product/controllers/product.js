@@ -38,6 +38,19 @@ function normalizeServiceDateList(input = []) {
   return [...new Set(values.map(normalizeServiceDate).filter(Boolean))].sort();
 }
 
+function normalizeProductVideoComments(input = []) {
+  return (Array.isArray(input) ? input : [])
+    .map((comment) => ({
+      id: String(comment?.id || '').trim() || `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      text: String(comment?.text || '').trim().slice(0, 500),
+      authorName: String(comment?.authorName || 'Buyer').trim().slice(0, 80),
+      authorId: comment?.authorId ? String(comment.authorId) : '',
+      createdAt: comment?.createdAt || new Date().toISOString(),
+    }))
+    .filter((comment) => comment.text)
+    .slice(-100);
+}
+
 function withSellerPaymentFallback(product) {
   if (!product) return product;
 
@@ -54,6 +67,8 @@ function withSellerPaymentFallback(product) {
     paymentCode: product.paymentCode || product.seller?.paymentCode || null,
     itemType: product.itemType === 'service' ? 'service' : 'product',
     marketplaceSource: product.marketplaceSource || 'core',
+    productVideoLikes: Math.max(0, Number(product.productVideoLikes || 0)),
+    productVideoComments: normalizeProductVideoComments(product.productVideoComments),
   };
 }
 
@@ -208,6 +223,13 @@ function buildProductPayload(input = {}, existingProduct = null) {
   const nextItemType = Object.prototype.hasOwnProperty.call(input, 'itemType')
     ? normalizeItemType(input.itemType)
     : normalizeItemType(existingProduct?.itemType);
+  const resolvedFeaturedImage = String(
+    input.featuredImage
+    || input.productVideoThumbnailUrl
+    || input.productVideoUrl
+    || existingProduct?.featuredImage
+    || ''
+  ).trim();
 
   const nextBookedDates = nextItemType === 'service'
     ? normalizeServiceDateList(
@@ -231,7 +253,17 @@ function buildProductPayload(input = {}, existingProduct = null) {
     ...(Object.prototype.hasOwnProperty.call(input, 'priceUGX') ? { priceUGX: input.priceUGX } : {}),
     ...(Object.prototype.hasOwnProperty.call(input, 'category') ? { category: input.category } : {}),
     ...(Object.prototype.hasOwnProperty.call(input, 'images') ? { images: Array.isArray(input.images) ? input.images : [] } : {}),
-    ...(Object.prototype.hasOwnProperty.call(input, 'featuredImage') ? { featuredImage: input.featuredImage } : {}),
+    ...(
+      Object.prototype.hasOwnProperty.call(input, 'featuredImage')
+      || Object.prototype.hasOwnProperty.call(input, 'productVideoUrl')
+      || Object.prototype.hasOwnProperty.call(input, 'productVideoThumbnailUrl')
+        ? { featuredImage: resolvedFeaturedImage }
+        : {}
+    ),
+    ...(Object.prototype.hasOwnProperty.call(input, 'productVideoUrl') ? { productVideoUrl: String(input.productVideoUrl || '').trim() } : {}),
+    ...(Object.prototype.hasOwnProperty.call(input, 'productVideoThumbnailUrl') ? { productVideoThumbnailUrl: String(input.productVideoThumbnailUrl || '').trim() } : {}),
+    ...(Object.prototype.hasOwnProperty.call(input, 'productVideoLikes') ? { productVideoLikes: Math.max(0, Number(input.productVideoLikes || 0)) } : {}),
+    ...(Object.prototype.hasOwnProperty.call(input, 'productVideoComments') ? { productVideoComments: normalizeProductVideoComments(input.productVideoComments) } : {}),
     ...(Object.prototype.hasOwnProperty.call(input, 'itemType') ? { itemType: nextItemType } : {}),
     ...(Object.prototype.hasOwnProperty.call(input, 'ageRange') ? { ageRange: input.ageRange } : {}),
     ...(Object.prototype.hasOwnProperty.call(input, 'audience') ? { audience: nextItemType === 'service' ? 'adults' : (input.audience || 'children') } : {}),
@@ -503,5 +535,55 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
         product: await attachReviewSummary(strapi, await withSoldCount(strapi, updatedProduct)),
       },
     };
+  },
+
+  async likeVideo(ctx) {
+    const product = await findProductByIdentifier(strapi, ctx.params.id);
+    if (!product) return ctx.notFound('Product not found');
+    if (!product.productVideoUrl) return ctx.badRequest('This product has no video');
+
+    const updated = await strapi.documents('api::product.product').update({
+      documentId: product.documentId,
+      data: {
+        productVideoLikes: Math.max(0, Number(product.productVideoLikes || 0)) + 1,
+      },
+      populate: { seller: true },
+      status: 'published',
+    });
+
+    return { data: await attachReviewSummary(strapi, await withSoldCount(strapi, updated)) };
+  },
+
+  async commentVideo(ctx) {
+    if (!ctx.state.user) {
+      return ctx.unauthorized('You must be logged in to comment on product videos');
+    }
+
+    const product = await findProductByIdentifier(strapi, ctx.params.id);
+    if (!product) return ctx.notFound('Product not found');
+    if (!product.productVideoUrl) return ctx.badRequest('This product has no video');
+
+    const text = String(ctx.request.body?.data?.text || ctx.request.body?.text || '').trim().slice(0, 500);
+    if (!text) return ctx.badRequest('Comment text is required');
+
+    const currentComments = normalizeProductVideoComments(product.productVideoComments);
+    const nextComment = {
+      id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      text,
+      authorId: String(ctx.state.user.id),
+      authorName: String(ctx.state.user.fullName || ctx.state.user.username || 'Buyer').trim(),
+      createdAt: new Date().toISOString(),
+    };
+
+    const updated = await strapi.documents('api::product.product').update({
+      documentId: product.documentId,
+      data: {
+        productVideoComments: normalizeProductVideoComments([...currentComments, nextComment]),
+      },
+      populate: { seller: true },
+      status: 'published',
+    });
+
+    return { data: await attachReviewSummary(strapi, await withSoldCount(strapi, updated)) };
   },
 }));

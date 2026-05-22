@@ -36,7 +36,7 @@ async function requireUploadUser(ctx) {
 }
 
 const OPEN_UPLOAD_FOLDERS = ['stories', 'entrep-documents', 'entrep-course-media', 'entrep-community-media', 'entrep-profile-media', 'entrep-assignments', 'entrep-lesson-question-responses', 'marketplace-chat', 'profile-pictures'];
-const PROVIDER_UPLOAD_FOLDERS = ['provider-materials', 'product-images'];
+const PROVIDER_UPLOAD_FOLDERS = ['provider-materials', 'product-images', 'product-videos'];
 
 function folderMatchesPrefix(folder, prefix) {
   return folder === prefix || folder.startsWith(`${prefix}/`);
@@ -75,7 +75,7 @@ async function ensureFolderAccess(ctx, authUser, folder) {
 
   if (folderType === 'provider') {
     if (authUser.accountType === 'provider' || authUser.accountType === 'both') return true;
-    if (folderMatchesPrefix(folder, 'product-images') && await isEntrepreneurUploadUser(authUser)) return true;
+    if ((folderMatchesPrefix(folder, 'product-images') || folderMatchesPrefix(folder, 'product-videos')) && await isEntrepreneurUploadUser(authUser)) return true;
     if (await isAdminUploadUser(authUser)) return true;
     ctx.forbidden('Provider/Seller access required for this folder');
     return false;

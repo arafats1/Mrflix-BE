@@ -36,6 +36,20 @@
       "type": "string",
       "required": true
     },
+    "productVideoUrl": {
+      "type": "string"
+    },
+    "productVideoThumbnailUrl": {
+      "type": "string"
+    },
+    "productVideoLikes": {
+      "type": "integer",
+      "default": 0,
+      "min": 0
+    },
+    "productVideoComments": {
+      "type": "json"
+    },
     "itemType": {
       "type": "enumeration",
       "enum": [

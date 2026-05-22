@@ -2464,6 +2464,17 @@ export interface ApiProductProduct extends Struct.CollectionTypeSchema {
     paymentCode: Schema.Attribute.String;
     paymentPhone: Schema.Attribute.String;
     priceUGX: Schema.Attribute.Integer & Schema.Attribute.Required;
+    productVideoComments: Schema.Attribute.JSON;
+    productVideoLikes: Schema.Attribute.Integer &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0;
+        },
+        number
+      > &
+      Schema.Attribute.DefaultTo<0>;
+    productVideoThumbnailUrl: Schema.Attribute.String;
+    productVideoUrl: Schema.Attribute.String;
     publishedAt: Schema.Attribute.DateTime;
     seller: Schema.Attribute.Relation<
       'manyToOne',
