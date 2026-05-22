@@ -13,7 +13,8 @@ module.exports = createCoreController('api::site-setting.site-setting', ({ strap
       return ctx.forbidden('Only admins can view admin stats');
     }
 
-    const settings = await strapi.entityService.findMany('api::site-setting.site-setting');
+    const res = await strapi.entityService.findMany('api::site-setting.site-setting');
+    const settings = Array.isArray(res) ? res[0] : res;
     const revenueStart = settings?.revenueResetDate
       ? new Date(settings.revenueResetDate)
       : new Date('2026-03-09T00:00:00.000Z');
@@ -100,6 +101,7 @@ module.exports = createCoreController('api::site-setting.site-setting', ({ strap
         exclusiveRevenue,
         promotionRevenue,
         apkDownloadCount: settings?.apkDownloadCount || 0,
+        apkDownloadMobileCount: settings?.apkDownloadMobileCount || 0,
         newMessages,
       },
     };
@@ -107,7 +109,8 @@ module.exports = createCoreController('api::site-setting.site-setting', ({ strap
 
   // Public read — anyone can read pricing
   async find(ctx) {
-    const entry = await strapi.entityService.findMany('api::site-setting.site-setting');
+    const settings = await strapi.entityService.findMany('api::site-setting.site-setting');
+    const entry = Array.isArray(settings) ? settings[0] : settings;
     // If no settings exist yet, return defaults
     if (!entry) {
       return {
@@ -145,7 +148,8 @@ module.exports = createCoreController('api::site-setting.site-setting', ({ strap
     }
 
     const inputData = ctx.request.body.data || ctx.request.body;
-    const existing = await strapi.entityService.findMany('api::site-setting.site-setting');
+    const settings = await strapi.entityService.findMany('api::site-setting.site-setting');
+    const existing = Array.isArray(settings) ? settings[0] : settings;
 
     let entry;
     if (existing?.id) {
@@ -162,7 +166,8 @@ module.exports = createCoreController('api::site-setting.site-setting', ({ strap
   },
 
   async incrementDownload(ctx) {
-    const existing = await strapi.entityService.findMany('api::site-setting.site-setting');
+    const settings = await strapi.entityService.findMany('api::site-setting.site-setting');
+    const existing = Array.isArray(settings) ? settings[0] : settings;
     if (!existing) {
       return ctx.notFound('Site setting not found');
     }
@@ -175,13 +180,14 @@ module.exports = createCoreController('api::site-setting.site-setting', ({ strap
   },
 
   async incrementMobileDownload(ctx) {
-    const existing = await strapi.entityService.findMany('api::site-setting.site-setting');
+    const settings = await strapi.entityService.findMany('api::site-setting.site-setting');
+    const existing = Array.isArray(settings) ? settings[0] : settings;
     if (!existing) {
       return ctx.notFound('Site setting not found');
     }
     const updated = await strapi.entityService.update('api::site-setting.site-setting', existing.id, {
       data: {
-        mobileApkDownloadCount: (existing.mobileApkDownloadCount || 0) + 1,
+        apkDownloadMobileCount: (existing.apkDownloadMobileCount || 0) + 1,
       },
     });
     return { data: updated };

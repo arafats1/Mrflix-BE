@@ -1,7 +1,7 @@
 'use strict';
 
 const { createCoreController } = require('@strapi/strapi').factories;
-const { submitPayment } = require('../../../utils/payment-gateway');
+const { submitPayment, checkPaymentStatus } = require('../../../utils/payment-gateway');
 const { activatePromotion } = require('../../../utils/marketplace-promotions');
 
 function isAdminUser(user) {
@@ -14,8 +14,28 @@ function clampDays(value) {
   return Math.min(Math.max(parsed, 1), 30);
 }
 
+function normalizeUgPhone(phone) {
+  const digits = String(phone || '').replace(/\D/g, '');
+  if (!digits) return '';
+  if (digits.startsWith('256')) return digits;
+  if (digits.startsWith('0') && digits.length === 10) return `256${digits.slice(1)}`;
+  if (digits.startsWith('7') && digits.length === 9) return `256${digits}`;
+  return digits;
+}
+
+function toTimestamp(value) {
+  if (!value) return 0;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+  const raw = String(value).trim();
+  if (!raw) return 0;
+  if (/^\d+$/.test(raw)) return Number(raw);
+  const parsed = new Date(raw).getTime();
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
 async function getSettings(strapi) {
   const settings = await strapi.entityService.findMany('api::site-setting.site-setting');
+  if (Array.isArray(settings)) return settings[0] || {};
   return settings || {};
 }
 
@@ -56,10 +76,31 @@ module.exports = createCoreController('api::marketplace-promotion.marketplace-pr
 
     const promotions = await strapi.entityService.findMany('api::marketplace-promotion.marketplace-promotion', {
       filters: { seller: { id: ctx.state.user.id } },
-      populate: { product: true },
+      populate: { product: true, seller: true },
       sort: { createdAt: 'desc' },
       limit: 100,
     });
+
+    // Self-heal: re-apply product fields for any active promotion whose product
+    // somehow lost its promotedUntil (e.g. activated before the DB-write fix).
+    const now = Date.now();
+    for (const promotion of promotions || []) {
+      if (promotion.status !== 'active') continue;
+      const endTs = toTimestamp(promotion.endDate);
+      if (!endTs || endTs <= now) continue;
+
+      const needsResync = promotion.promotionType === 'seller'
+        ? true
+        : !promotion.product?.promotedUntil || toTimestamp(promotion.product.promotedUntil) < endTs;
+
+      if (needsResync) {
+        try {
+          await activatePromotion(strapi, promotion);
+        } catch (err) {
+          strapi.log.warn(`[promotion] mine resync failed for ${promotion.id}: ${err.message}`);
+        }
+      }
+    }
 
     return { data: promotions || [] };
   },
@@ -71,6 +112,7 @@ module.exports = createCoreController('api::marketplace-promotion.marketplace-pr
     const promotionType = payload.promotionType === 'seller' ? 'seller' : 'product';
     const durationDays = promotionType === 'seller' ? 30 : clampDays(payload.durationDays);
     const paymentPhone = String(payload.paymentPhone || '').trim();
+    const normalizedPaymentPhone = normalizeUgPhone(paymentPhone);
     const productId = payload.productId;
 
     const settings = await getSettings(strapi);
@@ -84,7 +126,7 @@ module.exports = createCoreController('api::marketplace-promotion.marketplace-pr
     if (activeGateway === 'pesapal' && !settings.pesapalIpnId) {
       return ctx.badRequest('Payment system not configured. Please contact support.');
     }
-    if ((activeGateway === 'dgateway' || activeGateway === 'yo') && !paymentPhone) {
+    if ((activeGateway === 'dgateway' || activeGateway === 'yo') && !normalizedPaymentPhone) {
       return ctx.badRequest('Phone number is required for mobile money payment.');
     }
 
@@ -104,7 +146,7 @@ module.exports = createCoreController('api::marketplace-promotion.marketplace-pr
         durationDays,
         amount,
         paymentMethod: activeGateway,
-        paymentPhone,
+        paymentPhone: normalizedPaymentPhone || paymentPhone,
         transactionId: merchantReference,
         status: 'pending',
       },
@@ -127,7 +169,7 @@ module.exports = createCoreController('api::marketplace-promotion.marketplace-pr
         paymentPhone,
         billingAddress: {
           email: user.email || '',
-          phone: paymentPhone,
+          phone: normalizedPaymentPhone || paymentPhone,
           firstName: nameParts[0] || '',
           lastName: nameParts.slice(1).join(' ') || '',
         },
@@ -173,8 +215,31 @@ module.exports = createCoreController('api::marketplace-promotion.marketplace-pr
       limit: 1,
     });
 
-    const promotion = promotions?.[0];
+    let promotion = promotions?.[0];
     if (!promotion) return ctx.notFound('Promotion not found');
+
+    if (promotion.status === 'pending') {
+      try {
+        const gatewayStatus = await checkPaymentStatus(strapi, {
+          gateway: promotion.paymentMethod,
+          pesapalTrackingId: promotion.pesapalTrackingId,
+          dgatewayReference: promotion.dgatewayReference,
+          yoReference: promotion.yoReference,
+          merchantReference: promotion.transactionId,
+        });
+
+        if (gatewayStatus?.status === 'completed') {
+          promotion = await activatePromotion(strapi, promotion);
+        } else if (gatewayStatus?.status === 'failed') {
+          await strapi.entityService.update('api::marketplace-promotion.marketplace-promotion', promotion.id, {
+            data: { status: 'cancelled' },
+          });
+          promotion = { ...promotion, status: 'cancelled' };
+        }
+      } catch (err) {
+        strapi.log.warn(`Promotion status verify failed for ${transactionId}: ${err.message}`);
+      }
+    }
 
     return { data: promotion };
   },

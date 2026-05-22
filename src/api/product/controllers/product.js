@@ -88,6 +88,16 @@ function parsePositiveInteger(value, fallback) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+function toTimestamp(value) {
+  if (!value) return 0;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+  const raw = String(value).trim();
+  if (!raw) return 0;
+  if (/^\d+$/.test(raw)) return Number(raw);
+  const parsed = new Date(raw).getTime();
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
 async function clearExpiredProductPromotions(strapi) {
   const now = new Date().toISOString();
   await strapi.db.query('api::product.product').updateMany({
@@ -184,6 +194,79 @@ async function attachReviewSummary(strapi, products) {
       ...product,
       rating: average,
       reviewsCount: summary.count,
+    };
+  });
+
+  return Array.isArray(products) ? enriched : enriched[0];
+}
+
+async function attachActivePromotionState(strapi, products) {
+  const list = Array.isArray(products) ? products.filter(Boolean) : [products].filter(Boolean);
+  if (!list.length) return Array.isArray(products) ? [] : null;
+
+  const productDocumentIds = [...new Set(list.map((product) => product.documentId).filter(Boolean))];
+  const sellerIds = [...new Set(list.map((product) => product.seller?.id).filter(Boolean))];
+
+  if (!productDocumentIds.length && !sellerIds.length) return Array.isArray(products) ? list : list[0];
+
+  const promotions = await strapi.db.connection('marketplace_promotions as mp')
+    .leftJoin('marketplace_promotions_product_lnk as product_lnk', 'product_lnk.marketplace_promotion_id', 'mp.id')
+    .leftJoin('products as promoted_product', 'promoted_product.id', 'product_lnk.product_id')
+    .leftJoin('marketplace_promotions_seller_lnk as seller_lnk', 'seller_lnk.marketplace_promotion_id', 'mp.id')
+    .where('mp.status', 'active')
+    .select(
+      'mp.id',
+      'mp.promotion_type as promotionType',
+      'mp.end_date as endDate',
+      'promoted_product.document_id as productDocumentId',
+      'seller_lnk.user_id as sellerId'
+    )
+    .limit(1000)
+    .catch((error) => {
+    strapi.log.warn(`Failed to attach active product promotions: ${error.message}`);
+    return [];
+  });
+
+  const activeProductPromotions = new Map();
+  const activeSellerPromotions = new Map();
+  const productDocumentIdSet = new Set(productDocumentIds);
+  const sellerIdSet = new Set(sellerIds.map((id) => String(id)));
+
+  for (const promotion of promotions || []) {
+    const endTs = toTimestamp(promotion.endDate);
+    if (!endTs || endTs <= Date.now()) continue;
+
+    if (promotion.promotionType === 'seller' && promotion.sellerId) {
+      if (!sellerIdSet.has(String(promotion.sellerId))) continue;
+      const current = activeSellerPromotions.get(promotion.sellerId);
+      if (!current || toTimestamp(current.endDate) < endTs) {
+        activeSellerPromotions.set(promotion.sellerId, promotion);
+      }
+      continue;
+    }
+
+    const documentId = promotion.productDocumentId;
+    if (documentId) {
+      if (!productDocumentIdSet.has(documentId)) continue;
+      const current = activeProductPromotions.get(documentId);
+      if (!current || toTimestamp(current.endDate) < endTs) {
+        activeProductPromotions.set(documentId, promotion);
+      }
+    }
+  }
+
+  const enriched = list.map((product) => {
+    const sellerPromotion = product.seller?.id ? activeSellerPromotions.get(product.seller.id) : null;
+    const productPromotion = product.documentId ? activeProductPromotions.get(product.documentId) : null;
+    const winningPromotion = sellerPromotion || productPromotion;
+
+    if (!winningPromotion) return product;
+
+    return {
+      ...product,
+      promotedUntil: winningPromotion.endDate,
+      promotionKind: winningPromotion.promotionType === 'seller' ? 'seller' : 'product',
+      promotionBadgeLabel: 'Promoted',
     };
   });
 
@@ -319,7 +402,8 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
     });
 
     const soldProducts = await Promise.all(products.map((product) => withSoldCount(strapi, product)));
-    return { data: await attachReviewSummary(strapi, soldProducts) };
+    const promotedProducts = await attachActivePromotionState(strapi, soldProducts);
+    return { data: await attachReviewSummary(strapi, promotedProducts) };
   },
 
   /**
@@ -394,8 +478,9 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
     ]);
 
     const soldProducts = await Promise.all(products.map((product) => withSoldCount(strapi, product)));
+    const promotedProducts = await attachActivePromotionState(strapi, soldProducts);
     return {
-      data: await attachReviewSummary(strapi, soldProducts),
+      data: await attachReviewSummary(strapi, promotedProducts),
       meta: {
         pagination: {
           page,
@@ -445,7 +530,9 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
       return ctx.notFound('Product not found');
     }
 
-    return { data: await attachReviewSummary(strapi, await withSoldCount(strapi, product)) };
+    const soldProduct = await withSoldCount(strapi, product);
+    const promotedProduct = await attachActivePromotionState(strapi, soldProduct);
+    return { data: await attachReviewSummary(strapi, promotedProduct) };
   },
 
   async bookService(ctx) {
