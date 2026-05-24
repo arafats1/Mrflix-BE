@@ -10,5 +10,13 @@ module.exports = {
         policies: [],
       },
     },
+    {
+      method: 'POST',
+      path: '/ai-chat/marketplace-description',
+      handler: 'ai-chat.generateMarketplaceDescription',
+      config: {
+        policies: [],
+      },
+    },
   ],
 };

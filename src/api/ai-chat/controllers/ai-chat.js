@@ -38,8 +38,15 @@ module.exports = {
       // Fetch a representative slice from every section so the assistant can
       // help users across the whole platform (movies + marketplace + books +
       // music + jobs + courses + education materials + stories).
+      /** @param {Promise<any>} p */
       const safe = async (p) => {
-        try { return await p; } catch (e) { strapi.log.warn('AI Chat fetch failed:', e?.message || e); return []; }
+        try {
+          return await p;
+        } catch (e) {
+          const error = /** @type {any} */ (e);
+          strapi.log.warn('AI Chat fetch failed:', error?.message || error);
+          return [];
+        }
       };
 
       const [
@@ -283,9 +290,11 @@ LUGANDA MODE ACTIVE: The user is browsing the Luganda section. When recommending
       // Sanitize any hallucinated absolute domains the model may have emitted.
       // We always want links to be root-relative so the browser uses the
       // current host (e.g. movobrands.com, dev domains, preview deployments).
+      /** @param {string} _match @param {string} _origin @param {string | undefined} path */
+      const stripHallucinatedDomain = (_match, _origin, path) => path || '/';
       reply = reply.replace(
         /(https?:\/\/(?:www\.)?(?:movo|movobrands|movokids|mrflix)[a-z0-9.-]*)(\/[^\s)\]]*)?/gi,
-        (_match, _origin, path) => path || '/'
+        stripHallucinatedDomain
       );
 
       // Safety net: if Luganda mode has catalog items but model says none available,
@@ -394,6 +403,93 @@ LUGANDA MODE ACTIVE: The user is browsing the Luganda section. When recommending
     } catch (err) {
       strapi.log.error('AI chat error:', err);
       return ctx.badRequest('AI assistant encountered an error');
+    }
+  },
+
+  /** @param {any} ctx */
+  async generateMarketplaceDescription(ctx) {
+    const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+    if (!OPENAI_API_KEY) {
+      strapi.log.error('OPENAI_API_KEY not configured');
+      return ctx.badRequest('AI assistant is not configured');
+    }
+
+    if (!ctx.state.user?.id) {
+      return ctx.unauthorized('Authentication required');
+    }
+
+    const rawName = ctx.request.body?.name;
+    const rawItemType = ctx.request.body?.itemType;
+    const rawCategory = ctx.request.body?.category;
+
+    const name = String(rawName || '').trim();
+    const itemType = String(rawItemType || 'product').trim().toLowerCase() === 'service' ? 'service' : 'product';
+    const category = String(rawCategory || '').trim();
+
+    if (!name || name.length < 2) {
+      return ctx.badRequest('Product or service name is required');
+    }
+
+    try {
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${OPENAI_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          temperature: 0.7,
+          max_tokens: 220,
+          messages: [
+            {
+              role: 'system',
+              content: [
+                'You write marketplace descriptions for MOVO sellers in Uganda.',
+                'Return plain text only.',
+                'Write a maximum of two short paragraphs.',
+                'Do not use markdown, bullet points, headings, hashtags, or emojis.',
+                'Keep the tone clear, confident, and practical.',
+                'Mention useful buyer details like purpose, quality, fit, use case, or service outcome, but do not invent unavailable specifications.',
+              ].join(' '),
+            },
+            {
+              role: 'user',
+              content: [
+                `Name: ${name}`,
+                `Type: ${itemType}`,
+                category ? `Category: ${category}` : null,
+                'Write a strong description the seller can edit before publishing.',
+              ].filter(Boolean).join('\n'),
+            },
+          ],
+        }),
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        strapi.log.error('OpenAI marketplace description error:', err);
+        return ctx.badRequest('AI description is temporarily unavailable');
+      }
+
+      const data = await response.json();
+      const description = String(data?.choices?.[0]?.message?.content || '')
+        .trim()
+        .replace(/^['"\s]+|['"\s]+$/g, '')
+        .replace(/\n{3,}/g, '\n\n');
+
+      if (!description) {
+        return ctx.badRequest('AI description is temporarily unavailable');
+      }
+
+      return {
+        data: {
+          description,
+        },
+      };
+    } catch (err) {
+      strapi.log.error('Marketplace description AI error:', err);
+      return ctx.badRequest('AI description is temporarily unavailable');
     }
   },
 };
