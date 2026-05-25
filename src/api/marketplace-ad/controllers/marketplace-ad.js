@@ -185,4 +185,53 @@ module.exports = createCoreController('api::marketplace-ad.marketplace-ad', ({ s
     await strapi.documents('api::marketplace-ad.marketplace-ad').delete({ documentId });
     return { data: { success: true } };
   },
+
+  async adminUploadImage(ctx) {
+    if (!(await assertAdmin(ctx, strapi))) return;
+
+    const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
+    const fs   = require('node:fs');
+    const path = require('node:path');
+    const { randomUUID } = require('node:crypto');
+
+    // koa-body puts uploaded files on ctx.request.files; field name is "file"
+    const rawFile = ctx.request.files?.file;
+    const uploadedFile = Array.isArray(rawFile) ? rawFile[0] : rawFile;
+
+    if (!uploadedFile) {
+      return ctx.badRequest('No file provided. Send multipart/form-data with a "file" field.');
+    }
+
+    const isBackblaze     = (process.env.STORAGE_PROVIDER || 'backblaze').toLowerCase() === 'backblaze';
+    const endpoint        = isBackblaze ? process.env.B2_ENDPOINT     : process.env.CF_ENDPOINT;
+    const bucket          = isBackblaze ? process.env.B2_BUCKET        : process.env.CF_BUCKET;
+    const publicUrl       = (isBackblaze ? process.env.B2_PUBLIC_URL   : process.env.CF_PUBLIC_URL || '').replace(/\/$/, '');
+    const accessKeyId     = isBackblaze ? process.env.B2_ACCESS_KEY_ID : process.env.CF_ACCESS_KEY_ID;
+    const secretAccessKey = isBackblaze ? process.env.B2_ACCESS_SECRET : process.env.CF_ACCESS_SECRET;
+    const region          = isBackblaze ? (process.env.B2_REGION || 'us-east-005') : 'auto';
+
+    const s3 = new S3Client({
+      region,
+      endpoint,
+      credentials: { accessKeyId, secretAccessKey },
+      forcePathStyle: true,
+    });
+
+    // Support both formidable v2 (.path / .name / .type) and v3+ (.filepath / .originalFilename / .mimetype)
+    const tempPath    = uploadedFile.filepath || uploadedFile.path;
+    const origName    = uploadedFile.originalFilename || uploadedFile.name || 'upload';
+    const contentType = uploadedFile.mimetype || uploadedFile.type || 'application/octet-stream';
+
+    const ext = path.extname(origName).toLowerCase() || '.jpg';
+    const key = `marketplace-ads/${randomUUID()}${ext}`;
+
+    await s3.send(new PutObjectCommand({
+      Bucket: bucket,
+      Key: key,
+      Body: fs.readFileSync(tempPath),
+      ContentType: contentType,
+    }));
+
+    return ctx.send({ url: `${publicUrl}/${key}` });
+  },
 }));

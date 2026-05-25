@@ -21,6 +21,12 @@ module.exports = {
       config: { auth: false },
     },
     {
+      method: 'POST',
+      path: '/marketplace-ads/admin/upload-image',
+      handler: 'marketplace-ad.adminUploadImage',
+      config: { auth: false },
+    },
+    {
       method: 'PUT',
       path: '/marketplace-ads/admin/:id',
       handler: 'marketplace-ad.adminUpdate',
