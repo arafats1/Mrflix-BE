@@ -1,0 +1,75 @@
+{
+  "kind": "collectionType",
+  "collectionName": "marketplace_ads",
+  "info": {
+    "singularName": "marketplace-ad",
+    "pluralName": "marketplace-ads",
+    "displayName": "Marketplace Ad",
+    "description": "Animated marketplace banner ads managed by admins"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "title": {
+      "type": "string",
+      "required": true
+    },
+    "subtitle": {
+      "type": "string"
+    },
+    "eyebrow": {
+      "type": "string"
+    },
+    "ctaLabel": {
+      "type": "string"
+    },
+    "linkUrl": {
+      "type": "string"
+    },
+    "imageUrl": {
+      "type": "string"
+    },
+    "image": {
+      "type": "media",
+      "multiple": false,
+      "required": false,
+      "allowedTypes": ["images"]
+    },
+    "backgroundColor": {
+      "type": "string",
+      "default": "#073f56"
+    },
+    "textColor": {
+      "type": "string",
+      "default": "#ffffff"
+    },
+    "accentColor": {
+      "type": "string",
+      "default": "#ff8a00"
+    },
+    "placement": {
+      "type": "enumeration",
+      "enum": ["marketplace_top"],
+      "required": true,
+      "default": "marketplace_top"
+    },
+    "status": {
+      "type": "enumeration",
+      "enum": ["active", "paused"],
+      "required": true,
+      "default": "active"
+    },
+    "priority": {
+      "type": "integer",
+      "default": 0
+    },
+    "startsAt": {
+      "type": "datetime"
+    },
+    "endsAt": {
+      "type": "datetime"
+    }
+  }
+}

@@ -2109,6 +2109,56 @@ export interface ApiFreeTrialWatchFreeTrialWatch
   };
 }
 
+export interface ApiMarketplaceAdMarketplaceAd
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'marketplace_ads';
+  info: {
+    description: 'Animated marketplace banner ads managed by admins';
+    displayName: 'Marketplace Ad';
+    pluralName: 'marketplace-ads';
+    singularName: 'marketplace-ad';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    accentColor: Schema.Attribute.String &
+      Schema.Attribute.DefaultTo<'#ff8a00'>;
+    backgroundColor: Schema.Attribute.String &
+      Schema.Attribute.DefaultTo<'#073f56'>;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    ctaLabel: Schema.Attribute.String;
+    endsAt: Schema.Attribute.DateTime;
+    eyebrow: Schema.Attribute.String;
+    image: Schema.Attribute.Media<'images'>;
+    imageUrl: Schema.Attribute.String;
+    linkUrl: Schema.Attribute.String;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::marketplace-ad.marketplace-ad'
+    > &
+      Schema.Attribute.Private;
+    placement: Schema.Attribute.Enumeration<['marketplace_top']> &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<'marketplace_top'>;
+    priority: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    publishedAt: Schema.Attribute.DateTime;
+    startsAt: Schema.Attribute.DateTime;
+    status: Schema.Attribute.Enumeration<['active', 'paused']> &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<'active'>;
+    subtitle: Schema.Attribute.String;
+    textColor: Schema.Attribute.String & Schema.Attribute.DefaultTo<'#ffffff'>;
+    title: Schema.Attribute.String & Schema.Attribute.Required;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface ApiMarketplacePromotionMarketplacePromotion
   extends Struct.CollectionTypeSchema {
   collectionName: 'marketplace_promotions';
@@ -3993,6 +4043,7 @@ declare module '@strapi/strapi' {
       'api::entrep-submission.entrep-submission': ApiEntrepSubmissionEntrepSubmission;
       'api::exclusive-subscription.exclusive-subscription': ApiExclusiveSubscriptionExclusiveSubscription;
       'api::free-trial-watch.free-trial-watch': ApiFreeTrialWatchFreeTrialWatch;
+      'api::marketplace-ad.marketplace-ad': ApiMarketplaceAdMarketplaceAd;
       'api::marketplace-promotion.marketplace-promotion': ApiMarketplacePromotionMarketplacePromotion;
       'api::marketplace-thread.marketplace-thread': ApiMarketplaceThreadMarketplaceThread;
       'api::movie-request.movie-request': ApiMovieRequestMovieRequest;
