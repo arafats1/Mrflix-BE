@@ -4,6 +4,14 @@ module.exports = {
   routes: [
     {
       method: 'GET',
+      path: '/products/marketplace-impact',
+      handler: 'product.marketplaceImpact',
+      config: {
+        auth: false,
+      },
+    },
+    {
+      method: 'GET',
       path: '/products/mine',
       handler: 'product.mine',
       config: {},

@@ -694,4 +694,53 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
 
     return { data: await attachReviewSummary(strapi, await withSoldCount(strapi, updated)) };
   },
+
+  async marketplaceImpact(ctx) {
+    const [activeProducts, completedProductPurchases] = await Promise.all([
+      strapi.documents('api::product.product').findMany({
+        filters: { status: 'active' },
+        populate: { seller: true },
+        fields: ['id'],
+        status: 'published',
+        limit: 10000,
+      }),
+      strapi.db.query('api::purchase.purchase').findMany({
+        where: {
+          status: 'completed',
+          product: { id: { $notNull: true } },
+        },
+        select: ['amount'],
+        populate: {
+          buyer: { select: ['id'] },
+        },
+      }),
+    ]);
+
+    const sellerIds = new Set(
+      (activeProducts || [])
+        .map((product) => product?.seller?.id)
+        .filter(Boolean)
+        .map(String)
+    );
+
+    const buyerIds = new Set(
+      (completedProductPurchases || [])
+        .map((purchase) => purchase?.buyer?.id)
+        .filter(Boolean)
+        .map(String)
+    );
+
+    const totalPurchasedValueUGX = (completedProductPurchases || []).reduce(
+      (sum, purchase) => sum + Math.max(0, Number(purchase?.amount || 0)),
+      0
+    );
+
+    return {
+      data: {
+        totalBuyers: buyerIds.size,
+        totalSellers: sellerIds.size,
+        totalPurchasedValueUGX,
+      },
+    };
+  },
 }));
