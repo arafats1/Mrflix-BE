@@ -696,11 +696,11 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
   },
 
   async marketplaceImpact(ctx) {
-    const [activeProducts, completedProductPurchases] = await Promise.all([
+    const [activeProducts, completedProductPurchases, marketplaceThreads] = await Promise.all([
       strapi.documents('api::product.product').findMany({
         filters: { status: 'active' },
         populate: { seller: true },
-        fields: ['id'],
+        fields: ['id', 'priceUGX'],
         status: 'published',
         limit: 10000,
       }),
@@ -713,6 +713,13 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
         populate: {
           buyer: { select: ['id'] },
         },
+      }),
+      strapi.db.query('api::marketplace-thread.marketplace-thread').findMany({
+        select: ['id'],
+        populate: {
+          buyer: { select: ['id'] },
+        },
+        limit: 10000,
       }),
     ]);
 
@@ -730,8 +737,14 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
         .map(String)
     );
 
-    const totalPurchasedValueUGX = (completedProductPurchases || []).reduce(
-      (sum, purchase) => sum + Math.max(0, Number(purchase?.amount || 0)),
+    (marketplaceThreads || [])
+      .map((thread) => thread?.buyer?.id)
+      .filter(Boolean)
+      .map(String)
+      .forEach((buyerId) => buyerIds.add(buyerId));
+
+    const totalProductValueUGX = (activeProducts || []).reduce(
+      (sum, product) => sum + Math.max(0, Number(product?.priceUGX || 0)),
       0
     );
 
@@ -739,7 +752,8 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
       data: {
         totalBuyers: buyerIds.size,
         totalSellers: sellerIds.size,
-        totalPurchasedValueUGX,
+        totalProductValueUGX,
+        totalPurchasedValueUGX: totalProductValueUGX,
       },
     };
   },
