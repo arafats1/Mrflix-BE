@@ -696,7 +696,7 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
   },
 
   async marketplaceImpact(ctx) {
-    const [activeProducts, completedProductPurchases, marketplaceThreads] = await Promise.all([
+    const [activeProducts, totalRegisteredUsers] = await Promise.all([
       strapi.documents('api::product.product').findMany({
         filters: { status: 'active' },
         populate: { seller: true },
@@ -704,23 +704,7 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
         status: 'published',
         limit: 10000,
       }),
-      strapi.db.query('api::purchase.purchase').findMany({
-        where: {
-          status: 'completed',
-          product: { id: { $notNull: true } },
-        },
-        select: ['amount'],
-        populate: {
-          buyer: { select: ['id'] },
-        },
-      }),
-      strapi.db.query('api::marketplace-thread.marketplace-thread').findMany({
-        select: ['id'],
-        populate: {
-          buyer: { select: ['id'] },
-        },
-        limit: 10000,
-      }),
+      strapi.db.query('plugin::users-permissions.user').count({}),
     ]);
 
     const sellerIds = new Set(
@@ -730,19 +714,6 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
         .map(String)
     );
 
-    const buyerIds = new Set(
-      (completedProductPurchases || [])
-        .map((purchase) => purchase?.buyer?.id)
-        .filter(Boolean)
-        .map(String)
-    );
-
-    (marketplaceThreads || [])
-      .map((thread) => thread?.buyer?.id)
-      .filter(Boolean)
-      .map(String)
-      .forEach((buyerId) => buyerIds.add(buyerId));
-
     const totalProductValueUGX = (activeProducts || []).reduce(
       (sum, product) => sum + Math.max(0, Number(product?.priceUGX || 0)),
       0
@@ -750,7 +721,8 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
 
     return {
       data: {
-        totalBuyers: buyerIds.size,
+        totalBuyers: Number(totalRegisteredUsers || 0),
+        totalRegisteredUsers: Number(totalRegisteredUsers || 0),
         totalSellers: sellerIds.size,
         totalProductValueUGX,
         totalPurchasedValueUGX: totalProductValueUGX,
