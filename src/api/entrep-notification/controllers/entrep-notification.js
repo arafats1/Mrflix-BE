@@ -133,4 +133,15 @@ module.exports = createCoreController('api::entrep-notification.entrep-notificat
 
     ctx.send({ ok: true, updated: unread.length });
   },
+
+  async clear(ctx) {
+    const user = await resolveUser(strapi, ctx);
+    if (!user) return ctx.unauthorized();
+
+    await strapi.db.query('api::entrep-notification.entrep-notification').deleteMany({
+      where: { recipient: user.id },
+    });
+
+    ctx.send({ ok: true });
+  },
 }));
