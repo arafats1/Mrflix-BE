@@ -51,6 +51,35 @@ function configureWebPush() {
   return true;
 }
 
+function getEndpointHost(endpoint) {
+  try {
+    return new URL(endpoint).host;
+  } catch {
+    return 'unknown-provider';
+  }
+}
+
+function summarizePushError(err) {
+  const statusCode = Number(err?.statusCode || err?.status || 0);
+  const body = err?.body ? String(err.body).replace(/\s+/g, ' ').slice(0, 220) : '';
+  return {
+    statusCode,
+    body,
+    message: err?.message || 'Unknown push provider error',
+  };
+}
+
+function shouldRevokeFailedSubscription(err) {
+  const { statusCode } = summarizePushError(err);
+  return [400, 403, 404, 410].includes(statusCode);
+}
+
+async function revokeSubscription(strapi, record, now) {
+  await strapi.entityService.update('api::push-subscription.push-subscription', record.id, {
+    data: { revokedAt: now },
+  });
+}
+
 async function sendPushToUser(strapi, recipientId, payload = {}) {
   const userId = Number(recipientId);
   if (!userId || !configureWebPush()) return;
@@ -78,14 +107,13 @@ async function sendPushToUser(strapi, recipientId, payload = {}) {
         data: { lastUsedAt: now },
       });
     } catch (err) {
-      const statusCode = Number(err?.statusCode || err?.status || 0);
-      if ([404, 410].includes(statusCode)) {
-        await strapi.entityService.update('api::push-subscription.push-subscription', record.id, {
-          data: { revokedAt: now },
-        });
+      const summary = summarizePushError(err);
+      if (shouldRevokeFailedSubscription(err)) {
+        await revokeSubscription(strapi, record, now);
+        strapi.log.warn(`Web push subscription revoked for user ${userId}: status=${summary.statusCode || 'unknown'} provider=${getEndpointHost(record.endpoint)} body=${summary.body || summary.message}`);
         return;
       }
-      strapi.log.warn(`Web push send failed for user ${userId}: ${err.message}`);
+      strapi.log.warn(`Web push send failed for user ${userId}: status=${summary.statusCode || 'unknown'} provider=${getEndpointHost(record.endpoint)} body=${summary.body || summary.message}`);
     }
   }));
 }
