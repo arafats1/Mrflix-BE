@@ -1,6 +1,7 @@
 'use strict';
 
 const { sendPushToUser } = require('./push-notifications');
+const { sendExpoPushToUser } = require('./expo-push-notifications');
 
 function uniqUserIds(values) {
   return [...new Set((Array.isArray(values) ? values : [values]).map((value) => Number(value)).filter(Boolean))];
@@ -48,6 +49,19 @@ async function createNotification(strapi, payload) {
     },
   }).catch((err) => {
     strapi.log.warn(`Push notification dispatch failed: ${err.message}`);
+  });
+
+  sendExpoPushToUser(strapi, recipientId, {
+    title: String(payload.title || 'Notification').trim(),
+    body: payload.message || '',
+    url: payload.actionUrl || '/(tabs)/',
+    data: {
+      notificationId: notification.id,
+      actionUrl: payload.actionUrl || '/(tabs)/',
+      metadata: payload.metadata || {},
+    },
+  }).catch((err) => {
+    strapi.log.warn(`Expo push notification dispatch failed: ${err.message}`);
   });
 
   return notification;

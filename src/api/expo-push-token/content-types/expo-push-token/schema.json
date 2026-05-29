@@ -1,0 +1,32 @@
+{
+  "kind": "collectionType",
+  "collectionName": "expo_push_tokens",
+  "info": {
+    "singularName": "expo-push-token",
+    "pluralName": "expo-push-tokens",
+    "displayName": "Expo Push Token",
+    "description": "Expo push notification tokens for mobile app users"
+  },
+  "options": { "draftAndPublish": false },
+  "attributes": {
+    "user": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user",
+      "required": true
+    },
+    "token": {
+      "type": "text",
+      "required": true
+    },
+    "platform": {
+      "type": "string"
+    },
+    "revokedAt": {
+      "type": "datetime"
+    },
+    "lastUsedAt": {
+      "type": "datetime"
+    }
+  }
+}

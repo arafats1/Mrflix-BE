@@ -2070,6 +2070,44 @@ export interface ApiExclusiveSubscriptionExclusiveSubscription
   };
 }
 
+export interface ApiExpoPushTokenExpoPushToken
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'expo_push_tokens';
+  info: {
+    description: 'Expo push notification tokens for mobile app users';
+    displayName: 'Expo Push Token';
+    pluralName: 'expo-push-tokens';
+    singularName: 'expo-push-token';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    lastUsedAt: Schema.Attribute.DateTime;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::expo-push-token.expo-push-token'
+    > &
+      Schema.Attribute.Private;
+    platform: Schema.Attribute.String;
+    publishedAt: Schema.Attribute.DateTime;
+    revokedAt: Schema.Attribute.DateTime;
+    token: Schema.Attribute.Text & Schema.Attribute.Required;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    user: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    > &
+      Schema.Attribute.Required;
+  };
+}
+
 export interface ApiFreeTrialWatchFreeTrialWatch
   extends Struct.CollectionTypeSchema {
   collectionName: 'free_trial_watches';
@@ -4082,6 +4120,7 @@ declare module '@strapi/strapi' {
       'api::entrep-quiz.entrep-quiz': ApiEntrepQuizEntrepQuiz;
       'api::entrep-submission.entrep-submission': ApiEntrepSubmissionEntrepSubmission;
       'api::exclusive-subscription.exclusive-subscription': ApiExclusiveSubscriptionExclusiveSubscription;
+      'api::expo-push-token.expo-push-token': ApiExpoPushTokenExpoPushToken;
       'api::free-trial-watch.free-trial-watch': ApiFreeTrialWatchFreeTrialWatch;
       'api::marketplace-ad.marketplace-ad': ApiMarketplaceAdMarketplaceAd;
       'api::marketplace-promotion.marketplace-promotion': ApiMarketplacePromotionMarketplacePromotion;
