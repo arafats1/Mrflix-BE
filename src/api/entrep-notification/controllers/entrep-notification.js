@@ -6,6 +6,20 @@ async function resolveUser(strapi, ctx) {
   if (ctx.state.user?.id) {
     return strapi.entityService.findOne('plugin::users-permissions.user', ctx.state.user.id);
   }
+
+  const authHeader = ctx.request.header?.authorization || ctx.request.headers?.authorization || '';
+  if (!authHeader.startsWith('Bearer ')) return null;
+
+  try {
+    const token = authHeader.slice(7);
+    const { id } = await strapi.plugins['users-permissions'].services.jwt.verify(token);
+    if (!id) return null;
+
+    return strapi.entityService.findOne('plugin::users-permissions.user', id);
+  } catch {
+    return null;
+  }
+
   return null;
 }
 
