@@ -4,6 +4,7 @@ const pesapal = require('../../../utils/pesapal');
 const { normalizePaymentMethod } = require('../../../utils/payment-methods');
 const { recordProviderMaterialSale } = require('../../../utils/provider-material-sales');
 const { activatePromotionByFilter, failPromotionByFilter } = require('../../../utils/marketplace-promotions');
+const { notifyProductOrderPlaced } = require('../../../utils/marketplace-notifications');
 
 module.exports = {
   /**
@@ -85,10 +86,18 @@ module.exports = {
           // Purchase(s) — could be single (PUR_) or cart (CART_)
           const purchases = await strapi.db.query('api::purchase.purchase').findMany({
             where: { transactionId: ref },
+            populate: {
+              buyer: true,
+              providerMaterial: true,
+              product: { populate: { seller: true } },
+            },
           });
 
           for (const purchase of purchases) {
             if (purchase.status !== 'completed') {
+              if (purchase.providerMaterial) {
+                await recordProviderMaterialSale(strapi, purchase);
+              }
               await strapi.db.query('api::purchase.purchase').update({
                 where: { id: purchase.id },
                 data: {
@@ -97,6 +106,14 @@ module.exports = {
                   ...(paymentMethod ? { paymentMethod } : {}),
                 },
               });
+              if (purchase.product) {
+                await notifyProductOrderPlaced(strapi, {
+                  ...purchase,
+                  status: 'completed',
+                  pesapalTrackingId: OrderTrackingId,
+                  ...(paymentMethod ? { paymentMethod } : {}),
+                }, { statusLabel: 'Payment completed' });
+              }
               strapi.log.info(`[Pesapal IPN] Purchase ${purchase.id} completed for ref ${ref}, method: ${paymentMethod}`);
             }
           }
@@ -214,7 +231,12 @@ module.exports = {
           purchaseType = 'purchase';
           const purchases = await strapi.db.query('api::purchase.purchase').findMany({
             where: { transactionId: ref },
-            populate: ['movie', 'providerMaterial'],
+            populate: {
+              movie: true,
+              providerMaterial: true,
+              buyer: true,
+              product: { populate: { seller: true } },
+            },
           });
           for (const p of purchases) {
             if (p.status !== 'completed') {
@@ -225,6 +247,14 @@ module.exports = {
                 where: { id: p.id },
                 data: { status: 'completed', pesapalTrackingId: orderTrackingId, ...(actualPaymentMethod ? { paymentMethod: actualPaymentMethod } : {}) },
               });
+              if (p.product) {
+                await notifyProductOrderPlaced(strapi, {
+                  ...p,
+                  status: 'completed',
+                  pesapalTrackingId: orderTrackingId,
+                  ...(actualPaymentMethod ? { paymentMethod: actualPaymentMethod } : {}),
+                }, { statusLabel: 'Payment completed' });
+              }
             }
           }
           // Return movie info so frontend can link directly to the content

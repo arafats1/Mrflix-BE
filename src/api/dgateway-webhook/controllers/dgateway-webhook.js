@@ -3,6 +3,7 @@
 const { normalizePaymentMethod } = require('../../../utils/payment-methods');
 const { recordProviderMaterialSale } = require('../../../utils/provider-material-sales');
 const { activatePromotionByFilter, failPromotionByFilter } = require('../../../utils/marketplace-promotions');
+const { notifyProductOrderPlaced } = require('../../../utils/marketplace-notifications');
 
 const crypto = require('crypto');
 const dgateway = require('../../../utils/dgateway');
@@ -194,7 +195,11 @@ async function activateByReference(reference, paymentMethod) {
   // Purchases
   const purchases = await strapi.db.query('api::purchase.purchase').findMany({
     where: { dgatewayReference: reference },
-    populate: ['providerMaterial'],
+    populate: {
+      providerMaterial: true,
+      buyer: true,
+      product: { populate: { seller: true } },
+    },
   });
   for (const p of purchases) {
     if (p.status !== 'completed') {
@@ -208,6 +213,13 @@ async function activateByReference(reference, paymentMethod) {
           ...(paymentMethod ? { paymentMethod } : {}),
         },
       });
+      if (p.product) {
+        await notifyProductOrderPlaced(strapi, {
+          ...p,
+          status: 'completed',
+          ...(paymentMethod ? { paymentMethod } : {}),
+        }, { statusLabel: 'Payment completed' });
+      }
       strapi.log.info(`[DGateway Webhook] Purchase ${p.id} completed for ref ${reference}`);
     }
   }

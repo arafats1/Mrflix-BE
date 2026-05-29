@@ -3,6 +3,7 @@
 const { createCoreController } = require('@strapi/strapi').factories;
 const { submitPayment, checkPaymentStatus, getActiveGateway } = require('../../../utils/payment-gateway');
 const { recordProviderMaterialSale } = require('../../../utils/provider-material-sales');
+const { notifyBuyerOrderStatus, notifyProductOrderPlaced } = require('../../../utils/marketplace-notifications');
 
 function getDiscountedProductAmount(product) {
   const basePrice = Number(product?.priceUGX || 0);
@@ -37,6 +38,7 @@ async function findPurchaseTarget(strapi, { movieId, providerMaterialId, product
   if (productId) {
     const product = await strapi.documents('api::product.product').findOne({
       documentId: productId,
+      populate: { seller: true },
     });
 
     if (!product) return null;
@@ -219,12 +221,21 @@ async function markPurchasesCompleted(strapi, purchases, paymentData = {}) {
       updateData.expiresAt = expirationDate;
     }
 
-    await strapi.documents('api::purchase.purchase').update({
+    const updated = await strapi.documents('api::purchase.purchase').update({
       documentId: purchase.documentId,
       data: updateData,
+      populate: {
+        buyer: true,
+        product: { populate: { seller: true } },
+      },
     });
+
+    if (updated.product) {
+      await notifyProductOrderPlaced(strapi, updated, { statusLabel: 'Payment completed' });
+    }
   }
 }
+
 
 function getMovieAmount(settings, movie, seasonNumber) {
   if (movie.type === 'series') {
@@ -424,6 +435,7 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
             seller: true,
           },
         },
+        buyer: true,
       },
     });
 
@@ -435,6 +447,8 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
       return ctx.forbidden('You can only update your own product orders');
     }
 
+    const previousStatus = normalizeDeliveryStatus(purchase.deliveryStatus);
+
     const updated = await strapi.documents('api::purchase.purchase').update({
       documentId: purchase.documentId,
       data: {
@@ -445,6 +459,10 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
         buyer: true,
       },
     });
+
+    if (previousStatus !== nextStatus) {
+      await notifyBuyerOrderStatus(strapi, updated, requestUser.id, nextStatus);
+    }
 
     return {
       data: {
@@ -622,9 +640,19 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
 
     const purchase = await strapi.documents('api::purchase.purchase').create({
       data: purchaseData,
+      populate: {
+        buyer: true,
+        product: { populate: { seller: true } },
+      },
     });
 
     if (manualSupplierPayment || payOnDeliveryOrder) {
+      if (purchase.product) {
+        await notifyProductOrderPlaced(strapi, purchase, {
+          statusLabel: manualSupplierPayment ? 'Supplier payment submitted' : 'Pay on delivery',
+        });
+      }
+
       return {
         data: {
           purchaseId: purchase.documentId,
@@ -861,7 +889,13 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
         transactionId,
         buyer: { id: ctx.state.user.id },
       },
-      populate: { movie: true, providerMaterial: true, childProfile: true },
+      populate: {
+        movie: true,
+        providerMaterial: true,
+        childProfile: true,
+        buyer: true,
+        product: { populate: { seller: true } },
+      },
     });
 
     if (!purchases || purchases.length === 0) {
@@ -893,7 +927,13 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
           await markPurchasesCompleted(strapi, purchases, data);
           purchases = await strapi.documents('api::purchase.purchase').findMany({
             filters: { transactionId, buyer: { id: ctx.state.user.id } },
-            populate: { movie: true, providerMaterial: true, childProfile: true },
+            populate: {
+              movie: true,
+              providerMaterial: true,
+              childProfile: true,
+              buyer: true,
+              product: { populate: { seller: true } },
+            },
           });
         } else if (result.status === 'failed') {
           for (const p of purchases) {
@@ -906,7 +946,13 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
           }
           purchases = await strapi.documents('api::purchase.purchase').findMany({
             filters: { transactionId, buyer: { id: ctx.state.user.id } },
-            populate: { movie: true, providerMaterial: true, childProfile: true },
+            populate: {
+              movie: true,
+              providerMaterial: true,
+              childProfile: true,
+              buyer: true,
+              product: { populate: { seller: true } },
+            },
           });
         }
       } catch (err) {

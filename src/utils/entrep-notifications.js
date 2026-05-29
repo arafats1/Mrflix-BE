@@ -1,5 +1,7 @@
 'use strict';
 
+const { sendPushToUser } = require('./push-notifications');
+
 function uniqUserIds(values) {
   return [...new Set((Array.isArray(values) ? values : [values]).map((value) => Number(value)).filter(Boolean))];
 }
@@ -20,7 +22,7 @@ async function createNotification(strapi, payload) {
   const recipientId = Number(payload?.recipientId);
   if (!recipientId) return null;
 
-  return strapi.entityService.create('api::entrep-notification.entrep-notification', {
+  const notification = await strapi.entityService.create('api::entrep-notification.entrep-notification', {
     data: {
       recipient: recipientId,
       actor: payload.actorId ? Number(payload.actorId) : null,
@@ -32,6 +34,23 @@ async function createNotification(strapi, payload) {
       readAt: null,
     },
   });
+
+  sendPushToUser(strapi, recipientId, {
+    id: notification.id,
+    title: String(payload.title || 'Notification').trim(),
+    body: payload.message || '',
+    url: payload.actionUrl || '/',
+    tag: payload.metadata?.category || payload.type || 'notification',
+    data: {
+      notificationId: notification.id,
+      actionUrl: payload.actionUrl || '/',
+      metadata: payload.metadata || {},
+    },
+  }).catch((err) => {
+    strapi.log.warn(`Push notification dispatch failed: ${err.message}`);
+  });
+
+  return notification;
 }
 
 async function notifyUsers(strapi, recipientIds, payloadFactory) {

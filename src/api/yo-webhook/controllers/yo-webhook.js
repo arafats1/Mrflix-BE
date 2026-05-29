@@ -3,6 +3,7 @@
 const yoPayments = require('../../../utils/yo-payments');
 const { normalizePaymentMethod } = require('../../../utils/payment-methods');
 const { recordProviderMaterialSale } = require('../../../utils/provider-material-sales');
+const { notifyProductOrderPlaced } = require('../../../utils/marketplace-notifications');
 
 /**
  * Activate purchases / subscriptions tagged with the given Yo! reference.
@@ -22,7 +23,11 @@ async function activateByReference(reference, paymentMethod = 'yo') {
 
   const purchases = await strapi.db.query('api::purchase.purchase').findMany({
     where: { yoReference: reference },
-    populate: ['providerMaterial'],
+    populate: {
+      providerMaterial: true,
+      buyer: true,
+      product: { populate: { seller: true } },
+    },
   });
   for (const p of purchases) {
     if (p.status !== 'completed') {
@@ -33,6 +38,13 @@ async function activateByReference(reference, paymentMethod = 'yo') {
         where: { id: p.id },
         data: { status: 'completed', paymentMethod },
       });
+      if (p.product) {
+        await notifyProductOrderPlaced(strapi, {
+          ...p,
+          status: 'completed',
+          paymentMethod,
+        }, { statusLabel: 'Payment completed' });
+      }
       strapi.log.info(`[Yo Webhook] Purchase ${p.id} completed for ref ${reference}`);
     }
   }

@@ -2863,6 +2863,46 @@ export interface ApiPurchasePurchase extends Struct.CollectionTypeSchema {
   };
 }
 
+export interface ApiPushSubscriptionPushSubscription
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'push_subscriptions';
+  info: {
+    description: 'Browser push subscriptions for signed-in users';
+    displayName: 'Push Subscription';
+    pluralName: 'push-subscriptions';
+    singularName: 'push-subscription';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    endpoint: Schema.Attribute.Text & Schema.Attribute.Required;
+    expirationTime: Schema.Attribute.BigInteger;
+    keys: Schema.Attribute.JSON & Schema.Attribute.Required;
+    lastUsedAt: Schema.Attribute.DateTime;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::push-subscription.push-subscription'
+    > &
+      Schema.Attribute.Private;
+    publishedAt: Schema.Attribute.DateTime;
+    revokedAt: Schema.Attribute.DateTime;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    user: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    > &
+      Schema.Attribute.Required;
+    userAgent: Schema.Attribute.Text;
+  };
+}
+
 export interface ApiReferralReferral extends Struct.CollectionTypeSchema {
   collectionName: 'referrals';
   info: {
@@ -4054,6 +4094,7 @@ declare module '@strapi/strapi' {
       'api::promo-code.promo-code': ApiPromoCodePromoCode;
       'api::provider-material.provider-material': ApiProviderMaterialProviderMaterial;
       'api::purchase.purchase': ApiPurchasePurchase;
+      'api::push-subscription.push-subscription': ApiPushSubscriptionPushSubscription;
       'api::referral.referral': ApiReferralReferral;
       'api::search-history.search-history': ApiSearchHistorySearchHistory;
       'api::shared-link.shared-link': ApiSharedLinkSharedLink;

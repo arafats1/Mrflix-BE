@@ -1,0 +1,39 @@
+{
+  "kind": "collectionType",
+  "collectionName": "push_subscriptions",
+  "info": {
+    "singularName": "push-subscription",
+    "pluralName": "push-subscriptions",
+    "displayName": "Push Subscription",
+    "description": "Browser push subscriptions for signed-in users"
+  },
+  "options": { "draftAndPublish": false },
+  "attributes": {
+    "user": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user",
+      "required": true
+    },
+    "endpoint": {
+      "type": "text",
+      "required": true
+    },
+    "keys": {
+      "type": "json",
+      "required": true
+    },
+    "expirationTime": {
+      "type": "biginteger"
+    },
+    "userAgent": {
+      "type": "text"
+    },
+    "lastUsedAt": {
+      "type": "datetime"
+    },
+    "revokedAt": {
+      "type": "datetime"
+    }
+  }
+}

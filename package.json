@@ -12,6 +12,7 @@
     "generate:720p": "node scripts/generate-720p-variants.js",
     "regenerate:marketplace-images": "node scripts/regenerate-marketplace-image-variants.js",
     "migrate:bunny-stream": "node scripts/migrate-bunny-stream.js",
+    "push:vapid": "web-push generate-vapid-keys",
     "start": "strapi start",
     "strapi": "strapi",
     "upgrade": "npx @strapi/upgrade latest",
@@ -30,7 +31,8 @@
     "react-dom": "^18.0.0",
     "react-router-dom": "^6.0.0",
     "resend": "^6.9.3",
-    "styled-components": "^6.0.0"
+    "styled-components": "^6.0.0",
+    "web-push": "^3.6.7"
   },
   "engines": {
     "node": ">=20.0.0 <=24.x.x",

@@ -2,6 +2,7 @@
 
 const { createCoreController } = require('@strapi/strapi').factories;
 const { randomUUID } = require('crypto');
+const { notifyMarketplaceMessage } = require('../../../utils/marketplace-notifications');
 
 /**
  * Manually verify the Bearer JWT from the request headers.
@@ -190,6 +191,13 @@ module.exports = createCoreController('api::marketplace-thread.marketplace-threa
         seller: { select: ['id', 'documentId', 'fullName', 'username', 'lastSeenAt', 'avatarUrl'] },
         product: { select: ['id', 'documentId', 'name', 'featuredImage', 'priceUGX', 'itemType'] },
       },
+    });
+
+    await notifyMarketplaceMessage(strapi, {
+      thread,
+      message,
+      sender: user,
+      recipient: isBuyer ? thread.seller : thread.buyer,
     });
 
     ctx.body = { data: sanitizeThread(updated, user.id) };
