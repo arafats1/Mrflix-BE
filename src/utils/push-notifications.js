@@ -4,22 +4,40 @@ const webpush = require('web-push');
 
 let configuredFor = null;
 
+function normalizeEnvValue(value) {
+  return String(value || '').trim().replace(/^['"]|['"]$/g, '').trim();
+}
+
+function isValidPublicVapidKey(value) {
+  const key = normalizeEnvValue(value);
+  if (!key) return false;
+
+  try {
+    const normalized = key.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=');
+    const bytes = Buffer.from(padded, 'base64');
+    return bytes.length === 65 && bytes[0] === 4;
+  } catch {
+    return false;
+  }
+}
+
 function getPublicVapidKey() {
-  return String(process.env.WEB_PUSH_PUBLIC_KEY || '').trim();
+  return normalizeEnvValue(process.env.WEB_PUSH_PUBLIC_KEY);
 }
 
 function getPrivateVapidKey() {
-  return String(process.env.WEB_PUSH_PRIVATE_KEY || '').trim();
+  return normalizeEnvValue(process.env.WEB_PUSH_PRIVATE_KEY);
 }
 
 function getVapidSubject() {
-  const configured = String(process.env.WEB_PUSH_SUBJECT || '').trim();
+  const configured = normalizeEnvValue(process.env.WEB_PUSH_SUBJECT);
   if (configured) return configured;
   return process.env.FRONTEND_URL || process.env.PUBLIC_URL || 'mailto:support@movobrands.com';
 }
 
 function isPushConfigured() {
-  return Boolean(getPublicVapidKey() && getPrivateVapidKey());
+  return Boolean(isValidPublicVapidKey(getPublicVapidKey()) && getPrivateVapidKey());
 }
 
 function configureWebPush() {
@@ -75,5 +93,6 @@ async function sendPushToUser(strapi, recipientId, payload = {}) {
 module.exports = {
   getPublicVapidKey,
   isPushConfigured,
+  isValidPublicVapidKey,
   sendPushToUser,
 };
