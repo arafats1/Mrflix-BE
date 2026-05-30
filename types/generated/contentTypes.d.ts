@@ -2589,7 +2589,9 @@ export interface ApiProductProduct extends Struct.CollectionTypeSchema {
     ageRange: Schema.Attribute.String;
     audience: Schema.Attribute.Enumeration<['children', 'adults']> &
       Schema.Attribute.DefaultTo<'children'>;
+    brand: Schema.Attribute.String;
     category: Schema.Attribute.String & Schema.Attribute.Required;
+    color: Schema.Attribute.String;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -2619,6 +2621,7 @@ export interface ApiProductProduct extends Struct.CollectionTypeSchema {
     paymentCode: Schema.Attribute.String;
     paymentPhone: Schema.Attribute.String;
     priceUGX: Schema.Attribute.Integer & Schema.Attribute.Required;
+    productType: Schema.Attribute.String;
     productVideoComments: Schema.Attribute.JSON;
     productVideoLikes: Schema.Attribute.Integer &
       Schema.Attribute.SetMinMax<
@@ -2641,6 +2644,7 @@ export interface ApiProductProduct extends Struct.CollectionTypeSchema {
     >;
     serviceAvailabilityDates: Schema.Attribute.JSON;
     serviceBookedDates: Schema.Attribute.JSON;
+    size: Schema.Attribute.String;
     status: Schema.Attribute.Enumeration<
       ['active', 'out_of_stock', 'discontinued']
     > &

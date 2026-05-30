@@ -66,6 +66,18 @@
         "bundle"
       ]
     },
+    "size": {
+      "type": "string"
+    },
+    "color": {
+      "type": "string"
+    },
+    "productType": {
+      "type": "string"
+    },
+    "brand": {
+      "type": "string"
+    },
     "ageRange": {
       "type": "string"
     },
