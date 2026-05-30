@@ -283,6 +283,8 @@ function sanitizeThread(thread, viewerUserId) {
     lastMessageAt: thread.lastMessageAt || null,
     lastMessageText: thread.lastMessageText || '',
     unreadCount: buyer?.id === viewerUserId ? (thread.buyerUnread || 0) : (thread.sellerUnread || 0),
+    buyerUnread: thread.buyerUnread || 0,
+    sellerUnread: thread.sellerUnread || 0,
     createdAt: thread.createdAt,
     updatedAt: thread.updatedAt,
   };

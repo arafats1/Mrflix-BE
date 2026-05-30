@@ -2634,6 +2634,7 @@ export interface ApiProductProduct extends Struct.CollectionTypeSchema {
     promotionBadgeLabel: Schema.Attribute.String;
     promotionKind: Schema.Attribute.Enumeration<['product', 'seller']>;
     publishedAt: Schema.Attribute.DateTime;
+    saleUnit: Schema.Attribute.Enumeration<['kilogram', 'piece', 'bundle']>;
     seller: Schema.Attribute.Relation<
       'manyToOne',
       'plugin::users-permissions.user'

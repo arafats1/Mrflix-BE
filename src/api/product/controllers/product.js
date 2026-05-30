@@ -367,6 +367,7 @@ function buildProductPayload(input = {}, existingProduct = null) {
     ...(Object.prototype.hasOwnProperty.call(input, 'productVideoLikes') ? { productVideoLikes: Math.max(0, Number(input.productVideoLikes || 0)) } : {}),
     ...(Object.prototype.hasOwnProperty.call(input, 'productVideoComments') ? { productVideoComments: normalizeProductVideoComments(input.productVideoComments) } : {}),
     ...(Object.prototype.hasOwnProperty.call(input, 'itemType') ? { itemType: nextItemType } : {}),
+    ...(Object.prototype.hasOwnProperty.call(input, 'saleUnit') ? { saleUnit: input.saleUnit } : {}),
     ...(Object.prototype.hasOwnProperty.call(input, 'ageRange') ? { ageRange: input.ageRange } : {}),
     ...(Object.prototype.hasOwnProperty.call(input, 'audience') ? { audience: nextItemType === 'service' ? 'adults' : (input.audience || 'children') } : {}),
     ...(Object.prototype.hasOwnProperty.call(input, 'discountPercent') ? { discountPercent: input.discountPercent } : {}),

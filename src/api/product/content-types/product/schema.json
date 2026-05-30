@@ -58,6 +58,14 @@
       ],
       "default": "product"
     },
+    "saleUnit": {
+      "type": "enumeration",
+      "enum": [
+        "kilogram",
+        "piece",
+        "bundle"
+      ]
+    },
     "ageRange": {
       "type": "string"
     },
