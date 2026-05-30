@@ -24,6 +24,22 @@
       "type": "integer",
       "required": true
     },
+    "currency": {
+      "type": "enumeration",
+      "enum": [
+        "UGX",
+        "KES",
+        "TZS",
+        "RWF",
+        "BIF",
+        "SOS",
+        "SSP",
+        "ETB",
+        "DJF",
+        "USD"
+      ],
+      "default": "UGX"
+    },
     "category": {
       "type": "string",
       "required": true
@@ -77,6 +93,120 @@
     },
     "brand": {
       "type": "string"
+    },
+    "yearOfManufacture": {
+      "type": "enumeration",
+      "enum": [
+        "Year 2022 - 2026",
+        "Year 2017 - 2021",
+        "Year 2012 - 2016",
+        "Year 2007 - 2011",
+        "Year 2002 - 2006",
+        "Year 1997 - 2001",
+        "Year 1992 - 1996",
+        "Year 1987 - 1991",
+        "Year 1972 - 1976"
+      ]
+    },
+    "condition": {
+      "type": "enumeration",
+      "enum": [
+        "Brand New",
+        "Foreign Used",
+        "Local Used"
+      ]
+    },
+    "transmission": {
+      "type": "enumeration",
+      "enum": [
+        "AMT",
+        "Automatic",
+        "CVT",
+        "Manual"
+      ]
+    },
+    "bodyType": {
+      "type": "enumeration",
+      "enum": [
+        "SUV",
+        "Station Wagon",
+        "Sedan",
+        "Pickup",
+        "Minivan",
+        "Hatchback",
+        "Crossover",
+        "Coupe",
+        "Convertible"
+      ]
+    },
+    "secondHandCondition": {
+      "type": "enumeration",
+      "enum": [
+        "After crash",
+        "Engine issue",
+        "First owner",
+        "First registration",
+        "Gear issue",
+        "Need body repair",
+        "Need repainting",
+        "Need repair",
+        "Original parts",
+        "Unpainted",
+        "Wiring problems",
+        "No faults"
+      ]
+    },
+    "engineSize": {
+      "type": "enumeration",
+      "enum": [
+        "Engine 3000 cc",
+        "Engine 2500 cc",
+        "Engine 2400 cc",
+        "Engine 2000 cc",
+        "Engine 1500 cc",
+        "Engine 700 cc",
+        "Engine 6000 cc",
+        "Engine 5700 cc",
+        "Engine 5500 cc",
+        "Engine 5000 cc",
+        "Engine 4700 cc",
+        "Engine 4600 cc",
+        "Engine 4500 cc",
+        "Engine 4400 cc",
+        "Engine 4200 cc",
+        "Engine 4000 cc",
+        "Engine 3800 cc",
+        "Engine 3700 cc",
+        "Engine 3600 cc",
+        "Engine 3500 cc",
+        "Engine 3400 cc",
+        "Engine 3300 cc",
+        "Engine 3200 cc",
+        "Engine 2900 cc",
+        "Engine 2800 cc",
+        "Engine 2700 cc",
+        "Engine 2300 cc",
+        "Engine 2200 cc",
+        "Engine 2100 cc",
+        "Engine 1800 cc",
+        "Engine 1600 cc",
+        "Engine 1400 cc",
+        "Engine 1300 cc",
+        "Engine 1200 cc",
+        "Engine 1000 cc"
+      ]
+    },
+    "fuelType": {
+      "type": "enumeration",
+      "enum": [
+        "Plug-in Hybrid",
+        "Petrol",
+        "Mild Hybrid",
+        "Hybrid",
+        "Electric",
+        "Diesel",
+        "CNG"
+      ]
     },
     "ageRange": {
       "type": "string"

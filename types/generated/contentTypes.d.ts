@@ -2589,12 +2589,32 @@ export interface ApiProductProduct extends Struct.CollectionTypeSchema {
     ageRange: Schema.Attribute.String;
     audience: Schema.Attribute.Enumeration<['children', 'adults']> &
       Schema.Attribute.DefaultTo<'children'>;
+    bodyType: Schema.Attribute.Enumeration<
+      [
+        'SUV',
+        'Station Wagon',
+        'Sedan',
+        'Pickup',
+        'Minivan',
+        'Hatchback',
+        'Crossover',
+        'Coupe',
+        'Convertible',
+      ]
+    >;
     brand: Schema.Attribute.String;
     category: Schema.Attribute.String & Schema.Attribute.Required;
     color: Schema.Attribute.String;
+    condition: Schema.Attribute.Enumeration<
+      ['Brand New', 'Foreign Used', 'Local Used']
+    >;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    currency: Schema.Attribute.Enumeration<
+      ['UGX', 'KES', 'TZS', 'RWF', 'BIF', 'SOS', 'SSP', 'ETB', 'DJF', 'USD']
+    > &
+      Schema.Attribute.DefaultTo<'UGX'>;
     deliveryAreas: Schema.Attribute.JSON;
     description: Schema.Attribute.Text & Schema.Attribute.Required;
     discountPercent: Schema.Attribute.Integer &
@@ -2605,7 +2625,57 @@ export interface ApiProductProduct extends Struct.CollectionTypeSchema {
         },
         number
       >;
+    engineSize: Schema.Attribute.Enumeration<
+      [
+        'Engine 3000 cc',
+        'Engine 2500 cc',
+        'Engine 2400 cc',
+        'Engine 2000 cc',
+        'Engine 1500 cc',
+        'Engine 700 cc',
+        'Engine 6000 cc',
+        'Engine 5700 cc',
+        'Engine 5500 cc',
+        'Engine 5000 cc',
+        'Engine 4700 cc',
+        'Engine 4600 cc',
+        'Engine 4500 cc',
+        'Engine 4400 cc',
+        'Engine 4200 cc',
+        'Engine 4000 cc',
+        'Engine 3800 cc',
+        'Engine 3700 cc',
+        'Engine 3600 cc',
+        'Engine 3500 cc',
+        'Engine 3400 cc',
+        'Engine 3300 cc',
+        'Engine 3200 cc',
+        'Engine 2900 cc',
+        'Engine 2800 cc',
+        'Engine 2700 cc',
+        'Engine 2300 cc',
+        'Engine 2200 cc',
+        'Engine 2100 cc',
+        'Engine 1800 cc',
+        'Engine 1600 cc',
+        'Engine 1400 cc',
+        'Engine 1300 cc',
+        'Engine 1200 cc',
+        'Engine 1000 cc',
+      ]
+    >;
     featuredImage: Schema.Attribute.String & Schema.Attribute.Required;
+    fuelType: Schema.Attribute.Enumeration<
+      [
+        'Plug-in Hybrid',
+        'Petrol',
+        'Mild Hybrid',
+        'Hybrid',
+        'Electric',
+        'Diesel',
+        'CNG',
+      ]
+    >;
     images: Schema.Attribute.JSON & Schema.Attribute.Required;
     itemType: Schema.Attribute.Enumeration<['product', 'service']> &
       Schema.Attribute.DefaultTo<'product'>;
@@ -2638,6 +2708,22 @@ export interface ApiProductProduct extends Struct.CollectionTypeSchema {
     promotionKind: Schema.Attribute.Enumeration<['product', 'seller']>;
     publishedAt: Schema.Attribute.DateTime;
     saleUnit: Schema.Attribute.Enumeration<['kilogram', 'piece', 'bundle']>;
+    secondHandCondition: Schema.Attribute.Enumeration<
+      [
+        'After crash',
+        'Engine issue',
+        'First owner',
+        'First registration',
+        'Gear issue',
+        'Need body repair',
+        'Need repainting',
+        'Need repair',
+        'Original parts',
+        'Unpainted',
+        'Wiring problems',
+        'No faults',
+      ]
+    >;
     seller: Schema.Attribute.Relation<
       'manyToOne',
       'plugin::users-permissions.user'
@@ -2658,9 +2744,25 @@ export interface ApiProductProduct extends Struct.CollectionTypeSchema {
         number
       > &
       Schema.Attribute.DefaultTo<1>;
+    transmission: Schema.Attribute.Enumeration<
+      ['AMT', 'Automatic', 'CVT', 'Manual']
+    >;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    yearOfManufacture: Schema.Attribute.Enumeration<
+      [
+        'Year 2022 - 2026',
+        'Year 2017 - 2021',
+        'Year 2012 - 2016',
+        'Year 2007 - 2011',
+        'Year 2002 - 2006',
+        'Year 1997 - 2001',
+        'Year 1992 - 1996',
+        'Year 1987 - 1991',
+        'Year 1972 - 1976',
+      ]
+    >;
   };
 }
 
