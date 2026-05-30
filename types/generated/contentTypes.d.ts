@@ -2179,7 +2179,9 @@ export interface ApiMarketplaceAdMarketplaceAd
       'api::marketplace-ad.marketplace-ad'
     > &
       Schema.Attribute.Private;
-    placement: Schema.Attribute.Enumeration<['marketplace_top']> &
+    placement: Schema.Attribute.Enumeration<
+      ['marketplace_top', 'marketplace_sidebar', 'marketplace_carousel']
+    > &
       Schema.Attribute.Required &
       Schema.Attribute.DefaultTo<'marketplace_top'>;
     priority: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
@@ -2190,7 +2192,7 @@ export interface ApiMarketplaceAdMarketplaceAd
       Schema.Attribute.DefaultTo<'active'>;
     subtitle: Schema.Attribute.String;
     textColor: Schema.Attribute.String & Schema.Attribute.DefaultTo<'#ffffff'>;
-    title: Schema.Attribute.String & Schema.Attribute.Required;
+    title: Schema.Attribute.String;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;

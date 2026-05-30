@@ -96,6 +96,7 @@ function isAdLive(ad, now = Date.now()) {
 }
 
 function cleanInput(input = {}) {
+  const placement = String(input.placement || 'marketplace_top').trim();
   return {
     title: String(input.title || '').trim(),
     subtitle: String(input.subtitle || '').trim(),
@@ -106,11 +107,21 @@ function cleanInput(input = {}) {
     backgroundColor: String(input.backgroundColor || '#073f56').trim(),
     textColor: String(input.textColor || '#ffffff').trim(),
     accentColor: String(input.accentColor || '#ff8a00').trim(),
-    placement: input.placement === 'marketplace_top' ? 'marketplace_top' : 'marketplace_top',
+    placement: ['marketplace_carousel', 'marketplace_sidebar'].includes(placement) ? placement : 'marketplace_top',
     status: input.status === 'paused' ? 'paused' : 'active',
     priority: Number.isFinite(Number(input.priority)) ? Number(input.priority) : 0,
     startsAt: input.startsAt || null,
     endsAt: input.endsAt || null,
+  };
+}
+
+function fillAdDefaults(data = {}) {
+  const placement = ['marketplace_carousel', 'marketplace_sidebar'].includes(data.placement) ? data.placement : 'marketplace_top';
+  const title = String(data.title || '').trim() || (placement === 'marketplace_carousel' ? 'Carousel Image' : 'Ad Card');
+  return {
+    ...data,
+    placement,
+    title,
   };
 }
 
@@ -150,8 +161,8 @@ module.exports = createCoreController('api::marketplace-ad.marketplace-ad', ({ s
   async adminCreate(ctx) {
     if (!(await assertAdmin(ctx, strapi))) return;
 
-    const data = cleanInput(ctx.request.body?.data || ctx.request.body || {});
-    if (!data.title) return ctx.badRequest('Ad title is required');
+    const data = fillAdDefaults(cleanInput(ctx.request.body?.data || ctx.request.body || {}));
+    if (!data.imageUrl) return ctx.badRequest('Ad image is required');
 
     const created = await strapi.documents('api::marketplace-ad.marketplace-ad').create({
       data,
@@ -167,9 +178,12 @@ module.exports = createCoreController('api::marketplace-ad.marketplace-ad', ({ s
     const documentId = String(ctx.params.id || '').trim();
     if (!documentId) return ctx.badRequest('Missing ad id');
 
+    const data = fillAdDefaults(cleanInput(ctx.request.body?.data || ctx.request.body || {}));
+    if (!data.imageUrl) return ctx.badRequest('Ad image is required');
+
     const updated = await strapi.documents('api::marketplace-ad.marketplace-ad').update({
       documentId,
-      data: cleanInput(ctx.request.body?.data || ctx.request.body || {}),
+      data,
       populate: { image: true },
     });
 
