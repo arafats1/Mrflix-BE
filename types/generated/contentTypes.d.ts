@@ -2750,19 +2750,7 @@ export interface ApiProductProduct extends Struct.CollectionTypeSchema {
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
-    yearOfManufacture: Schema.Attribute.Enumeration<
-      [
-        'Year 2022 - 2026',
-        'Year 2017 - 2021',
-        'Year 2012 - 2016',
-        'Year 2007 - 2011',
-        'Year 2002 - 2006',
-        'Year 1997 - 2001',
-        'Year 1992 - 1996',
-        'Year 1987 - 1991',
-        'Year 1972 - 1976',
-      ]
-    >;
+    yearOfManufacture: Schema.Attribute.String;
   };
 }
 
