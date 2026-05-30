@@ -68,14 +68,45 @@ module.exports = createCoreController('api::marketplace-thread.marketplace-threa
     if (!thread) return ctx.notFound();
     if (thread.buyer?.id !== user.id && thread.seller?.id !== user.id) return ctx.forbidden();
 
-    // Mark as read for this participant
+    // Mark unread incoming messages as read for this participant.
     const isBuyer = thread.buyer?.id === user.id;
+    const unreadField = isBuyer ? 'buyerUnread' : 'sellerUnread';
+    const viewerRole = isBuyer ? 'buyer' : 'seller';
+    const unreadCount = Number(thread[unreadField] || 0);
+    const existingMessages = Array.isArray(thread.messages) ? thread.messages : [];
+    let nextMessages = existingMessages;
+
+    if (unreadCount > 0 && existingMessages.length > 0) {
+      let remaining = unreadCount;
+      const readAt = new Date().toISOString();
+      nextMessages = [...existingMessages];
+
+      for (let index = nextMessages.length - 1; index >= 0 && remaining > 0; index -= 1) {
+        const message = nextMessages[index];
+        const senderRole = String(message?.senderRole || '').toLowerCase();
+        const sentByViewer = senderRole ? senderRole === viewerRole : message?.senderId === user.id;
+
+        if (sentByViewer || message?.readAt) continue;
+
+        nextMessages[index] = {
+          ...message,
+          readAt,
+        };
+        remaining -= 1;
+      }
+    }
+
+    const updateData = {
+      ...(isBuyer ? { buyerUnread: 0 } : { sellerUnread: 0 }),
+      ...(nextMessages !== existingMessages ? { messages: nextMessages } : {}),
+    };
+
     await strapi.db.query('api::marketplace-thread.marketplace-thread').update({
       where: { id: thread.id },
-      data: isBuyer ? { buyerUnread: 0 } : { sellerUnread: 0 },
+      data: updateData,
     });
 
-    ctx.body = { data: sanitizeThread({ ...thread, ...(isBuyer ? { buyerUnread: 0 } : { sellerUnread: 0 }) }, user.id) };
+    ctx.body = { data: sanitizeThread({ ...thread, ...updateData, messages: nextMessages }, user.id) };
   },
 
   // POST /marketplace-threads  — find or create thread for buyer+seller+product
@@ -174,6 +205,7 @@ module.exports = createCoreController('api::marketplace-thread.marketplace-threa
       text: (text || '').trim(),
       images: Array.isArray(images) ? images.filter(Boolean) : [],
       sentAt: new Date().toISOString(),
+      readAt: null,
     };
 
     const existing = Array.isArray(thread.messages) ? thread.messages : [];
