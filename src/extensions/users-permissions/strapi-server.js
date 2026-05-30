@@ -130,6 +130,10 @@ module.exports = (plugin) => {
     type: 'string',
   };
 
+  plugin.contentTypes.user.schema.attributes.country = {
+    type: 'string',
+  };
+
   plugin.contentTypes.user.schema.attributes.paymentPhone = {
     type: 'string',
   };
@@ -309,6 +313,7 @@ module.exports = (plugin) => {
       isReligiousProvider: normalizeProviderTypes(userWithRole.providerTypes || userWithRole.providerType).includes('religious'),
       schoolName: userWithRole.schoolName || null,
       location: userWithRole.location || null,
+      country: userWithRole.country || null,
       paymentPhone: userWithRole.paymentPhone || null,
       paymentCode: userWithRole.paymentCode || null,
       educationLevel: userWithRole.educationLevel || null,
@@ -427,6 +432,7 @@ module.exports = (plugin) => {
         const educationLevel = educationLevels[0];
         const educationLevelOther = typeof body.educationLevelOther === 'string' ? body.educationLevelOther.trim() : '';
         const location = typeof body.location === 'string' ? body.location.trim() : '';
+        const country = typeof body.country === 'string' ? body.country.trim() : '';
         const schoolName = typeof body.schoolName === 'string' ? body.schoolName.trim() : '';
         const religion = RELIGION_OPTIONS.includes(body.religion) ? body.religion : undefined;
         const isParent = wantsParent;
@@ -457,6 +463,10 @@ module.exports = (plugin) => {
 
         if (wantsProvider && providerType && providerType !== 'seller' && !location) {
           throw new ValidationError('Location is required for provider accounts');
+        }
+
+        if (providerType === 'seller' && !country) {
+          throw new ValidationError('Country is required for seller accounts');
         }
 
         if (!normalizedPhone) {
@@ -508,6 +518,7 @@ module.exports = (plugin) => {
           if (typeof body.fullName === 'string' && body.fullName.trim()) updateData.fullName = body.fullName.trim();
           if (religion) updateData.religion = religion;
           if (location) updateData.location = location;
+          if (country) updateData.country = country;
           if (schoolName) updateData.schoolName = schoolName;
           if (educationLevel) updateData.educationLevel = educationLevel;
           if (educationLevels.length > 0) updateData.educationLevels = educationLevels;
@@ -537,6 +548,7 @@ module.exports = (plugin) => {
           providerType,
           providerTypes: requestedProviderTypes.length > 0 ? requestedProviderTypes : undefined,
           location: location || undefined,
+          country: country || undefined,
           schoolName: schoolName || undefined,
           educationLevel,
           educationLevels: educationLevels.length > 0 ? educationLevels : undefined,
@@ -576,6 +588,7 @@ module.exports = (plugin) => {
         if (extras.providerType) updateData.providerType = extras.providerType;
         if (extras.providerTypes) updateData.providerTypes = extras.providerTypes;
         if (extras.location) updateData.location = extras.location;
+        if (extras.country) updateData.country = extras.country;
         if (extras.schoolName) updateData.schoolName = extras.schoolName;
         if (extras.educationLevel) updateData.educationLevel = extras.educationLevel;
         if (extras.educationLevels) updateData.educationLevels = extras.educationLevels;
