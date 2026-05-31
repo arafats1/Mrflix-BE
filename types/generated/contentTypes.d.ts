@@ -2212,12 +2212,19 @@ export interface ApiMarketplacePromotionMarketplacePromotion
     draftAndPublish: false;
   };
   attributes: {
+    adCampaignNotes: Schema.Attribute.Text;
+    adFulfillmentStatus: Schema.Attribute.Enumeration<
+      ['draft', 'ready', 'scheduled', 'running', 'completed', 'cancelled']
+    > &
+      Schema.Attribute.DefaultTo<'draft'>;
     amount: Schema.Attribute.Integer &
       Schema.Attribute.Required &
       Schema.Attribute.DefaultTo<0>;
+    channels: Schema.Attribute.JSON;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    creativeAssets: Schema.Attribute.JSON;
     dgatewayReference: Schema.Attribute.String;
     durationDays: Schema.Attribute.Integer &
       Schema.Attribute.Required &
@@ -2252,6 +2259,7 @@ export interface ApiMarketplacePromotionMarketplacePromotion
       'manyToOne',
       'plugin::users-permissions.user'
     >;
+    socialProfiles: Schema.Attribute.JSON;
     startDate: Schema.Attribute.DateTime;
     status: Schema.Attribute.Enumeration<
       ['pending', 'active', 'expired', 'cancelled']

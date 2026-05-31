@@ -4,6 +4,81 @@
  * AI Movie Assistant Controller
  * Uses OpenAI to help users discover movies based on natural language queries
  */
+/**
+ * @param {unknown} value
+ * @param {number} min
+ * @param {number} max
+ * @param {number} fallback
+ */
+function clampNumber(value, min, max, fallback) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(Math.max(Math.round(parsed), min), max);
+}
+
+/** @param {unknown} value */
+function stripCodeFence(value) {
+  return String(value || '')
+    .trim()
+    .replace(/^```(?:json)?/i, '')
+    .replace(/```$/i, '')
+    .trim();
+}
+
+/** @param {unknown} dataUrl */
+function parseDataUrlImage(dataUrl) {
+  const raw = String(dataUrl || '').trim();
+  const match = raw.match(/^data:(image\/[a-z0-9.+-]+);base64,(.+)$/i);
+  if (!match) return null;
+
+  const mime = match[1].toLowerCase();
+  const buffer = Buffer.from(match[2], 'base64');
+  if (!buffer.length) return null;
+
+  return { buffer, mime, filename: `product-source.${mime.split('/')[1] || 'png'}` };
+}
+
+/** @param {unknown} imageUrl */
+async function fetchImageForOpenAI(imageUrl) {
+  const url = String(imageUrl || '').trim();
+  if (!/^https?:\/\//i.test(url)) return null;
+
+  const response = await fetch(url);
+  if (!response.ok) return null;
+
+  const mime = String(response.headers.get('content-type') || 'image/png').split(';')[0].trim().toLowerCase();
+  if (!mime.startsWith('image/')) return null;
+
+  const buffer = Buffer.from(await response.arrayBuffer());
+  if (!buffer.length) return null;
+
+  return { buffer, mime, filename: `product-source.${mime.split('/')[1] || 'png'}` };
+}
+
+/**
+ * @param {unknown} value
+ * @param {string} fallbackName
+ */
+function normalizeCreativeCopy(value, fallbackName) {
+  /** @type {Record<string, any>} */
+  const parsed = value && typeof value === 'object' ? value : {};
+  const headline = String(parsed.headline || fallbackName || 'Promote your product').trim().slice(0, 90);
+  const primaryText = String(parsed.primaryText || parsed.body || '').trim().slice(0, 280);
+  const description = String(parsed.description || '').trim().slice(0, 120);
+  const callToAction = String(parsed.callToAction || 'Shop now').trim().slice(0, 32);
+  const overlayTexts = Array.isArray(parsed.overlayTexts)
+    ? parsed.overlayTexts.map(/** @param {unknown} item */(item) => String(item || '').trim()).filter(Boolean).slice(0, 4)
+    : [];
+
+  return {
+    headline: headline || 'Promote your product',
+    primaryText: primaryText || `Discover ${fallbackName || 'this product'} today.`,
+    description,
+    callToAction: callToAction || 'Shop now',
+    overlayTexts: overlayTexts.length ? overlayTexts : [headline || 'New arrival', callToAction || 'Shop now'],
+  };
+}
+
 module.exports = {
   /** @param {any} ctx */
   async chat(ctx) {
@@ -490,6 +565,181 @@ LUGANDA MODE ACTIVE: The user is browsing the Luganda section. When recommending
     } catch (err) {
       strapi.log.error('Marketplace description AI error:', err);
       return ctx.badRequest('AI description is temporarily unavailable');
+    }
+  },
+
+  /** @param {any} ctx */
+  async generateMarketplaceAdCreatives(ctx) {
+    const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+    if (!OPENAI_API_KEY) {
+      strapi.log.error('OPENAI_API_KEY not configured');
+      return ctx.badRequest('AI image generation is not configured');
+    }
+
+    if (!ctx.state.user?.id) {
+      return ctx.unauthorized('Authentication required');
+    }
+
+    const payload = ctx.request.body || {};
+    const productName = String(payload.productName || payload.name || '').trim();
+    const description = String(payload.description || '').trim();
+    const category = String(payload.category || '').trim();
+    const audience = String(payload.audience || '').trim();
+    const purpose = String(payload.purpose || 'ad_creatives').trim() === 'product_images' ? 'product_images' : 'ad_creatives';
+    const priceLabel = String(payload.priceLabel || '').trim();
+    const sourceImageDataUrl = String(payload.sourceImageDataUrl || '').trim();
+    const sourceImageUrl = String(payload.sourceImageUrl || '').trim();
+    const count = clampNumber(payload.count, 1, 4, 3);
+
+    if (!productName || productName.length < 2) {
+      return ctx.badRequest('Product name is required');
+    }
+
+    let sourceImage = parseDataUrlImage(sourceImageDataUrl);
+    if (!sourceImage && sourceImageUrl) {
+      try {
+        sourceImage = await fetchImageForOpenAI(sourceImageUrl);
+      } catch (err) {
+        strapi.log.warn(`Could not fetch source product image: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+
+    try {
+      const copyResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${OPENAI_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          temperature: 0.75,
+          max_tokens: 280,
+          response_format: { type: 'json_object' },
+          messages: [
+            {
+              role: 'system',
+              content: [
+                'You create concise paid social ad copy for MOVO marketplace sellers in Uganda.',
+                'Return only JSON with headline, primaryText, description, callToAction, and overlayTexts array.',
+                'Keep the wording direct, credible, and sales-focused. Do not include hashtags or emojis.',
+              ].join(' '),
+            },
+            {
+              role: 'user',
+              content: [
+                `Product: ${productName}`,
+                category ? `Category: ${category}` : null,
+                priceLabel ? `Price: ${priceLabel}` : null,
+                description ? `Description: ${description.slice(0, 700)}` : null,
+                audience ? `Audience: ${audience}` : null,
+                purpose === 'product_images'
+                  ? 'Create short product gallery copy for seller reference. The generated images themselves should not need marketing text.'
+                  : 'Create ad copy and 2-4 short overlay text options for attractive Facebook, Instagram, TikTok, and X ads.',
+              ].filter(Boolean).join('\n'),
+            },
+          ],
+        }),
+      });
+
+      if (!copyResponse.ok) {
+        const err = await copyResponse.json().catch(() => ({}));
+        strapi.log.error('OpenAI marketplace ad copy error:', err);
+        return ctx.badRequest('AI ad copy is temporarily unavailable');
+      }
+
+      const copyData = await copyResponse.json();
+      let parsedCopy = {};
+      try {
+        parsedCopy = JSON.parse(stripCodeFence(copyData?.choices?.[0]?.message?.content));
+      } catch {
+        parsedCopy = {};
+      }
+      const copy = normalizeCreativeCopy(parsedCopy, productName);
+
+      const imagePrompt = purpose === 'product_images'
+        ? [
+          'Create a clean ecommerce product gallery image from the attached source product photo.',
+          sourceImage ? 'Keep the product recognizable and preserve its main shape, color, and important details.' : `The product is: ${productName}.`,
+          category ? `Category: ${category}.` : null,
+          audience ? `Intended audience: ${audience}.` : null,
+          description ? `Product context: ${description.slice(0, 500)}.` : null,
+          'Place the product in a polished realistic studio or lifestyle scene suitable for a marketplace product listing.',
+          'Use attractive lighting, clean background, natural shadows, and professional ecommerce composition.',
+          'Do not add marketing text, prices, call-to-action buttons, platform UI, logos, watermarks, or fake badges.',
+        ].filter(Boolean).join(' ')
+        : [
+          'Create a polished paid social media product advertisement image.',
+          sourceImage ? 'Use the attached product photo as the visual reference and keep the product recognizable.' : `The product is: ${productName}.`,
+          category ? `Category: ${category}.` : null,
+          audience ? `Audience: ${audience}.` : null,
+          description ? `Product context: ${description.slice(0, 500)}.` : null,
+          priceLabel ? `Include price cue if it fits naturally: ${priceLabel}.` : null,
+          'Use clean premium composition, realistic lighting, modern ecommerce styling, and readable marketing typography.',
+          `Include one of these short text overlays: ${copy.overlayTexts.join(' | ')}.`,
+          `Call to action: ${copy.callToAction}.`,
+          'Avoid clutter, tiny text, distorted product shapes, fake platform UI, celebrity likenesses, and third-party logos unless they are already on the product.',
+        ].filter(Boolean).join(' ');
+
+      const imageForm = new FormData();
+      imageForm.append('model', 'gpt-image-1');
+      imageForm.append('prompt', imagePrompt);
+      imageForm.append('n', String(count));
+      imageForm.append('size', '1024x1024');
+      imageForm.append('quality', 'medium');
+
+      const imageEndpoint = sourceImage
+        ? 'https://api.openai.com/v1/images/edits'
+        : 'https://api.openai.com/v1/images/generations';
+
+      if (sourceImage) {
+        imageForm.append('image', new Blob([sourceImage.buffer], { type: sourceImage.mime }), sourceImage.filename);
+      }
+
+      const imageResponse = await fetch(imageEndpoint, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${OPENAI_API_KEY}`,
+        },
+        body: imageForm,
+      });
+
+      if (!imageResponse.ok) {
+        const err = await imageResponse.json().catch(() => ({}));
+        strapi.log.error('OpenAI marketplace ad image error:', err);
+        return ctx.badRequest(err?.error?.message || 'AI image generation is temporarily unavailable');
+      }
+
+      const imageData = await imageResponse.json();
+      const creatives = (Array.isArray(imageData?.data) ? imageData.data : [])
+        .map(/** @param {any} item @param {number} index */(item, index) => ({
+          id: `${Date.now()}_${index}`,
+          format: 'square_feed',
+          imageDataUrl: item?.b64_json ? `data:image/png;base64,${item.b64_json}` : '',
+          imageUrl: item?.url || '',
+          headline: copy.headline,
+          primaryText: copy.primaryText,
+          description: copy.description,
+          callToAction: copy.callToAction,
+          purpose,
+        }))
+        .filter(/** @param {{ imageDataUrl?: string, imageUrl?: string }} item */(item) => item.imageDataUrl || item.imageUrl);
+
+      if (!creatives.length) {
+        return ctx.badRequest('AI image generation returned no images');
+      }
+
+      return {
+        data: {
+          copy,
+          creatives,
+          source: sourceImage ? 'uploaded_or_product_image' : 'text_prompt',
+          purpose,
+        },
+      };
+    } catch (err) {
+      strapi.log.error('OpenAI marketplace ad creative exception:', err);
+      return ctx.badRequest('AI ad creative generation is temporarily unavailable');
     }
   },
 };

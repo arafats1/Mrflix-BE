@@ -18,5 +18,13 @@ module.exports = {
         policies: [],
       },
     },
+    {
+      method: 'POST',
+      path: '/ai-chat/marketplace-ad-creatives',
+      handler: 'ai-chat.generateMarketplaceAdCreatives',
+      config: {
+        policies: [],
+      },
+    },
   ],
 };

@@ -23,6 +23,39 @@ function normalizeUgPhone(phone) {
   return digits;
 }
 
+function normalizeStringMap(input = {}) {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return {};
+  return Object.entries(input).reduce((acc, [key, value]) => {
+    const safeKey = String(key || '').trim().slice(0, 40);
+    const safeValue = String(value || '').trim().slice(0, 300);
+    if (safeKey && safeValue) acc[safeKey] = safeValue;
+    return acc;
+  }, {});
+}
+
+function normalizeChannels(input = []) {
+  const allowed = new Set(['facebook', 'instagram', 'tiktok', 'x']);
+  return [...new Set((Array.isArray(input) ? input : [])
+    .map((value) => String(value || '').trim().toLowerCase())
+    .filter((value) => allowed.has(value)))]
+    .slice(0, 4);
+}
+
+function normalizeCreativeAssets(input = []) {
+  return (Array.isArray(input) ? input : [])
+    .map((asset) => ({
+      id: String(asset?.id || '').trim().slice(0, 80),
+      format: String(asset?.format || 'square_feed').trim().slice(0, 40),
+      imageUrl: String(asset?.imageUrl || '').trim().slice(0, 1000),
+      headline: String(asset?.headline || '').trim().slice(0, 120),
+      primaryText: String(asset?.primaryText || '').trim().slice(0, 400),
+      description: String(asset?.description || '').trim().slice(0, 200),
+      callToAction: String(asset?.callToAction || '').trim().slice(0, 40),
+    }))
+    .filter((asset) => asset.imageUrl || asset.headline || asset.primaryText)
+    .slice(0, 8);
+}
+
 function toTimestamp(value) {
   if (!value) return 0;
   if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
@@ -114,6 +147,10 @@ module.exports = createCoreController('api::marketplace-promotion.marketplace-pr
     const paymentPhone = String(payload.paymentPhone || '').trim();
     const normalizedPaymentPhone = normalizeUgPhone(paymentPhone);
     const productId = payload.productId;
+    const channels = normalizeChannels(payload.channels || ['facebook', 'instagram']);
+    const socialProfiles = normalizeStringMap(payload.socialProfiles);
+    const creativeAssets = normalizeCreativeAssets(payload.creativeAssets);
+    const adCampaignNotes = String(payload.adCampaignNotes || '').trim().slice(0, 1000);
 
     const settings = await getSettings(strapi);
     const pricing = getPromotionPricing(settings);
@@ -149,6 +186,11 @@ module.exports = createCoreController('api::marketplace-promotion.marketplace-pr
         paymentPhone: normalizedPaymentPhone || paymentPhone,
         transactionId: merchantReference,
         status: 'pending',
+        channels,
+        socialProfiles,
+        creativeAssets,
+        adCampaignNotes,
+        adFulfillmentStatus: creativeAssets.length || channels.length ? 'ready' : 'draft',
       },
     });
 

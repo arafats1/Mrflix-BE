@@ -72,6 +72,23 @@
     },
     "endDate": {
       "type": "datetime"
+    },
+    "channels": {
+      "type": "json"
+    },
+    "socialProfiles": {
+      "type": "json"
+    },
+    "creativeAssets": {
+      "type": "json"
+    },
+    "adCampaignNotes": {
+      "type": "text"
+    },
+    "adFulfillmentStatus": {
+      "type": "enumeration",
+      "enum": ["draft", "ready", "scheduled", "running", "completed", "cancelled"],
+      "default": "draft"
     }
   }
 }
