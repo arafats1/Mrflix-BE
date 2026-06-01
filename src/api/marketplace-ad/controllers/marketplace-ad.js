@@ -3,7 +3,7 @@
 const { createCoreController } = require('@strapi/strapi').factories;
 
 function isAdminUser(user) {
-  return user?.role?.type === 'admin' || user?.role?.name === 'Admin';
+  return user?.role?.type === 'admin' || user?.role?.name === 'Admin' || user?.isApiTokenAdmin === true;
 }
 
 async function getUserWithRole(strapi, userId) {
@@ -14,6 +14,22 @@ async function getUserWithRole(strapi, userId) {
   });
 }
 
+async function resolveApiTokenAdmin(strapi, token) {
+  if (!token) return null;
+  try {
+    const apiTokenService = strapi.service('admin::api-token');
+    if (!apiTokenService?.hash) return null;
+    const accessKey = apiTokenService.hash(token);
+    const tokenRow = await strapi.db.query('admin::api-token').findOne({ where: { accessKey } });
+    if (tokenRow && tokenRow.type === 'full-access') {
+      return { isApiTokenAdmin: true };
+    }
+  } catch (_) {
+    return null;
+  }
+  return null;
+}
+
 async function resolveUserWithRole(strapi, ctx) {
   if (ctx.state.user?.id) {
     return getUserWithRole(strapi, ctx.state.user.id);
@@ -22,13 +38,19 @@ async function resolveUserWithRole(strapi, ctx) {
   const authHeader = ctx.request.header?.authorization || ctx.request.headers?.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
 
+  const token = authHeader.substring(7);
+
+  // 1) users-permissions JWT (admin user logging in from the web app)
   try {
-    const token = authHeader.substring(7);
     const { id } = await strapi.plugins['users-permissions'].services.jwt.verify(token);
-    return getUserWithRole(strapi, id);
+    const user = await getUserWithRole(strapi, id);
+    if (user) return user;
   } catch (_) {
-    return null;
+    // Not a users-permissions JWT — fall through to API token check.
   }
+
+  // 2) full-access Strapi API token (used by maintenance scripts)
+  return resolveApiTokenAdmin(strapi, token);
 }
 
 async function assertAdmin(ctx, strapi) {
@@ -236,14 +258,37 @@ module.exports = createCoreController('api::marketplace-ad.marketplace-ad', ({ s
     const origName    = uploadedFile.originalFilename || uploadedFile.name || 'upload';
     const contentType = uploadedFile.mimetype || uploadedFile.type || 'application/octet-stream';
 
-    const ext = path.extname(origName).toLowerCase() || '.jpg';
-    const key = `marketplace-ads/${randomUUID()}${ext}`;
+    const rawBuffer = fs.readFileSync(tempPath);
+
+    // Compress/resize ad images to keep the marketplace carousel fast. Banner
+    // creatives only need to render up to ~1600px wide, so we never serve the
+    // multi-MB originals that sellers/admins tend to upload.
+    let body = rawBuffer;
+    let key = `marketplace-ads/${randomUUID()}${path.extname(origName).toLowerCase() || '.jpg'}`;
+    let outputType = contentType;
+
+    if (String(contentType).startsWith('image/')) {
+      try {
+        const sharp = require('sharp');
+        body = await sharp(rawBuffer)
+          .rotate()
+          .resize({ width: 1600, height: 1600, fit: 'inside', withoutEnlargement: true })
+          .webp({ quality: 80 })
+          .toBuffer();
+        key = `marketplace-ads/${randomUUID()}.webp`;
+        outputType = 'image/webp';
+      } catch (error) {
+        strapi.log.warn(`[marketplace-ads] Image compression failed, uploading original: ${error.message}`);
+        body = rawBuffer;
+      }
+    }
 
     await s3.send(new PutObjectCommand({
       Bucket: bucket,
       Key: key,
-      Body: fs.readFileSync(tempPath),
-      ContentType: contentType,
+      Body: body,
+      ContentType: outputType,
+      CacheControl: 'public, max-age=31536000, immutable',
     }));
 
     return ctx.send({ url: `${publicUrl}/${key}` });

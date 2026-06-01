@@ -5,6 +5,7 @@
  */
 
 const { createCoreController } = require('@strapi/strapi').factories;
+const { scheduleProductImageProcessing } = require('../../../utils/marketplace-image-processing');
 
 function normalizeDeliveryAreas(input = []) {
   const values = Array.isArray(input)
@@ -446,6 +447,8 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
       status: 'published',
     });
 
+    scheduleProductImageProcessing(strapi, { documentId: created.documentId, id: created.id });
+
     return { data: await attachReviewSummary(strapi, await withSoldCount(strapi, created)) };
   },
 
@@ -528,6 +531,10 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
       },
       status: 'published',
     });
+
+    if (Object.prototype.hasOwnProperty.call(input, 'images')) {
+      scheduleProductImageProcessing(strapi, { documentId: updated.documentId, id: updated.id });
+    }
 
     return { data: await attachReviewSummary(strapi, await withSoldCount(strapi, updated)) };
   },
