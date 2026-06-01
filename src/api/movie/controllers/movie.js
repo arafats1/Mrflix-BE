@@ -316,9 +316,9 @@ function mapCatalogMovie(movie, baseUrl) {
     backdropUrl: toAbsoluteUrl(movie.backdropUrl, baseUrl) || backdropAsset?.url,
     trailerUrl: toAbsoluteUrl(movie.trailerUrl, baseUrl),
     subtitleUrl: toAbsoluteUrl(movie.subtitleUrl, baseUrl),
-    videoUrl: buildMoviePlaybackUrl(movie.videoUrl, baseUrl) || buildMoviePlaybackUrl(videoAsset?.url, baseUrl),
-    videoUrl720: buildMoviePlaybackUrl(movie.videoUrl720, baseUrl),
-    videoUrl480: buildMoviePlaybackUrl(movie.videoUrl480, baseUrl),
+    videoUrl: toAbsoluteUrl(movie.videoUrl, baseUrl) || videoAsset?.url,
+    videoUrl720: toAbsoluteUrl(movie.videoUrl720, baseUrl),
+    videoUrl480: toAbsoluteUrl(movie.videoUrl480, baseUrl),
     bunnyVideoId: movie.bunnyVideoId || null,
     isAvailable: movie.isAvailable !== false,
     isFeatured: Boolean(movie.isFeatured),
@@ -332,16 +332,16 @@ function mapCatalogMovie(movie, baseUrl) {
     teaserUrl: toAbsoluteUrl(movie.teaserUrl, baseUrl),
     teaserEmbedUrl: toAbsoluteUrl(movie.teaserEmbedUrl, baseUrl),
     trailerEmbedUrl: toAbsoluteUrl(movie.trailerEmbedUrl, baseUrl),
-    lugandaVideoUrl: buildMoviePlaybackUrl(movie.lugandaVideoUrl, baseUrl),
-    lugandaVideoUrl720: buildMoviePlaybackUrl(movie.lugandaVideoUrl720, baseUrl),
-    lugandaVideoUrl480: buildMoviePlaybackUrl(movie.lugandaVideoUrl480, baseUrl),
+    lugandaVideoUrl: toAbsoluteUrl(movie.lugandaVideoUrl, baseUrl),
+    lugandaVideoUrl720: toAbsoluteUrl(movie.lugandaVideoUrl720, baseUrl),
+    lugandaVideoUrl480: toAbsoluteUrl(movie.lugandaVideoUrl480, baseUrl),
     lugandaBunnyVideoId: movie.lugandaBunnyVideoId || null,
     playback,
     translatedAudio: {
       language: movie.translatedLanguage || (movie.isLuganda ? 'Luganda' : null),
-      videoUrl: buildMoviePlaybackUrl(movie.lugandaVideoUrl, baseUrl),
-      videoUrl720: buildMoviePlaybackUrl(movie.lugandaVideoUrl720, baseUrl),
-      videoUrl480: buildMoviePlaybackUrl(movie.lugandaVideoUrl480, baseUrl),
+      videoUrl: toAbsoluteUrl(movie.lugandaVideoUrl, baseUrl),
+      videoUrl720: toAbsoluteUrl(movie.lugandaVideoUrl720, baseUrl),
+      videoUrl480: toAbsoluteUrl(movie.lugandaVideoUrl480, baseUrl),
       bunnyVideoId: movie.lugandaBunnyVideoId || null,
       playback: lugandaPlayback,
     },
@@ -652,8 +652,7 @@ module.exports = createCoreController('api::movie.movie', ({ strapi }) => ({
       movies = await enrichMoviesWithPreviews(strapi, movies);
     }
 
-    const baseUrl = getBaseUrl(ctx);
-    return { data: movies.map((movie) => mapCatalogMovie(movie, baseUrl)), meta };
+    return { data: movies, meta };
   },
 
   // Override findOne to populate relations and apply site-setting price
@@ -675,7 +674,7 @@ module.exports = createCoreController('api::movie.movie', ({ strapi }) => ({
       const enriched = includePreviews === 'true'
         ? await enrichMovieWithPreview(strapi, m)
         : m;
-      response.data = mapCatalogMovie(enriched, getBaseUrl(ctx));
+      response.data = enriched;
     }
 
     return response;
