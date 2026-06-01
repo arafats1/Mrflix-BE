@@ -291,6 +291,17 @@ function createBookExpiryIso(settings, purchaseType, now = new Date()) {
   return new Date(base.getTime() + hours * 60 * 60 * 1000).toISOString();
 }
 
+function resolvePaymentCallbackUrl(rawValue, fallbackUrl) {
+  const fallback = String(fallbackUrl || '').trim();
+  const input = String(rawValue || '').trim();
+  if (!input) return fallback;
+
+  if (/^movomarket:\/\//i.test(input)) return input;
+  if (/^https?:\/\//i.test(input)) return input;
+
+  return fallback;
+}
+
 module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => ({
   // Users see their own purchases, admins see all with buyer info
   async find(ctx) {
@@ -495,6 +506,7 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
       deliveryAddress,
       deliveryPhone,
       contactName,
+      callbackUrl: rawCallbackUrl,
     } = ctx.request.body.data || ctx.request.body;
     const childProfileId = (ctx.request.body.data || ctx.request.body || {}).childProfileId;
 
@@ -613,7 +625,7 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
     }
 
     const frontendUrl = process.env.FRONTEND_URL;
-    const callbackUrl = `${frontendUrl}/payment/callback`;
+    const callbackUrl = resolvePaymentCallbackUrl(rawCallbackUrl, `${frontendUrl}/payment/callback`);
 
     const purchaseData = {
       movie: target.kind === 'movie' ? target.id : null,

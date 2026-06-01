@@ -5,6 +5,17 @@ const pesapal = require('../../../utils/pesapal');
 const { submitPayment, getActiveGateway } = require('../../../utils/payment-gateway');
 const { evaluatePromoCode, incrementPromoUsage } = require('../../../utils/promo-code');
 
+function resolvePaymentCallbackUrl(rawValue, fallbackUrl) {
+  const fallback = String(fallbackUrl || '').trim();
+  const input = String(rawValue || '').trim();
+  if (!input) return fallback;
+
+  if (/^movomarket:\/\//i.test(input)) return input;
+  if (/^https?:\/\//i.test(input)) return input;
+
+  return fallback;
+}
+
 module.exports = createCoreController('api::exclusive-subscription.exclusive-subscription', ({ strapi }) => ({
   // Admin: list all exclusive subscriptions
   async find(ctx) {
@@ -62,7 +73,7 @@ module.exports = createCoreController('api::exclusive-subscription.exclusive-sub
       return ctx.unauthorized('You must be logged in');
     }
 
-    const { paymentMethod, paymentPhone, durationMonths: rawDuration, promoCode: rawPromoCode } = ctx.request.body.data || ctx.request.body;
+    const { paymentMethod, paymentPhone, durationMonths: rawDuration, promoCode: rawPromoCode, callbackUrl: rawCallbackUrl } = ctx.request.body.data || ctx.request.body;
 
     // Validate duration (1-12 months)
     const durationMonths = Math.min(Math.max(parseInt(rawDuration) || 1, 1), 12);
@@ -164,12 +175,13 @@ module.exports = createCoreController('api::exclusive-subscription.exclusive-sub
       const user = ctx.state.user;
       const nameParts = (user.fullName || user.username || '').split(' ');
       const frontendUrl = process.env.FRONTEND_URL;
+      const callbackUrl = resolvePaymentCallbackUrl(rawCallbackUrl, `${frontendUrl}/payment/callback`);
 
       const paymentResult = await submitPayment(strapi, {
         merchantReference,
         amount: totalPrice,
         description: `Mr.Flix Exclusive ${durationMonths} Month${durationMonths > 1 ? 's' : ''} Subscription`,
-        callbackUrl: `${frontendUrl}/payment/callback`,
+        callbackUrl,
         ipnId,
         paymentPhone: paymentPhone || '',
         billingAddress: {
