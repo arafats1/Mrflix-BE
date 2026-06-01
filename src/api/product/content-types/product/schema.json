@@ -122,6 +122,7 @@
         "Sedan",
         "Pickup",
         "Minivan",
+        "MPV",
         "Hatchback",
         "Crossover",
         "Coupe",
@@ -196,6 +197,10 @@
         "Diesel",
         "CNG"
       ]
+    },
+    "negotiable": {
+      "type": "boolean",
+      "default": false
     },
     "ageRange": {
       "type": "string"

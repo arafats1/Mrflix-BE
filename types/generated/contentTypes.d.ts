@@ -2606,6 +2606,7 @@ export interface ApiProductProduct extends Struct.CollectionTypeSchema {
         'Sedan',
         'Pickup',
         'Minivan',
+        'MPV',
         'Hatchback',
         'Crossover',
         'Coupe',
@@ -2698,6 +2699,7 @@ export interface ApiProductProduct extends Struct.CollectionTypeSchema {
     marketplaceSource: Schema.Attribute.Enumeration<['core', 'entrepreneur']> &
       Schema.Attribute.DefaultTo<'core'>;
     name: Schema.Attribute.String & Schema.Attribute.Required;
+    negotiable: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
     paymentCode: Schema.Attribute.String;
     paymentPhone: Schema.Attribute.String;
     priceUGX: Schema.Attribute.Integer & Schema.Attribute.Required;

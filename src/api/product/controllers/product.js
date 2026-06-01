@@ -378,6 +378,7 @@ function buildProductPayload(input = {}, existingProduct = null) {
     ...(Object.prototype.hasOwnProperty.call(input, 'condition') ? { condition: input.condition } : {}),
     ...(Object.prototype.hasOwnProperty.call(input, 'transmission') ? { transmission: input.transmission } : {}),
     ...(Object.prototype.hasOwnProperty.call(input, 'bodyType') ? { bodyType: input.bodyType } : {}),
+    ...(Object.prototype.hasOwnProperty.call(input, 'negotiable') ? { negotiable: Boolean(input.negotiable) } : {}),
     ...(Object.prototype.hasOwnProperty.call(input, 'secondHandCondition') ? { secondHandCondition: input.secondHandCondition } : {}),
     ...(Object.prototype.hasOwnProperty.call(input, 'engineSize') ? { engineSize: input.engineSize } : {}),
     ...(Object.prototype.hasOwnProperty.call(input, 'fuelType') ? { fuelType: input.fuelType } : {}),
