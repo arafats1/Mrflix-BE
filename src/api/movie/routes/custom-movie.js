@@ -4,6 +4,12 @@ module.exports = {
   routes: [
     {
       method: 'GET',
+      path: '/movie-playback',
+      handler: 'movie.playback',
+      config: { auth: false, policies: [] },
+    },
+    {
+      method: 'GET',
       path: '/movies/export',
       handler: 'movie.exportCatalog',
       config: {

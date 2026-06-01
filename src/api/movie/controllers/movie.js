@@ -1,6 +1,7 @@
 'use strict';
 
 const { createCoreController } = require('@strapi/strapi').factories;
+const http = require('node:http');
 const https = require('node:https');
 
 const ADULT_SEARCH_TERMS = /(^|\b)(adult|18\+|18\s*plus|mature|sex|erotic|explicit)(\b|$)/i;
@@ -202,6 +203,30 @@ function toAbsoluteUrl(url, baseUrl) {
   return `${baseUrl}${url.startsWith('/') ? '' : '/'}${url}`;
 }
 
+function getMovieServerUrlInfo(url) {
+  if (!url || typeof url !== 'string') return null;
+  try {
+    const targetUrl = new URL(url);
+    const { baseUrl } = getMovieServerConfig();
+    const movieServerUrl = new URL(baseUrl);
+    const basePath = ensureTrailingSlash(movieServerUrl.pathname || '/');
+    const targetPath = targetUrl.pathname || '/';
+    if (targetUrl.origin !== movieServerUrl.origin) return null;
+    if (!targetPath.startsWith(basePath)) return null;
+    return { url: targetUrl, requestPath: `${targetPath}${targetUrl.search || ''}` };
+  } catch {
+    return null;
+  }
+}
+
+function buildMoviePlaybackUrl(url, baseUrl) {
+  const absoluteUrl = toAbsoluteUrl(url, baseUrl);
+  if (!absoluteUrl) return null;
+  const movieServerInfo = getMovieServerUrlInfo(absoluteUrl);
+  if (!movieServerInfo) return absoluteUrl;
+  return `${baseUrl}/api/movie-playback?path=${encodeURIComponent(movieServerInfo.requestPath)}`;
+}
+
 function getMediaUrl(media, baseUrl) {
   if (!media) return null;
   const rawUrl = media.url || media?.formats?.large?.url || media?.formats?.medium?.url || media?.formats?.small?.url || media?.formats?.thumbnail?.url;
@@ -291,16 +316,32 @@ function mapCatalogMovie(movie, baseUrl) {
     backdropUrl: toAbsoluteUrl(movie.backdropUrl, baseUrl) || backdropAsset?.url,
     trailerUrl: toAbsoluteUrl(movie.trailerUrl, baseUrl),
     subtitleUrl: toAbsoluteUrl(movie.subtitleUrl, baseUrl),
-    videoUrl: toAbsoluteUrl(movie.videoUrl, baseUrl) || videoAsset?.url,
-    videoUrl720: toAbsoluteUrl(movie.videoUrl720, baseUrl),
-    videoUrl480: toAbsoluteUrl(movie.videoUrl480, baseUrl),
+    videoUrl: buildMoviePlaybackUrl(movie.videoUrl, baseUrl) || buildMoviePlaybackUrl(videoAsset?.url, baseUrl),
+    videoUrl720: buildMoviePlaybackUrl(movie.videoUrl720, baseUrl),
+    videoUrl480: buildMoviePlaybackUrl(movie.videoUrl480, baseUrl),
     bunnyVideoId: movie.bunnyVideoId || null,
+    isAvailable: movie.isAvailable !== false,
+    isFeatured: Boolean(movie.isFeatured),
+    isTrending: Boolean(movie.isTrending),
+    isAdult: Boolean(movie.isAdult),
+    isXXX: Boolean(movie.isXXX),
+    adultsOnly: Boolean(movie.adultsOnly),
+    isShortClip: Boolean(movie.isShortClip),
+    minAge: Number(movie.minAge || 0) || 0,
+    embedUrl: toAbsoluteUrl(movie.embedUrl, baseUrl),
+    teaserUrl: toAbsoluteUrl(movie.teaserUrl, baseUrl),
+    teaserEmbedUrl: toAbsoluteUrl(movie.teaserEmbedUrl, baseUrl),
+    trailerEmbedUrl: toAbsoluteUrl(movie.trailerEmbedUrl, baseUrl),
+    lugandaVideoUrl: buildMoviePlaybackUrl(movie.lugandaVideoUrl, baseUrl),
+    lugandaVideoUrl720: buildMoviePlaybackUrl(movie.lugandaVideoUrl720, baseUrl),
+    lugandaVideoUrl480: buildMoviePlaybackUrl(movie.lugandaVideoUrl480, baseUrl),
+    lugandaBunnyVideoId: movie.lugandaBunnyVideoId || null,
     playback,
     translatedAudio: {
       language: movie.translatedLanguage || (movie.isLuganda ? 'Luganda' : null),
-      videoUrl: toAbsoluteUrl(movie.lugandaVideoUrl, baseUrl),
-      videoUrl720: toAbsoluteUrl(movie.lugandaVideoUrl720, baseUrl),
-      videoUrl480: toAbsoluteUrl(movie.lugandaVideoUrl480, baseUrl),
+      videoUrl: buildMoviePlaybackUrl(movie.lugandaVideoUrl, baseUrl),
+      videoUrl720: buildMoviePlaybackUrl(movie.lugandaVideoUrl720, baseUrl),
+      videoUrl480: buildMoviePlaybackUrl(movie.lugandaVideoUrl480, baseUrl),
       bunnyVideoId: movie.lugandaBunnyVideoId || null,
       playback: lugandaPlayback,
     },
@@ -611,7 +652,8 @@ module.exports = createCoreController('api::movie.movie', ({ strapi }) => ({
       movies = await enrichMoviesWithPreviews(strapi, movies);
     }
 
-    return { data: movies, meta };
+    const baseUrl = getBaseUrl(ctx);
+    return { data: movies.map((movie) => mapCatalogMovie(movie, baseUrl)), meta };
   },
 
   // Override findOne to populate relations and apply site-setting price
@@ -630,9 +672,10 @@ module.exports = createCoreController('api::movie.movie', ({ strapi }) => ({
       const m = response.data.toJSON ? response.data.toJSON() : { ...response.data };
       const defaultPrice = m.type === 'series' ? defaults.seriesPrice : defaults.moviePrice;
       m.priceUGX = defaultPrice;
-      response.data = includePreviews === 'true'
+      const enriched = includePreviews === 'true'
         ? await enrichMovieWithPreview(strapi, m)
         : m;
+      response.data = mapCatalogMovie(enriched, getBaseUrl(ctx));
     }
 
     return response;
@@ -715,6 +758,56 @@ module.exports = createCoreController('api::movie.movie', ({ strapi }) => ({
         generatedAt: new Date().toISOString(),
       },
     };
+  },
+
+  async playback(ctx) {
+    const requestedPath = typeof ctx.query?.path === 'string' ? ctx.query.path.trim() : '';
+    if (!requestedPath) return ctx.badRequest('path query parameter is required');
+
+    const { baseUrl, username, password, timeoutMs } = getMovieServerConfig();
+    let candidateUrl;
+    try {
+      candidateUrl = new URL(requestedPath, baseUrl);
+    } catch {
+      return ctx.badRequest('Invalid path');
+    }
+    const movieServerInfo = getMovieServerUrlInfo(candidateUrl.toString());
+    if (!movieServerInfo) return ctx.badRequest('Invalid movie server path');
+
+    const requestModule = movieServerInfo.url.protocol === 'http:' ? http : https;
+    const upstreamHeaders = { Accept: '*/*' };
+    const rangeHeader = ctx.request.headers.range;
+    if (rangeHeader) upstreamHeaders.Range = rangeHeader;
+    if (username && password) {
+      upstreamHeaders.Authorization = `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`;
+    }
+
+    await new Promise((resolve, reject) => {
+      const req = requestModule.request(
+        movieServerInfo.url,
+        { method: 'GET', headers: upstreamHeaders, rejectUnauthorized: false, timeout: timeoutMs },
+        (upstream) => {
+          ctx.status = upstream.statusCode || 500;
+          for (const [name, value] of Object.entries(upstream.headers || {})) {
+            if (!value || name.toLowerCase() === 'transfer-encoding') continue;
+            ctx.set(name, value);
+          }
+          ctx.respond = false;
+          upstream.on('error', reject);
+          upstream.pipe(ctx.res);
+          upstream.on('end', resolve);
+        },
+      );
+      req.on('timeout', () => req.destroy(new Error('Upstream timeout')));
+      req.on('error', reject);
+      req.end();
+    }).catch((err) => {
+      strapi.log.error('Movie playback proxy failed:', err);
+      if (!ctx.headerSent) {
+        ctx.status = 502;
+        ctx.body = { error: 'Could not stream this movie right now.' };
+      }
+    });
   },
 
   // Most Watched: Return movies sorted by watchCount descending
