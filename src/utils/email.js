@@ -3,7 +3,7 @@
 const { Resend } = require('resend');
 
 const resend = new Resend(process.env.RESEND_API_KEY);
-const FROM = 'Mr.Flix <support@abramaccess.com>';
+const FROM = 'Movo Brands <support@movobrands.com>';
 
 /**
  * Shared wrapper around the base layout so every email looks consistent.

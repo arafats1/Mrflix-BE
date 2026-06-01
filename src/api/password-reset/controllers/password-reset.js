@@ -53,9 +53,9 @@ module.exports = {
     // Send email via Resend
     try {
       await resend.emails.send({
-        from: 'Mr.Flix <support@abramaccess.com>',
+        from: 'Movo Brands <support@abramaccess.com>',
         to: user.email,
-        subject: 'Mr.Flix - Password Reset Code',
+        subject: 'Movo Brands - Password Reset Code',
         html: `
           <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px 24px; background: #0a0a0a; color: #fff; border-radius: 16px;">
             <div style="text-align: center; margin-bottom: 24px;">
