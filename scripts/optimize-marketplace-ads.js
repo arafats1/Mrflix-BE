@@ -21,6 +21,9 @@
  */
 
 const path = require('node:path');
+// Load .env so MARKETPLACE_ADS_URL / MARKETPLACE_ADS_TOKEN are available when
+// running the script directly with `node` (Strapi's process doesn't preload .env).
+try { require('dotenv').config({ path: path.resolve(__dirname, '../.env') }); } catch (_) {}
 const sharp = require('sharp');
 
 function parseArgs(argv) {
