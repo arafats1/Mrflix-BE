@@ -8,12 +8,21 @@ const ADMIN_ACADEMY_ACTIONS = [
   'api::entrep-post.entrep-post.deletePost',
 ];
 
-async function ensureAdminAcademyPermissions(strapi) {
-  const knex = strapi.db.connection;
-  const adminRole = await knex('up_roles').where({ type: 'admin' }).first();
-  if (!adminRole) return;
+// Actions that any authenticated (logged-in) user must be able to call.
+// These are granted to the "authenticated" role on every startup so that
+// production role-permission tables always stay in sync with the code.
+const AUTHENTICATED_ACTIONS = [
+  'api::product.product.commentVideo',
+  'api::push-subscription.push-subscription.upsert',
+  'api::push-subscription.push-subscription.remove',
+];
 
-  for (const action of ADMIN_ACADEMY_ACTIONS) {
+async function ensureRolePermissions(strapi, roleType, actions) {
+  const knex = strapi.db.connection;
+  const role = await knex('up_roles').where({ type: roleType }).first();
+  if (!role) return;
+
+  for (const action of actions) {
     let permission = await knex('up_permissions').where({ action }).first();
     if (!permission) {
       const timestamp = new Date();
@@ -28,13 +37,13 @@ async function ensureAdminAcademyPermissions(strapi) {
     }
 
     const link = await knex('up_permissions_role_lnk')
-      .where({ permission_id: permission.id, role_id: adminRole.id })
+      .where({ permission_id: permission.id, role_id: role.id })
       .first();
 
     if (!link) {
       await knex('up_permissions_role_lnk').insert({
         permission_id: permission.id,
-        role_id: adminRole.id,
+        role_id: role.id,
         permission_ord: 1,
       });
     }
@@ -45,6 +54,7 @@ module.exports = {
   async register(/*{ strapi }*/) {},
 
   async bootstrap({ strapi }) {
-    await ensureAdminAcademyPermissions(strapi);
+    await ensureRolePermissions(strapi, 'admin', ADMIN_ACADEMY_ACTIONS);
+    await ensureRolePermissions(strapi, 'authenticated', AUTHENTICATED_ACTIONS);
   },
 };
