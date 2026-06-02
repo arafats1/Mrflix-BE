@@ -56,7 +56,11 @@ module.exports = {
       method: 'POST',
       path: '/products/:id/video-comments',
       handler: 'product.commentVideo',
-      config: {},
+      config: {
+        auth: {
+          scope: [],
+        },
+      },
     },
     {
       method: 'PUT',
