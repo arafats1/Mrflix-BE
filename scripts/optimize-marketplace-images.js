@@ -6,7 +6,9 @@
  *
  * Reuses the same logic the API uses on upload (src/utils/marketplace-image-processing.js),
  * so it generates card/thumbnail webp variants and re-encodes any heavy
- * original (> 1MB) for products that are still missing optimized images.
+ * original (> 500KB) down to the target size for products still missing
+ * optimized images. Use --force to re-optimize already-processed products
+ * (recommended once after lowering the size target).
  *
  * Usage:
  *   npm run optimize:marketplace-images -- --dry-run

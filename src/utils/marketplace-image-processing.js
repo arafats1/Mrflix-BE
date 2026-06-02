@@ -9,10 +9,20 @@ const VARIANT_SPECS = {
   thumbnail: { folder: 'product-images/thumbnail', maxDimension: 320, quality: 72 },
 };
 
-// Re-encode the "original" only when it is heavier than this threshold so we
-// never serve multi-MB images on product detail pages.
-const HEAVY_IMAGE_BYTES = 1024 * 1024; // 1MB
+// Re-encode the "original" so detail pages never serve heavy images. We aim
+// for <= TARGET_ORIGINAL_BYTES by progressively lowering quality / dimensions.
+const TARGET_ORIGINAL_BYTES = 500 * 1024; // 500KB
 const OPTIMIZED_ORIGINAL_SPEC = { folder: 'product-images/optimized', maxDimension: 1600, quality: 82 };
+// Quality / max-dimension steps tried (in order) until the encoded original
+// fits under the target size. The last step is the smallest acceptable result.
+const ORIGINAL_COMPRESSION_STEPS = [
+  { maxDimension: 1600, quality: 82 },
+  { maxDimension: 1600, quality: 72 },
+  { maxDimension: 1400, quality: 68 },
+  { maxDimension: 1200, quality: 62 },
+  { maxDimension: 1024, quality: 58 },
+  { maxDimension: 900, quality: 52 },
+];
 
 function getStorage() {
   const provider = (process.env.STORAGE_PROVIDER || 'backblaze').toLowerCase();
@@ -103,6 +113,34 @@ async function renderVariant(buffer, spec) {
     })
     .webp({ quality: spec.quality })
     .toBuffer();
+}
+
+/**
+ * Encode an image so it fits under `targetBytes`, stepping down quality and
+ * dimensions until the target is met. Always returns the smallest variant we
+ * produced even if the target could not be reached.
+ */
+async function compressToTarget(buffer, targetBytes) {
+  let best = null;
+
+  for (const step of ORIGINAL_COMPRESSION_STEPS) {
+    let encoded;
+    try {
+      encoded = await renderVariant(buffer, step);
+    } catch {
+      continue;
+    }
+
+    if (!best || encoded.length < best.length) {
+      best = encoded;
+    }
+
+    if (encoded.length <= targetBytes) {
+      return encoded;
+    }
+  }
+
+  return best;
 }
 
 async function uploadBuffer(storage, buffer, key) {
@@ -200,11 +238,12 @@ async function processProductImages(strapi, identifier = {}, options = {}) {
       continue;
     }
 
-    // Re-encode the original when it is too heavy to serve directly.
-    if (sourceBuffer.length > HEAVY_IMAGE_BYTES) {
+    // Re-encode the original when it is heavier than the target so detail
+    // pages and grids never serve oversized images.
+    if (sourceBuffer.length > TARGET_ORIGINAL_BYTES) {
       try {
-        const optimized = await renderVariant(sourceBuffer, OPTIMIZED_ORIGINAL_SPEC);
-        if (optimized.length < sourceBuffer.length) {
+        const optimized = await compressToTarget(sourceBuffer, TARGET_ORIGINAL_BYTES);
+        if (optimized && optimized.length < sourceBuffer.length) {
           const key = `${OPTIMIZED_ORIGINAL_SPEC.folder}/${identityKey}/${index + 1}.webp`;
           next.original = await uploadBuffer(storage, optimized, key);
           sourceBuffer = optimized;
