@@ -26,6 +26,14 @@ module.exports = {
     },
     {
       method: 'GET',
+      path: '/products/seller-catalog/:slug',
+      handler: 'product.sellerCatalog',
+      config: {
+        auth: false,
+      },
+    },
+    {
+      method: 'GET',
       path: '/products/:id',
       handler: 'product.findOne',
       config: {

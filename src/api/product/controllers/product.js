@@ -89,6 +89,16 @@ function parsePositiveInteger(value, fallback) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+// Keep this in sync with slugifySellerName() on the web client so the seller
+// catalog page (/marketplace/seller/{slug}) resolves to the same slug.
+function slugifySellerName(name) {
+  return String(name || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-+)|(-+$)/g, '');
+}
+
 function toTimestamp(value) {
   if (!value) return 0;
   if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
@@ -506,6 +516,71 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
           total,
         },
       },
+    };
+  },
+
+  async sellerCatalog(ctx) {
+    await clearExpiredProductPromotions(strapi);
+
+    const slug = slugifySellerName(ctx.params.slug);
+    if (!slug) {
+      return { data: [], meta: { total: 0 } };
+    }
+
+    // Pull every active product once (seller relation only) so we can resolve
+    // each seller's display-name slug in memory instead of forcing the client
+    // to page through the entire marketplace.
+    const products = await strapi.documents('api::product.product').findMany({
+      filters: { status: 'active' },
+      populate: { seller: true },
+      sort: [{ promotedUntil: 'desc' }, { createdAt: 'desc' }],
+      limit: 5000,
+      status: 'published',
+    });
+
+    // Resolve seller display names. The web client slugifies the entrepreneur
+    // profile's fullName first, so batch-load those profiles in a single query.
+    const sellerIds = [...new Set(products.map((p) => p.seller?.id).filter(Boolean))];
+    const profiles = sellerIds.length
+      ? await strapi.entityService.findMany('api::entrep-profile.entrep-profile', {
+          filters: { user: { id: { $in: sellerIds } } },
+          populate: { user: true },
+          limit: sellerIds.length,
+        }).catch(() => [])
+      : [];
+
+    const profileNameByUserId = new Map();
+    for (const profile of profiles || []) {
+      const userId = profile?.user?.id;
+      if (userId && profile.fullName) {
+        profileNameByUserId.set(userId, profile.fullName);
+      }
+    }
+
+    const resolveDisplayName = (product) => (
+      profileNameByUserId.get(product.seller?.id)
+      || product.seller?.fullName
+      || product.seller?.shopName
+      || product.seller?.username
+      || product.seller?.email
+      || 'Movo Seller'
+    );
+
+    const matched = products.filter((product) => slugifySellerName(resolveDisplayName(product)) === slug);
+
+    if (!matched.length) {
+      return { data: [], meta: { total: 0 } };
+    }
+
+    // Enrich only the matched products (small set): sold counts + seller
+    // identity, active promotions and review summaries.
+    const soldProducts = await Promise.all(matched.map((product) => withSoldCount(strapi, product)));
+    const promotedProducts = await attachActivePromotionState(strapi, soldProducts);
+    const data = await attachReviewSummary(strapi, promotedProducts);
+
+    return {
+      data,
+      meta: { total: data.length },
     };
   },
 
