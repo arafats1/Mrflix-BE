@@ -79,6 +79,14 @@ function normalizeCreativeCopy(value, fallbackName) {
   };
 }
 
+/** @param {unknown} value */
+function normalizeMarketplaceImagePurpose(value) {
+  const raw = String(value || '').trim();
+  if (raw === 'product_images') return 'product_images';
+  if (raw === 'product_polish') return 'product_polish';
+  return 'ad_creatives';
+}
+
 module.exports = {
   /** @param {any} ctx */
   async chat(ctx) {
@@ -585,7 +593,7 @@ LUGANDA MODE ACTIVE: The user is browsing the Luganda section. When recommending
     const description = String(payload.description || '').trim();
     const category = String(payload.category || '').trim();
     const audience = String(payload.audience || '').trim();
-    const purpose = String(payload.purpose || 'ad_creatives').trim() === 'product_images' ? 'product_images' : 'ad_creatives';
+    const purpose = normalizeMarketplaceImagePurpose(payload.purpose || 'ad_creatives');
     const priceLabel = String(payload.priceLabel || '').trim();
     const sourceImageDataUrl = String(payload.sourceImageDataUrl || '').trim();
     const sourceImageUrl = String(payload.sourceImageUrl || '').trim();
@@ -633,7 +641,7 @@ LUGANDA MODE ACTIVE: The user is browsing the Luganda section. When recommending
                 priceLabel ? `Price: ${priceLabel}` : null,
                 description ? `Description: ${description.slice(0, 700)}` : null,
                 audience ? `Audience: ${audience}` : null,
-                purpose === 'product_images'
+                purpose === 'product_images' || purpose === 'product_polish'
                   ? 'Create short product gallery copy for seller reference. The generated images themselves should not need marketing text.'
                   : 'Create ad copy and 2-4 short overlay text options for attractive Facebook, Instagram, TikTok, and X ads.',
               ].filter(Boolean).join('\n'),
@@ -657,16 +665,28 @@ LUGANDA MODE ACTIVE: The user is browsing the Luganda section. When recommending
       }
       const copy = normalizeCreativeCopy(parsedCopy, productName);
 
-      const imagePrompt = purpose === 'product_images'
+      const imagePrompt = purpose === 'product_polish'
         ? [
-          'Create a clean ecommerce product gallery image from the attached source product photo.',
-          sourceImage ? 'Keep the product recognizable and preserve its main shape, color, and important details.' : `The product is: ${productName}.`,
+          'Polish and improve the attached seller product photo for an ecommerce marketplace listing.',
+          'Preserve the exact product identity, shape, color, labels, logos, materials, and important visible details from the source image.',
+          'Improve clarity, sharpness, lighting, white balance, exposure, and noise. Make the product look clean, realistic, and professionally photographed.',
+          'If the background is messy, replace it with a clean neutral studio or subtle lifestyle background that does not distract from the product.',
+          category ? `Category: ${category}.` : null,
+          productName ? `Product name: ${productName}.` : null,
+          description ? `Product context: ${description.slice(0, 500)}.` : null,
+          'Do not add marketing text, prices, badges, watermarks, UI, fake labels, extra products, or change the product into a different item.',
+        ].filter(Boolean).join(' ')
+        : purpose === 'product_images'
+        ? [
+          'Create alternate ecommerce product gallery images from the attached seller product photo.',
+          sourceImage ? 'Keep the same product recognizable and preserve its main shape, color, labels, material, proportions, and important details.' : `The product is: ${productName}.`,
           category ? `Category: ${category}.` : null,
           audience ? `Intended audience: ${audience}.` : null,
           description ? `Product context: ${description.slice(0, 500)}.` : null,
-          'Place the product in a polished realistic studio or lifestyle scene suitable for a marketplace product listing.',
-          'Use attractive lighting, clean background, natural shadows, and professional ecommerce composition.',
-          'Do not add marketing text, prices, call-to-action buttons, platform UI, logos, watermarks, or fake badges.',
+          'Show the same product presented differently across a polished realistic studio or lifestyle scene, with varied clean backgrounds, natural shadows, and professional ecommerce composition.',
+          'Where reasonable, vary the camera angle, crop, product placement, or display styling while keeping the product truthful and recognizable.',
+          'Improve the product presentation if the source photo is unclear, but do not invent a different product or alter brand-critical details.',
+          'Do not add marketing text, prices, call-to-action buttons, platform UI, logos, watermarks, fake badges, or extra unrelated objects.',
         ].filter(Boolean).join(' ')
         : [
           'Create a polished paid social media product advertisement image.',
@@ -682,11 +702,12 @@ LUGANDA MODE ACTIVE: The user is browsing the Luganda section. When recommending
         ].filter(Boolean).join(' ');
 
       const imageForm = new FormData();
-      imageForm.append('model', 'gpt-image-1');
+      const imageModel = purpose === 'ad_creatives' ? 'gpt-image-1' : 'gpt-image-1-mini';
+      imageForm.append('model', imageModel);
       imageForm.append('prompt', imagePrompt);
-      imageForm.append('n', String(count));
+      imageForm.append('n', String(purpose === 'product_polish' ? 1 : count));
       imageForm.append('size', '1024x1024');
-      imageForm.append('quality', 'medium');
+      imageForm.append('quality', purpose === 'ad_creatives' ? 'medium' : 'high');
 
       const imageEndpoint = sourceImage
         ? 'https://api.openai.com/v1/images/edits'
