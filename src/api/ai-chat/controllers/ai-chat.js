@@ -859,8 +859,8 @@ LUGANDA MODE ACTIVE: The user is browsing the Luganda section. When recommending
           'Avoid clutter, tiny text, distorted product shapes, fake platform UI, celebrity likenesses, and third-party logos unless they are already on the product.',
         ].filter(Boolean).join(' ');
 
-      const imageModel = purpose === 'ad_creatives' || purpose === 'model_poster' || purpose === 'model_carousel' ? 'gpt-image-1' : 'gpt-image-1-mini';
-      const sourceImages = [sourceImage, modelImage, marketplaceLogo, movoBrandsLogo].filter(Boolean);
+      const imageModel = 'gpt-image-2';
+      const sourceImages = [sourceImage, modelImage, marketplaceLogo, movoBrandsLogo].filter((image) => Boolean(image));
       const imageEndpoint = sourceImages.length
         ? 'https://api.openai.com/v1/images/edits'
         : 'https://api.openai.com/v1/images/generations';
@@ -878,9 +878,13 @@ LUGANDA MODE ACTIVE: The user is browsing the Luganda section. When recommending
         imageForm.append('quality', purpose === 'ad_creatives' ? 'medium' : 'high');
 
         if (sourceImages.length === 1) {
-          imageForm.append('image', new Blob([sourceImages[0].buffer], { type: sourceImages[0].mime }), sourceImages[0].filename);
+          const singleSourceImage = sourceImages[0];
+          if (singleSourceImage) {
+            imageForm.append('image', new Blob([singleSourceImage.buffer], { type: singleSourceImage.mime }), singleSourceImage.filename);
+          }
         } else if (sourceImages.length > 1) {
           sourceImages.forEach((image, index) => {
+            if (!image) return;
             imageForm.append('image[]', new Blob([image.buffer], { type: image.mime }), image.filename || `poster-source-${index + 1}.png`);
           });
         }
