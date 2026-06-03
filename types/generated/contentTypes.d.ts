@@ -2743,6 +2743,7 @@ export interface ApiProductProduct extends Struct.CollectionTypeSchema {
     serviceAvailabilityDates: Schema.Attribute.JSON;
     serviceBookedDates: Schema.Attribute.JSON;
     size: Schema.Attribute.String;
+    specifications: Schema.Attribute.Text;
     status: Schema.Attribute.Enumeration<
       ['active', 'out_of_stock', 'discontinued']
     > &

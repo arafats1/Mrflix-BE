@@ -20,6 +20,9 @@
       "type": "text",
       "required": true
     },
+    "specifications": {
+      "type": "text"
+    },
     "priceUGX": {
       "type": "integer",
       "required": true

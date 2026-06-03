@@ -363,6 +363,7 @@ function buildProductPayload(input = {}, existingProduct = null) {
   return {
     ...(Object.prototype.hasOwnProperty.call(input, 'name') ? { name: input.name } : {}),
     ...(Object.prototype.hasOwnProperty.call(input, 'description') ? { description: input.description } : {}),
+    ...(Object.prototype.hasOwnProperty.call(input, 'specifications') ? { specifications: String(input.specifications || '').trim() } : {}),
     ...(Object.prototype.hasOwnProperty.call(input, 'priceUGX') ? { priceUGX: input.priceUGX } : {}),
     ...(Object.prototype.hasOwnProperty.call(input, 'currency') ? { currency: input.currency } : {}),
     ...(Object.prototype.hasOwnProperty.call(input, 'category') ? { category: input.category } : {}),
