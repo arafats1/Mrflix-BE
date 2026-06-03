@@ -651,7 +651,7 @@ LUGANDA MODE ACTIVE: The user is browsing the Luganda section. When recommending
     }
 
     let marketplaceLogo = null;
-    if (marketplaceLogoUrl) {
+    if (marketplaceLogoUrl && purpose !== 'model_poster' && purpose !== 'model_carousel') {
       try {
         marketplaceLogo = await fetchImageForOpenAI(marketplaceLogoUrl);
       } catch (err) {
@@ -660,7 +660,7 @@ LUGANDA MODE ACTIVE: The user is browsing the Luganda section. When recommending
     }
 
     let movoBrandsLogo = null;
-    if (movoBrandsLogoUrl) {
+    if (movoBrandsLogoUrl && purpose !== 'model_poster' && purpose !== 'model_carousel') {
       try {
         movoBrandsLogo = await fetchImageForOpenAI(movoBrandsLogoUrl);
       } catch (err) {
@@ -738,7 +738,7 @@ LUGANDA MODE ACTIVE: The user is browsing the Luganda section. When recommending
           category ? `Category: ${category}.` : null,
           description ? `Product context: ${description.slice(0, 500)}.` : null,
           posterStyle ? `Desired visual direction: ${posterStyle}.` : null,
-          'Design for a wide marketplace carousel/banner crop, with the main product and focal subject centered safely so it still looks good when cover-cropped on mobile.',
+          'Design for a wide marketplace carousel/banner crop, with the main product and focal subject centered safely so it still looks good when cover-cropped on mobile. Leave clean space near the top-left for the exact MOVO Marketplace logo overlay and near the lower-left for exact product price text.',
           'Use attractive rich backgrounds such as garden, flowers, ocean graphics, showroom lighting, reflective surfaces, city scenery, marble, soft mist, or premium lifestyle environments. Do not use plain solid color backgrounds.',
           'Do not generate readable text, URLs, prices, badges, or final logos inside the image. The app may add exact branding later.',
           'Avoid distorted faces, duplicate products, wrong labels, fake brand marks, clutter, and low-quality collage edges.',
@@ -752,7 +752,7 @@ LUGANDA MODE ACTIVE: The user is browsing the Luganda section. When recommending
           `Product: ${productName}.`,
           category ? `Category: ${category}.` : null,
           description ? `Product context: ${description.slice(0, 500)}.` : null,
-          priceLabel ? `Optional price cue for composition only: ${priceLabel}.` : null,
+          priceLabel ? `The app will overlay this exact price after generation: ${priceLabel}. Leave clean space for it near the lower-left and do not draw the price yourself.` : null,
           posterStyle ? `Desired visual direction: ${posterStyle}.` : null,
           'Compose the model and product like a polished social media advert: the product must be large enough to inspect, placed clearly in the foreground or beside the model, with natural contact shadows and realistic scale.',
           'Each generated poster must have a different attractive background and mood, such as garden, flowers, luxury vanity, ocean-inspired graphics, city night, showroom lighting, marble surface, reflective black surface, soft mist, or elegant scenic backdrop. Do not use plain solid color backgrounds.',
