@@ -1,0 +1,28 @@
+{
+  "kind": "collectionType",
+  "collectionName": "marketplace_models",
+  "info": {
+    "singularName": "marketplace-model",
+    "pluralName": "marketplace-models",
+    "displayName": "Marketplace Model",
+    "description": "Reusable model photos for marketplace AI advert generation"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "attributes": {
+    "name": {
+      "type": "string",
+      "required": true
+    },
+    "imageUrl": {
+      "type": "string",
+      "required": true
+    },
+    "status": {
+      "type": "enumeration",
+      "enum": ["active", "archived"],
+      "default": "active"
+    }
+  }
+}

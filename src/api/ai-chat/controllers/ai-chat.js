@@ -85,6 +85,7 @@ function normalizeMarketplaceImagePurpose(value) {
   if (raw === 'product_images') return 'product_images';
   if (raw === 'product_polish') return 'product_polish';
   if (raw === 'model_poster') return 'model_poster';
+  if (raw === 'model_carousel') return 'model_carousel';
   return 'ad_creatives';
 }
 
@@ -671,6 +672,10 @@ LUGANDA MODE ACTIVE: The user is browsing the Luganda section. When recommending
       return ctx.badRequest('A model image and product image are required for model poster generation');
     }
 
+    if (purpose === 'model_carousel' && !sourceImage) {
+      return ctx.badRequest('A product image is required for carousel image generation');
+    }
+
     try {
       const copyResponse = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
@@ -700,7 +705,7 @@ LUGANDA MODE ACTIVE: The user is browsing the Luganda section. When recommending
                 priceLabel ? `Price: ${priceLabel}` : null,
                 description ? `Description: ${description.slice(0, 700)}` : null,
                 audience ? `Audience: ${audience}` : null,
-                purpose === 'product_images' || purpose === 'product_polish' || purpose === 'model_poster'
+                purpose === 'product_images' || purpose === 'product_polish' || purpose === 'model_poster' || purpose === 'model_carousel'
                   ? 'Create short product gallery copy for seller reference. The generated images themselves should not need marketing text.'
                   : 'Create ad copy and 2-4 short overlay text options for attractive Facebook, Instagram, TikTok, and X ads.',
               ].filter(Boolean).join('\n'),
@@ -724,7 +729,21 @@ LUGANDA MODE ACTIVE: The user is browsing the Luganda section. When recommending
       }
       const copy = normalizeCreativeCopy(parsedCopy, productName);
 
-      const imagePrompt = purpose === 'model_poster'
+      const imagePrompt = purpose === 'model_carousel'
+        ? [
+          `Create ${count} premium MOVO Marketplace carousel hero image using the attached product photo${modelImage ? ' and model photo' : ''}.`,
+          'The first source image is the product reference. Keep the real product recognizable, clear, and large enough for buyers to inspect.',
+          modelImage ? 'The second source image is the model reference. If using the model, keep the face, skin tone, hairstyle, and outfit realistic while composing a premium lifestyle advert.' : 'A model is optional for this creative; a product-only enhanced scene is acceptable.',
+          `Product: ${productName}.`,
+          category ? `Category: ${category}.` : null,
+          description ? `Product context: ${description.slice(0, 500)}.` : null,
+          posterStyle ? `Desired visual direction: ${posterStyle}.` : null,
+          'Design for a wide marketplace carousel/banner crop, with the main product and focal subject centered safely so it still looks good when cover-cropped on mobile.',
+          'Use attractive rich backgrounds such as garden, flowers, ocean graphics, showroom lighting, reflective surfaces, city scenery, marble, soft mist, or premium lifestyle environments. Do not use plain solid color backgrounds.',
+          'Do not generate readable text, URLs, prices, badges, or final logos inside the image. The app may add exact branding later.',
+          'Avoid distorted faces, duplicate products, wrong labels, fake brand marks, clutter, and low-quality collage edges.',
+        ].filter(Boolean).join(' ')
+        : purpose === 'model_poster'
         ? [
           `Create ${count} premium vertical MOVO Marketplace fashion/editorial advert poster background images using the attached model photo and product photo.`,
           'The first source image is the product reference. The second source image is the model reference. Keep the same real product recognizable and keep the model face, pose identity, skin tone, hairstyle, and outfit realistic.',
@@ -780,11 +799,11 @@ LUGANDA MODE ACTIVE: The user is browsing the Luganda section. When recommending
         ].filter(Boolean).join(' ');
 
       const imageForm = new FormData();
-      const imageModel = purpose === 'ad_creatives' || purpose === 'model_poster' ? 'gpt-image-1' : 'gpt-image-1-mini';
+      const imageModel = purpose === 'ad_creatives' || purpose === 'model_poster' || purpose === 'model_carousel' ? 'gpt-image-1' : 'gpt-image-1-mini';
       imageForm.append('model', imageModel);
       imageForm.append('prompt', imagePrompt);
       imageForm.append('n', String(purpose === 'product_polish' ? 1 : count));
-      imageForm.append('size', purpose === 'model_poster' ? '1024x1536' : '1024x1024');
+      imageForm.append('size', purpose === 'model_poster' ? '1024x1536' : purpose === 'model_carousel' ? '1536x1024' : '1024x1024');
       imageForm.append('quality', purpose === 'ad_creatives' ? 'medium' : 'high');
 
       const sourceImages = [sourceImage, modelImage, marketplaceLogo, movoBrandsLogo].filter(Boolean);

@@ -2199,6 +2199,39 @@ export interface ApiMarketplaceAdMarketplaceAd
   };
 }
 
+export interface ApiMarketplaceModelMarketplaceModel
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'marketplace_models';
+  info: {
+    description: 'Reusable model photos for marketplace AI advert generation';
+    displayName: 'Marketplace Model';
+    pluralName: 'marketplace-models';
+    singularName: 'marketplace-model';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    imageUrl: Schema.Attribute.String & Schema.Attribute.Required;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::marketplace-model.marketplace-model'
+    > &
+      Schema.Attribute.Private;
+    name: Schema.Attribute.String & Schema.Attribute.Required;
+    publishedAt: Schema.Attribute.DateTime;
+    status: Schema.Attribute.Enumeration<['active', 'archived']> &
+      Schema.Attribute.DefaultTo<'active'>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface ApiMarketplacePromotionMarketplacePromotion
   extends Struct.CollectionTypeSchema {
   collectionName: 'marketplace_promotions';
@@ -4232,6 +4265,7 @@ declare module '@strapi/strapi' {
       'api::expo-push-token.expo-push-token': ApiExpoPushTokenExpoPushToken;
       'api::free-trial-watch.free-trial-watch': ApiFreeTrialWatchFreeTrialWatch;
       'api::marketplace-ad.marketplace-ad': ApiMarketplaceAdMarketplaceAd;
+      'api::marketplace-model.marketplace-model': ApiMarketplaceModelMarketplaceModel;
       'api::marketplace-promotion.marketplace-promotion': ApiMarketplacePromotionMarketplacePromotion;
       'api::marketplace-thread.marketplace-thread': ApiMarketplaceThreadMarketplaceThread;
       'api::movie-request.movie-request': ApiMovieRequestMovieRequest;
