@@ -84,7 +84,28 @@ function normalizeMarketplaceImagePurpose(value) {
   const raw = String(value || '').trim();
   if (raw === 'product_images') return 'product_images';
   if (raw === 'product_polish') return 'product_polish';
+  if (raw === 'model_poster') return 'model_poster';
   return 'ad_creatives';
+}
+
+/** @param {any} ctx */
+async function resolveUser(ctx) {
+  if (ctx.state.user?.id) return ctx.state.user;
+
+  const authHeader = String(ctx.request?.headers?.authorization || '');
+  if (!authHeader.toLowerCase().startsWith('bearer ')) return null;
+
+  try {
+    const token = authHeader.slice(7);
+    const payload = await strapi.plugins['users-permissions'].services.jwt.verify(token);
+    if (!payload?.id) return null;
+    return await strapi.db.query('plugin::users-permissions.user').findOne({
+      where: { id: payload.id },
+      populate: { role: true },
+    });
+  } catch {
+    return null;
+  }
 }
 
 module.exports = {
@@ -497,7 +518,8 @@ LUGANDA MODE ACTIVE: The user is browsing the Luganda section. When recommending
       return ctx.badRequest('AI assistant is not configured');
     }
 
-    if (!ctx.state.user?.id) {
+    const user = await resolveUser(ctx);
+    if (!user?.id) {
       return ctx.unauthorized('Authentication required');
     }
 
@@ -584,7 +606,8 @@ LUGANDA MODE ACTIVE: The user is browsing the Luganda section. When recommending
       return ctx.badRequest('AI image generation is not configured');
     }
 
-    if (!ctx.state.user?.id) {
+    const user = await resolveUser(ctx);
+    if (!user?.id) {
       return ctx.unauthorized('Authentication required');
     }
 
@@ -597,6 +620,11 @@ LUGANDA MODE ACTIVE: The user is browsing the Luganda section. When recommending
     const priceLabel = String(payload.priceLabel || '').trim();
     const sourceImageDataUrl = String(payload.sourceImageDataUrl || '').trim();
     const sourceImageUrl = String(payload.sourceImageUrl || '').trim();
+    const modelImageDataUrl = String(payload.modelImageDataUrl || '').trim();
+    const modelImageUrl = String(payload.modelImageUrl || '').trim();
+    const marketplaceLogoUrl = String(payload.marketplaceLogoUrl || '').trim();
+    const movoBrandsLogoUrl = String(payload.movoBrandsLogoUrl || '').trim();
+    const posterStyle = String(payload.posterStyle || '').trim();
     const count = clampNumber(payload.count, 1, 4, 3);
 
     if (!productName || productName.length < 2) {
@@ -610,6 +638,37 @@ LUGANDA MODE ACTIVE: The user is browsing the Luganda section. When recommending
       } catch (err) {
         strapi.log.warn(`Could not fetch source product image: ${err instanceof Error ? err.message : String(err)}`);
       }
+    }
+
+    let modelImage = parseDataUrlImage(modelImageDataUrl);
+    if (!modelImage && modelImageUrl) {
+      try {
+        modelImage = await fetchImageForOpenAI(modelImageUrl);
+      } catch (err) {
+        strapi.log.warn(`Could not fetch model image: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+
+    let marketplaceLogo = null;
+    if (marketplaceLogoUrl) {
+      try {
+        marketplaceLogo = await fetchImageForOpenAI(marketplaceLogoUrl);
+      } catch (err) {
+        strapi.log.warn(`Could not fetch marketplace logo: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+
+    let movoBrandsLogo = null;
+    if (movoBrandsLogoUrl) {
+      try {
+        movoBrandsLogo = await fetchImageForOpenAI(movoBrandsLogoUrl);
+      } catch (err) {
+        strapi.log.warn(`Could not fetch MOVO Brands logo: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+
+    if (purpose === 'model_poster' && (!sourceImage || !modelImage)) {
+      return ctx.badRequest('A model image and product image are required for model poster generation');
     }
 
     try {
@@ -641,7 +700,7 @@ LUGANDA MODE ACTIVE: The user is browsing the Luganda section. When recommending
                 priceLabel ? `Price: ${priceLabel}` : null,
                 description ? `Description: ${description.slice(0, 700)}` : null,
                 audience ? `Audience: ${audience}` : null,
-                purpose === 'product_images' || purpose === 'product_polish'
+                purpose === 'product_images' || purpose === 'product_polish' || purpose === 'model_poster'
                   ? 'Create short product gallery copy for seller reference. The generated images themselves should not need marketing text.'
                   : 'Create ad copy and 2-4 short overlay text options for attractive Facebook, Instagram, TikTok, and X ads.',
               ].filter(Boolean).join('\n'),
@@ -665,7 +724,23 @@ LUGANDA MODE ACTIVE: The user is browsing the Luganda section. When recommending
       }
       const copy = normalizeCreativeCopy(parsedCopy, productName);
 
-      const imagePrompt = purpose === 'product_polish'
+      const imagePrompt = purpose === 'model_poster'
+        ? [
+          `Create ${count} premium vertical MOVO Marketplace fashion/editorial advert poster background images using the attached model photo and product photo.`,
+          'The first source image is the product reference. The second source image is the model reference. Keep the same real product recognizable and keep the model face, pose identity, skin tone, hairstyle, and outfit realistic.',
+          marketplaceLogo ? 'Use the supplied MOVO Marketplace logo only as brand reference; leave clean space near the top-left for the app to overlay the exact logo later.' : 'Leave clean space near the top-left for a MOVO Marketplace logo overlay.',
+          movoBrandsLogo ? 'Use the supplied MOVO Brands logo only as brand reference; leave a clean bottom footer area for the app to overlay exact MOVO Brands branding later.' : 'Leave a clean bottom footer area for MOVO Brands branding.',
+          `Product: ${productName}.`,
+          category ? `Category: ${category}.` : null,
+          description ? `Product context: ${description.slice(0, 500)}.` : null,
+          priceLabel ? `Optional price cue for composition only: ${priceLabel}.` : null,
+          posterStyle ? `Desired visual direction: ${posterStyle}.` : null,
+          'Compose the model and product like a polished social media advert: the product must be large enough to inspect, placed clearly in the foreground or beside the model, with natural contact shadows and realistic scale.',
+          'Each generated poster must have a different attractive background and mood, such as garden, flowers, luxury vanity, ocean-inspired graphics, city night, showroom lighting, marble surface, reflective black surface, soft mist, or elegant scenic backdrop. Do not use plain solid color backgrounds.',
+          'Do not generate readable text, URLs, badges, prices, or final logos inside the image. The app will overlay exact branding and footer text after generation.',
+          'Avoid distorted faces, extra fingers, duplicate products, wrong product labels, fake brand marks, low-quality collage edges, and cluttered layouts.',
+        ].filter(Boolean).join(' ')
+        : purpose === 'product_polish'
         ? [
           'Polish and improve the attached seller product photo for an ecommerce marketplace listing.',
           'Preserve the exact product identity, shape, color, labels, logos, materials, and important visible details from the source image.',
@@ -705,19 +780,24 @@ LUGANDA MODE ACTIVE: The user is browsing the Luganda section. When recommending
         ].filter(Boolean).join(' ');
 
       const imageForm = new FormData();
-      const imageModel = purpose === 'ad_creatives' ? 'gpt-image-1' : 'gpt-image-1-mini';
+      const imageModel = purpose === 'ad_creatives' || purpose === 'model_poster' ? 'gpt-image-1' : 'gpt-image-1-mini';
       imageForm.append('model', imageModel);
       imageForm.append('prompt', imagePrompt);
       imageForm.append('n', String(purpose === 'product_polish' ? 1 : count));
-      imageForm.append('size', '1024x1024');
+      imageForm.append('size', purpose === 'model_poster' ? '1024x1536' : '1024x1024');
       imageForm.append('quality', purpose === 'ad_creatives' ? 'medium' : 'high');
 
-      const imageEndpoint = sourceImage
+      const sourceImages = [sourceImage, modelImage, marketplaceLogo, movoBrandsLogo].filter(Boolean);
+      const imageEndpoint = sourceImages.length
         ? 'https://api.openai.com/v1/images/edits'
         : 'https://api.openai.com/v1/images/generations';
 
-      if (sourceImage) {
+      if (sourceImages.length === 1) {
         imageForm.append('image', new Blob([sourceImage.buffer], { type: sourceImage.mime }), sourceImage.filename);
+      } else if (sourceImages.length > 1) {
+        sourceImages.forEach((image, index) => {
+          imageForm.append('image[]', new Blob([image.buffer], { type: image.mime }), image.filename || `poster-source-${index + 1}.png`);
+        });
       }
 
       const imageResponse = await fetch(imageEndpoint, {
@@ -757,7 +837,7 @@ LUGANDA MODE ACTIVE: The user is browsing the Luganda section. When recommending
         data: {
           copy,
           creatives,
-          source: sourceImage ? 'uploaded_or_product_image' : 'text_prompt',
+          source: sourceImages.length ? 'uploaded_or_product_image' : 'text_prompt',
           purpose,
         },
       };

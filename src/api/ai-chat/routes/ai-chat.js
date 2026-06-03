@@ -7,6 +7,7 @@ module.exports = {
       path: '/ai-chat',
       handler: 'ai-chat.chat',
       config: {
+        auth: false,
         policies: [],
       },
     },
@@ -15,6 +16,7 @@ module.exports = {
       path: '/ai-chat/marketplace-description',
       handler: 'ai-chat.generateMarketplaceDescription',
       config: {
+        auth: false,
         policies: [],
       },
     },
@@ -23,6 +25,7 @@ module.exports = {
       path: '/ai-chat/marketplace-ad-creatives',
       handler: 'ai-chat.generateMarketplaceAdCreatives',
       config: {
+        auth: false,
         policies: [],
       },
     },

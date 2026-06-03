@@ -12,6 +12,8 @@ const ADMIN_ACADEMY_ACTIONS = [
 // These are granted to the "authenticated" role on every startup so that
 // production role-permission tables always stay in sync with the code.
 const AUTHENTICATED_ACTIONS = [
+  'api::ai-chat.ai-chat.generateMarketplaceDescription',
+  'api::ai-chat.ai-chat.generateMarketplaceAdCreatives',
   'api::product.product.commentVideo',
   'api::push-subscription.push-subscription.upsert',
   'api::push-subscription.push-subscription.remove',
