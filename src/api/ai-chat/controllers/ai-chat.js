@@ -678,13 +678,16 @@ LUGANDA MODE ACTIVE: The user is browsing the Luganda section. When recommending
         ].filter(Boolean).join(' ')
         : purpose === 'product_images'
         ? [
-          'Create alternate ecommerce product gallery images from the attached seller product photo.',
+          `Create ${count} distinct ecommerce product gallery images as a varied set from the attached seller product photo.`,
           sourceImage ? 'Keep the same product recognizable and preserve its main shape, color, labels, material, proportions, and important details.' : `The product is: ${productName}.`,
           category ? `Category: ${category}.` : null,
           audience ? `Intended audience: ${audience}.` : null,
           description ? `Product context: ${description.slice(0, 500)}.` : null,
-          'Show the same product presented differently across a polished realistic studio or lifestyle scene, with varied clean backgrounds, natural shadows, and professional ecommerce composition.',
-          'Where reasonable, vary the camera angle, crop, product placement, or display styling while keeping the product truthful and recognizable.',
+          'Each generated image must use a clearly different product pose, action, camera angle, or presentation. Do not repeat the same side, stance, crop, or plain background across the set.',
+          'Use attractive ecommerce graphics and realistic lifestyle scenes, not just flat color studio backgrounds. Include premium visual ideas such as reflective surfaces, water splash, soft smoke or mist, ocean-inspired graphic backgrounds, elegant product pedestals, outdoor use scenes, showroom lighting, or contextual props when they fit the product category.',
+          'For vehicles, vary between front view, rear view, three-quarter view, motion on a road, splash of water, and polished mirrored surface scenes. For perfume or beauty items, show spray mist, ocean or floral graphic scenes, luxury vanity surfaces, and close-up hero angles. For clothing, show worn, folded, hanging, and styled outfit views. For food, show serving, packaging, ingredient, and table scenes. For live animals, show natural varied poses and actions such as standing, walking, grazing, front view, side view, and a clean farm or outdoor setting.',
+          'The product should remain the main subject and fill the frame enough for buyers to inspect it clearly.',
+          'Vary camera angle, crop, product placement, scene, lighting, and background style while keeping the product truthful and recognizable.',
           'Improve the product presentation if the source photo is unclear, but do not invent a different product or alter brand-critical details.',
           'Do not add marketing text, prices, call-to-action buttons, platform UI, logos, watermarks, fake badges, or extra unrelated objects.',
         ].filter(Boolean).join(' ')
