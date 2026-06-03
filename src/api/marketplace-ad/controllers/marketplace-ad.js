@@ -150,14 +150,17 @@ function fillAdDefaults(data = {}) {
 module.exports = createCoreController('api::marketplace-ad.marketplace-ad', ({ strapi }) => ({
   async active(ctx) {
     const placement = String(ctx.query?.placement || 'marketplace_top');
+    const isSidebar = placement === 'marketplace_sidebar';
     const ads = await strapi.documents('api::marketplace-ad.marketplace-ad').findMany({
       filters: {
         placement,
         status: 'active',
       },
       populate: { image: true },
-      sort: [{ priority: 'desc' }, { createdAt: 'desc' }],
-      limit: 20,
+      // Sidebar ad cards rotate through every uploaded image in random order on
+      // the client — avoid newest-first bias and fetch the full active set.
+      sort: isSidebar ? [{ id: 'asc' }] : [{ priority: 'desc' }, { createdAt: 'desc' }],
+      limit: isSidebar ? 200 : 20,
     });
 
     return {
