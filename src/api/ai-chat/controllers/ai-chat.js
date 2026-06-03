@@ -89,6 +89,64 @@ function normalizeMarketplaceImagePurpose(value) {
   return 'ad_creatives';
 }
 
+/**
+ * @param {string} text
+ * @param {number} count
+ */
+function extractProductImageDirections(text, count) {
+  const raw = String(text || '').replace(/\s+/g, ' ').trim();
+  if (!raw || count < 2) return [];
+
+  let directionsText = raw;
+  let sharedContext = '';
+  const generateMatch = raw.match(/(?:generate|create|make)\s+(?:\w+\s+)?(?:images?|photos?|scenes?)\s*[,;:]\s*(.+?)(?:\.\s+|$)(.*)$/i);
+  if (generateMatch) {
+    directionsText = generateMatch[1].trim();
+    sharedContext = String(generateMatch[2] || '').trim();
+  }
+
+  const clauses = directionsText
+    .replace(/\s+and\s+another\s+/gi, ', another ')
+    .replace(/\s+and\s+(?=(?:one|first|second|third|fourth)\b)/gi, ', ')
+    .split(/\s*,\s*(?=(?:one|another|first|second|third|fourth|1st|2nd|3rd|4th)\b)/i)
+    .map((clause) => clause
+      .replace(/^(?:one|another|first|second|third|fourth|1st|2nd|3rd|4th)\s+(?:image|photo|scene|shot)?\s*/i, '')
+      .replace(/^(?:showing|show|with|of|for)\s+/i, '')
+      .trim())
+    .filter(Boolean);
+
+  if (clauses.length < 2) return [];
+
+  return clauses.slice(0, count).map((clause) => {
+    const sentence = clause.replace(/[.;,\s]+$/g, '').trim();
+    const context = sharedContext ? ` ${sharedContext.replace(/[.;,\s]+$/g, '').trim()}.` : '';
+    return `${sentence}.${context}`.trim();
+  });
+}
+
+/**
+ * @param {number} index
+ * @param {number} count
+ * @param {string} category
+ */
+function fallbackProductImageDirection(index, count, category) {
+  const isVehicle = /car|vehicle|auto|motor|truck|van|suv/i.test(category || '');
+  const vehicleShots = [
+    'front three-quarter exterior hero view in a premium realistic setting',
+    'clean interior cabin and dashboard view with premium lighting',
+    'rear or back exterior view in a different realistic setting',
+    'side profile or motion driving view with a different camera angle',
+  ];
+  const generalShots = [
+    'front hero product view with a premium ecommerce composition',
+    'close-up detail view showing important materials and features',
+    'lifestyle or use-case view in a different realistic setting',
+    'alternate angle product view with different lighting and background',
+  ];
+  const shots = isVehicle ? vehicleShots : generalShots;
+  return `${shots[index % shots.length]}. This is image ${index + 1} of ${count}; make it clearly different from the other generated images.`;
+}
+
 /** @param {any} ctx */
 async function resolveUser(ctx) {
   if (ctx.state.user?.id) return ctx.state.user;
@@ -801,43 +859,69 @@ LUGANDA MODE ACTIVE: The user is browsing the Luganda section. When recommending
           'Avoid clutter, tiny text, distorted product shapes, fake platform UI, celebrity likenesses, and third-party logos unless they are already on the product.',
         ].filter(Boolean).join(' ');
 
-      const imageForm = new FormData();
       const imageModel = purpose === 'ad_creatives' || purpose === 'model_poster' || purpose === 'model_carousel' ? 'gpt-image-1' : 'gpt-image-1-mini';
-      imageForm.append('model', imageModel);
-      imageForm.append('prompt', imagePrompt);
-      imageForm.append('n', String(purpose === 'product_polish' ? 1 : count));
-      imageForm.append('size', purpose === 'model_poster' ? '1024x1536' : purpose === 'model_carousel' ? '1536x1024' : '1024x1024');
-      imageForm.append('quality', purpose === 'ad_creatives' ? 'medium' : 'high');
-
       const sourceImages = [sourceImage, modelImage, marketplaceLogo, movoBrandsLogo].filter(Boolean);
       const imageEndpoint = sourceImages.length
         ? 'https://api.openai.com/v1/images/edits'
         : 'https://api.openai.com/v1/images/generations';
 
-      if (sourceImages.length === 1) {
-        imageForm.append('image', new Blob([sourceImage.buffer], { type: sourceImage.mime }), sourceImage.filename);
-      } else if (sourceImages.length > 1) {
-        sourceImages.forEach((image, index) => {
-          imageForm.append('image[]', new Blob([image.buffer], { type: image.mime }), image.filename || `poster-source-${index + 1}.png`);
+      /**
+       * @param {string} prompt
+       * @param {number} imageCount
+       */
+      const requestImages = async (prompt, imageCount) => {
+        const imageForm = new FormData();
+        imageForm.append('model', imageModel);
+        imageForm.append('prompt', prompt);
+        imageForm.append('n', String(imageCount));
+        imageForm.append('size', purpose === 'model_poster' ? '1024x1536' : purpose === 'model_carousel' ? '1536x1024' : '1024x1024');
+        imageForm.append('quality', purpose === 'ad_creatives' ? 'medium' : 'high');
+
+        if (sourceImages.length === 1) {
+          imageForm.append('image', new Blob([sourceImages[0].buffer], { type: sourceImages[0].mime }), sourceImages[0].filename);
+        } else if (sourceImages.length > 1) {
+          sourceImages.forEach((image, index) => {
+            imageForm.append('image[]', new Blob([image.buffer], { type: image.mime }), image.filename || `poster-source-${index + 1}.png`);
+          });
+        }
+
+        const imageResponse = await fetch(imageEndpoint, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${OPENAI_API_KEY}`,
+          },
+          body: imageForm,
         });
+
+        if (!imageResponse.ok) {
+          const err = await imageResponse.json().catch(() => ({}));
+          strapi.log.error('OpenAI marketplace ad image error:', err);
+          throw new Error(err?.error?.message || 'AI image generation is temporarily unavailable');
+        }
+
+        const imageData = await imageResponse.json();
+        return Array.isArray(imageData?.data) ? imageData.data : [];
+      };
+
+      let imageItems = [];
+      if (purpose === 'product_images' && count > 1) {
+        const sceneDirections = extractProductImageDirections(posterStyle, count);
+        for (let index = 0; index < count; index += 1) {
+          const sceneDirection = sceneDirections[index] || fallbackProductImageDirection(index, count, category);
+          const prompt = [
+            imagePrompt,
+            `Generate only image ${index + 1} of ${count} for this response.`,
+            `Specific required shot for this image: ${sceneDirection}`,
+            'Do not reuse the same camera angle, product crop, or scene from the other requested images.',
+          ].join(' ');
+          const items = await requestImages(prompt, 1);
+          imageItems.push(...items);
+        }
+      } else {
+        imageItems = await requestImages(imagePrompt, purpose === 'product_polish' ? 1 : count);
       }
 
-      const imageResponse = await fetch(imageEndpoint, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${OPENAI_API_KEY}`,
-        },
-        body: imageForm,
-      });
-
-      if (!imageResponse.ok) {
-        const err = await imageResponse.json().catch(() => ({}));
-        strapi.log.error('OpenAI marketplace ad image error:', err);
-        return ctx.badRequest(err?.error?.message || 'AI image generation is temporarily unavailable');
-      }
-
-      const imageData = await imageResponse.json();
-      const creatives = (Array.isArray(imageData?.data) ? imageData.data : [])
+      const creatives = imageItems
         .map(/** @param {any} item @param {number} index */(item, index) => ({
           id: `${Date.now()}_${index}`,
           format: 'square_feed',
@@ -865,6 +949,10 @@ LUGANDA MODE ACTIVE: The user is browsing the Luganda section. When recommending
       };
     } catch (err) {
       strapi.log.error('OpenAI marketplace ad creative exception:', err);
+      const message = err instanceof Error ? err.message : '';
+      if (message && /image generation|temporarily unavailable|OpenAI/i.test(message)) {
+        return ctx.badRequest(message);
+      }
       return ctx.badRequest('AI ad creative generation is temporarily unavailable');
     }
   },
