@@ -172,6 +172,96 @@ async function withSoldCount(strapi, product) {
   };
 }
 
+/**
+ * Batched equivalent of mapping `enrichSellerIdentity` over a list. Resolves
+ * every seller's entrepreneur profile in a single query instead of one query
+ * per product (removes an N+1 on the marketplace listing endpoint).
+ */
+async function enrichSellerIdentities(strapi, products) {
+  const list = Array.isArray(products) ? products.filter(Boolean) : [products].filter(Boolean);
+  if (!list.length) return Array.isArray(products) ? [] : null;
+
+  const sellerIds = [...new Set(list.map((product) => product.seller?.id).filter(Boolean))];
+  const profileByUserId = new Map();
+
+  if (sellerIds.length) {
+    const profiles = await strapi.entityService.findMany('api::entrep-profile.entrep-profile', {
+      filters: { user: { id: { $in: sellerIds } } },
+      populate: { user: true },
+      limit: sellerIds.length,
+    }).catch((error) => {
+      strapi.log.warn(`Batched seller profile lookup failed: ${error.message}`);
+      return [];
+    });
+
+    for (const profile of profiles || []) {
+      const userId = profile?.user?.id;
+      if (userId) profileByUserId.set(userId, profile);
+    }
+  }
+
+  const enriched = list.map((product) => {
+    if (!product?.seller?.id) return product;
+    const entrepreneurProfile = profileByUserId.get(product.seller.id) || null;
+
+    return {
+      ...product,
+      sellerDisplayName: entrepreneurProfile?.fullName || product.seller?.fullName || product.seller?.shopName || product.seller?.username || product.seller?.email || null,
+      sellerLocation: entrepreneurProfile?.location || product.seller?.location || null,
+      sellerPhone: entrepreneurProfile?.phone || product.paymentPhone || product.seller?.phone || product.seller?.paymentPhone || null,
+      sellerAge: entrepreneurProfile?.age || null,
+      sellerProfilePhotoUrl: entrepreneurProfile?.profilePhotoUrl || product.seller?.avatarUrl || null,
+    };
+  });
+
+  return Array.isArray(products) ? enriched : enriched[0];
+}
+
+/**
+ * Batched equivalent of mapping `withSoldCount` over a list. Computes every
+ * product's non-failed purchase count in a single grouped query instead of one
+ * count query per product. Falls back to per-product counts if the grouped
+ * query fails (e.g. unexpected link-table name on a future Strapi version).
+ */
+async function attachSoldCounts(strapi, products) {
+  const list = Array.isArray(products) ? products.filter(Boolean) : [products].filter(Boolean);
+  if (!list.length) return Array.isArray(products) ? [] : null;
+
+  const ids = [...new Set(list.map((product) => product.id).filter(Boolean))];
+  const countByProductId = new Map();
+
+  if (ids.length) {
+    try {
+      const rows = await strapi.db.connection('purchases_product_lnk as lnk')
+        .join('purchases as p', 'p.id', 'lnk.purchase_id')
+        .whereIn('lnk.product_id', ids)
+        .andWhere('p.status', '<>', 'failed')
+        .groupBy('lnk.product_id')
+        .select('lnk.product_id as productId')
+        .count('p.id as soldCount');
+
+      for (const row of rows || []) {
+        countByProductId.set(Number(row.productId), Number(row.soldCount || 0));
+      }
+    } catch (error) {
+      strapi.log.warn(`Batched sold-count query failed, falling back to per-product counts: ${error.message}`);
+      await Promise.all(ids.map(async (id) => {
+        const soldCount = await strapi.db.query('api::purchase.purchase').count({
+          where: { product: { id }, status: { $ne: 'failed' } },
+        }).catch(() => 0);
+        countByProductId.set(Number(id), Number(soldCount || 0));
+      }));
+    }
+  }
+
+  const enriched = list.map((product) => ({
+    ...product,
+    soldCount: countByProductId.get(Number(product.id)) || 0,
+  }));
+
+  return Array.isArray(products) ? enriched : enriched[0];
+}
+
 async function attachReviewSummary(strapi, products) {
   const list = Array.isArray(products) ? products.filter(Boolean) : [products].filter(Boolean);
   if (!list.length) return Array.isArray(products) ? [] : null;
@@ -505,7 +595,13 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
       }),
     ]);
 
-    const soldProducts = await Promise.all(products.map((product) => withSoldCount(strapi, product)));
+    // Batched enrichment: one query for all seller profiles + one grouped
+    // query for all sold counts, instead of two queries per product. Combined
+    // with the already-batched promotion and review steps, a full page now runs
+    // a small constant number of queries regardless of page size.
+    const normalizedProducts = products.map((product) => withSellerPaymentFallback(product));
+    const sellerEnrichedProducts = await enrichSellerIdentities(strapi, normalizedProducts);
+    const soldProducts = await attachSoldCounts(strapi, sellerEnrichedProducts);
     const promotedProducts = await attachActivePromotionState(strapi, soldProducts);
     return {
       data: await attachReviewSummary(strapi, promotedProducts),
