@@ -4,6 +4,7 @@ const yoPayments = require('../../../utils/yo-payments');
 const { normalizePaymentMethod } = require('../../../utils/payment-methods');
 const { recordProviderMaterialSale } = require('../../../utils/provider-material-sales');
 const { notifyProductOrderPlaced } = require('../../../utils/marketplace-notifications');
+const { activateHomesPaymentByFilter, failHomesPaymentByFilter } = require('../../../utils/homes-payments');
 
 /**
  * Activate purchases / subscriptions tagged with the given Yo! reference.
@@ -74,6 +75,8 @@ async function activateByReference(reference, paymentMethod = 'yo') {
       strapi.log.info(`[Yo Webhook] Exclusive subscription ${exclSub.id} activated for ref ${reference}`);
     }
   }
+
+  await activateHomesPaymentByFilter(strapi, { yoReference: reference }, paymentMethod);
 }
 
 async function failByReference(reference) {
@@ -112,6 +115,8 @@ async function failByReference(reference) {
       });
     }
   }
+
+  await failHomesPaymentByFilter(strapi, { yoReference: reference });
 }
 
 module.exports = {
@@ -222,6 +227,12 @@ module.exports = {
             limit: 1,
           });
           if (exclSubs && exclSubs.length > 0) purchaseType = 'exclusive';
+        }
+
+        if (purchaseType === 'unknown') {
+          const homesUnlocks = await strapi.entityService.findMany('api::home-contact-unlock.home-contact-unlock', { filters: { yoReference: txRef }, limit: 1 }).catch(() => []);
+          const homesBookings = await strapi.entityService.findMany('api::home-booking.home-booking', { filters: { yoReference: txRef }, limit: 1 }).catch(() => []);
+          if ((homesUnlocks && homesUnlocks.length > 0) || (homesBookings && homesBookings.length > 0)) purchaseType = 'homes';
         }
       }
 

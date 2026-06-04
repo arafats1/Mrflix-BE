@@ -1,0 +1,447 @@
+'use strict';
+
+const { submitPayment, checkPaymentStatus: checkGatewayPaymentStatus } = require('../../../utils/payment-gateway');
+const { activateHomesPaymentByFilter, failHomesPaymentByFilter } = require('../../../utils/homes-payments');
+
+const LISTING_UID = 'api::home-listing.home-listing';
+const KYC_UID = 'api::home-kyc.home-kyc';
+const CONTACT_UID = 'api::home-contact-unlock.home-contact-unlock';
+const BOOKING_UID = 'api::home-booking.home-booking';
+const SAVE_UID = 'api::home-save.home-save';
+
+const LISTING_KINDS = ['rent', 'sale', 'stay'];
+const OWNER_ROLES = ['landlord', 'broker', 'host'];
+const STATUSES = ['draft', 'pending_review', 'published', 'rejected', 'archived'];
+const AVAILABILITY = ['available', 'taken'];
+
+function bodyData(ctx) {
+  return ctx.request.body?.data || ctx.request.body || {};
+}
+
+function cleanString(value, max = 1000) {
+  return String(value || '').trim().slice(0, max);
+}
+
+function intValue(value, fallback = 0) {
+  const parsed = parseInt(value, 10);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function positiveInt(value, fallback = 0) {
+  return Math.max(0, intValue(value, fallback));
+}
+
+function normalizeList(input) {
+  if (Array.isArray(input)) return input.map((item) => cleanString(item, 120)).filter(Boolean);
+  if (typeof input === 'string') return input.split(/[\n,]+/).map((item) => cleanString(item, 120)).filter(Boolean);
+  return [];
+}
+
+function normalizeJsonArray(input) {
+  return Array.isArray(input) ? input : [];
+}
+
+function slugify(value) {
+  return cleanString(value, 140).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-+)|(-+$)/g, '') || `home-${Date.now()}`;
+}
+
+function isAdmin(user) {
+  return user?.role?.type === 'admin' || user?.role?.name === 'Admin';
+}
+
+async function fullUser(userId) {
+  if (!userId) return null;
+  return strapi.entityService.findOne('plugin::users-permissions.user', userId, { populate: ['role'] });
+}
+
+async function findListing(identifier, populate = {}) {
+  const raw = cleanString(identifier, 180);
+  if (!raw) return null;
+
+  if (/^\d+$/.test(raw)) {
+    const byId = await strapi.entityService.findOne(LISTING_UID, Number(raw), { populate }).catch(() => null);
+    if (byId) return byId;
+  }
+
+  const found = await strapi.entityService.findMany(LISTING_UID, {
+    filters: { $or: [{ slug: raw }, { documentId: raw }] },
+    populate,
+    limit: 1,
+  });
+  return found?.[0] || null;
+}
+
+async function hasApprovedKyc(userId, role) {
+  if (!userId || !role) return false;
+  const rows = await strapi.entityService.findMany(KYC_UID, {
+    filters: { user: { id: userId }, role, status: 'approved' },
+    limit: 1,
+  });
+  return rows?.length > 0;
+}
+
+async function hasActiveUnlock(userId, listingId) {
+  if (!userId || !listingId) return false;
+  const rows = await strapi.entityService.findMany(CONTACT_UID, {
+    filters: { requester: { id: userId }, listing: { id: listingId }, status: 'active' },
+    limit: 1,
+  });
+  return rows?.length > 0;
+}
+
+function publicListing(listing, options = {}) {
+  if (!listing) return listing;
+  const canSeeContact = !!options.canSeeContact;
+  const owner = listing.owner || null;
+  return {
+    id: listing.documentId || listing.slug || String(listing.id),
+    numericId: listing.id,
+    documentId: listing.documentId,
+    slug: listing.slug,
+    kind: listing.kind,
+    status: listing.status,
+    availabilityStatus: listing.availabilityStatus || 'available',
+    title: listing.title,
+    location: listing.location,
+    addressHint: listing.addressHint || '',
+    priceUGX: Number(listing.priceUGX || 0),
+    priceLabel: listing.priceLabel || (listing.kind === 'stay' ? 'per night' : listing.kind === 'rent' ? 'per month' : 'asking price'),
+    bedrooms: Number(listing.bedrooms || 0),
+    bathrooms: Number(listing.bathrooms || 0),
+    guests: Number(listing.guests || 1),
+    sizeLabel: listing.sizeLabel || '',
+    propertyType: listing.propertyType || '',
+    description: listing.description || '',
+    ownerName: listing.ownerName || owner?.fullName || owner?.username || 'Homes provider',
+    ownerRole: listing.ownerRole,
+    ownerPhone: canSeeContact ? (listing.ownerPhone || owner?.phone || null) : null,
+    contactLocked: !canSeeContact,
+    verificationStatus: listing.verificationStatus || 'pending',
+    contactUnlockFeeUGX: Number(listing.contactUnlockFeeUGX || 0),
+    visitFeeUGX: Number(listing.visitFeeUGX || 0),
+    availableFrom: listing.availableFrom || '',
+    amenities: Array.isArray(listing.amenities) ? listing.amenities : [],
+    highlights: Array.isArray(listing.highlights) ? listing.highlights : [],
+    sections: Array.isArray(listing.sections) ? listing.sections : [],
+    rules: Array.isArray(listing.rules) ? listing.rules : [],
+    rating: listing.rating ? Number(listing.rating) : null,
+    reviews: Number(listing.reviews || 0),
+    bookingCount: Number(listing.bookingCount || 0),
+    createdAt: listing.createdAt,
+    updatedAt: listing.updatedAt,
+  };
+}
+
+function listingInput(input, user, existing = {}) {
+  const kind = LISTING_KINDS.includes(input.kind) ? input.kind : existing.kind || 'rent';
+  const ownerRole = OWNER_ROLES.includes(input.ownerRole) ? input.ownerRole : existing.ownerRole || (kind === 'stay' ? 'host' : 'landlord');
+  const title = cleanString(input.title || existing.title, 160);
+  const status = STATUSES.includes(input.status) && isAdmin(user) ? input.status : existing.status || 'pending_review';
+  const availabilityStatus = AVAILABILITY.includes(input.availabilityStatus) ? input.availabilityStatus : existing.availabilityStatus || 'available';
+
+  return {
+    title,
+    slug: cleanString(input.slug || existing.slug || slugify(title), 180),
+    kind,
+    status,
+    availabilityStatus,
+    location: cleanString(input.location || existing.location, 140),
+    addressHint: cleanString(input.addressHint || existing.addressHint, 180),
+    priceUGX: positiveInt(input.priceUGX ?? input.price ?? existing.priceUGX, existing.priceUGX || 0),
+    priceLabel: cleanString(input.priceLabel || existing.priceLabel || (kind === 'stay' ? 'per night' : kind === 'rent' ? 'per month' : 'asking price'), 80),
+    bedrooms: positiveInt(input.bedrooms ?? existing.bedrooms, existing.bedrooms || 0),
+    bathrooms: positiveInt(input.bathrooms ?? existing.bathrooms, existing.bathrooms || 0),
+    guests: Math.max(1, positiveInt(input.guests ?? existing.guests, existing.guests || 1)),
+    sizeLabel: cleanString(input.sizeLabel || existing.sizeLabel, 80),
+    propertyType: cleanString(input.propertyType || existing.propertyType, 80),
+    description: cleanString(input.description || existing.description, 4000),
+    ownerName: cleanString(input.ownerName || existing.ownerName || user?.fullName || user?.username, 120),
+    ownerRole,
+    ownerPhone: cleanString(input.ownerPhone || input.phone || existing.ownerPhone || user?.phone, 40),
+    contactUnlockFeeUGX: positiveInt(input.contactUnlockFeeUGX ?? existing.contactUnlockFeeUGX, existing.contactUnlockFeeUGX || 10000),
+    visitFeeUGX: positiveInt(input.visitFeeUGX ?? existing.visitFeeUGX, existing.visitFeeUGX || 5000),
+    availableFrom: cleanString(input.availableFrom || existing.availableFrom, 120),
+    amenities: normalizeList(input.amenities ?? existing.amenities),
+    highlights: normalizeList(input.highlights ?? existing.highlights),
+    sections: normalizeJsonArray(input.sections ?? existing.sections),
+    rules: normalizeList(input.rules ?? existing.rules),
+  };
+}
+
+async function submitHomesPayment(ctx, record, amountUGX, prefix, description, paymentPhone) {
+  const settings = await strapi.entityService.findMany('api::site-setting.site-setting');
+  const activeGateway = settings?.paymentGateway || 'pesapal';
+  const ipnId = settings?.pesapalIpnId;
+
+  if (activeGateway === 'pesapal' && !ipnId) return ctx.badRequest('Payment system not configured. Please contact support.');
+  if ((activeGateway === 'dgateway' || activeGateway === 'yo') && !paymentPhone) return ctx.badRequest('Phone number is required for mobile money payment.');
+
+  const merchantReference = `${prefix}_${ctx.state.user.id}_${Date.now()}_${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+  const updateData = { transactionId: merchantReference, paymentMethod: activeGateway, paymentPhone: paymentPhone || '' };
+
+  const uid = prefix === 'HBOOK' ? BOOKING_UID : CONTACT_UID;
+  await strapi.entityService.update(uid, record.id, { data: updateData });
+
+  const nameParts = (ctx.state.user.fullName || ctx.state.user.username || '').split(' ');
+  const frontendUrl = process.env.FRONTEND_URL || process.env.MRKEYP_URL || 'http://localhost:3000';
+  const paymentResult = await submitPayment(strapi, {
+    merchantReference,
+    amount: amountUGX,
+    description,
+    callbackUrl: `${frontendUrl}/payment/callback`,
+    ipnId,
+    paymentPhone: paymentPhone || '',
+    billingAddress: {
+      email: ctx.state.user.email || '',
+      phone: paymentPhone || ctx.state.user.phone || '',
+      firstName: nameParts[0] || '',
+      lastName: nameParts.slice(1).join(' ') || '',
+    },
+  });
+
+  const paymentFields = {};
+  if (paymentResult.gateway === 'pesapal') paymentFields.pesapalTrackingId = paymentResult.order_tracking_id;
+  if (paymentResult.gateway === 'dgateway') paymentFields.dgatewayReference = paymentResult.reference;
+  if (paymentResult.gateway === 'yo') paymentFields.yoReference = paymentResult.reference;
+  await strapi.entityService.update(uid, record.id, { data: paymentFields });
+
+  return {
+    gateway: paymentResult.gateway,
+    transactionId: merchantReference,
+    redirect_url: paymentResult.redirect_url || null,
+    order_tracking_id: paymentResult.order_tracking_id || null,
+    reference: paymentResult.reference || null,
+    paymentStatus: paymentResult.status || null,
+  };
+}
+
+module.exports = {
+  async findPublic(ctx) {
+    const { kind, where, minPrice, maxPrice, bedrooms, propertyType, guests, page = 1, pageSize = 24 } = ctx.query || {};
+    const filters = { status: 'published' };
+    if (LISTING_KINDS.includes(kind)) filters.kind = kind;
+
+    const rows = await strapi.entityService.findMany(LISTING_UID, {
+      filters,
+      populate: { owner: { fields: ['id', 'username', 'fullName'] } },
+      sort: { createdAt: 'desc' },
+      limit: 500,
+    });
+
+    let data = rows || [];
+    if (where) data = data.filter((item) => `${item.location || ''} ${item.addressHint || ''}`.toLowerCase().includes(String(where).toLowerCase()));
+    if (minPrice) data = data.filter((item) => Number(item.priceUGX || 0) >= Number(minPrice));
+    if (maxPrice) data = data.filter((item) => Number(item.priceUGX || 0) <= Number(maxPrice));
+    if (bedrooms) data = data.filter((item) => Number(item.bedrooms || 0) === Number(bedrooms));
+    if (propertyType) data = data.filter((item) => String(item.propertyType || '').toLowerCase() === String(propertyType).toLowerCase());
+    if (guests) data = data.filter((item) => Number(item.guests || 1) >= Number(guests));
+
+    const currentPage = Math.max(1, intValue(page, 1));
+    const size = Math.min(100, Math.max(1, intValue(pageSize, 24)));
+    const start = (currentPage - 1) * size;
+    const paged = data.slice(start, start + size);
+
+    return { data: paged.map((item) => publicListing(item)), meta: { pagination: { page: currentPage, pageSize: size, pageCount: Math.ceil(data.length / size), total: data.length } } };
+  },
+
+  async findOnePublic(ctx) {
+    const user = ctx.state.user || null;
+    const listing = await findListing(ctx.params.id, { owner: { fields: ['id', 'username', 'fullName', 'phone'] } });
+    if (!listing || listing.status !== 'published') return ctx.notFound('Listing not found');
+
+    const canSeeContact = user?.id && (await hasActiveUnlock(user.id, listing.id) || Number(listing.owner?.id || 0) === Number(user.id) || isAdmin(await fullUser(user.id)));
+    return { data: publicListing(listing, { canSeeContact }) };
+  },
+
+  async myListings(ctx) {
+    if (!ctx.state.user) return ctx.unauthorized('Login required');
+    const rows = await strapi.entityService.findMany(LISTING_UID, {
+      filters: { owner: { id: ctx.state.user.id } },
+      populate: { owner: { fields: ['id', 'username', 'fullName', 'phone'] } },
+      sort: { createdAt: 'desc' },
+      limit: 200,
+    });
+    return { data: rows.map((item) => publicListing(item, { canSeeContact: true })) };
+  },
+
+  async createListing(ctx) {
+    if (!ctx.state.user) return ctx.unauthorized('Login required');
+    const user = await fullUser(ctx.state.user.id);
+    const input = listingInput(bodyData(ctx), user);
+    if (!input.title || !input.location || !input.propertyType || !input.description || !input.priceUGX) return ctx.badRequest('Title, location, property type, description, and price are required');
+
+    input.verificationStatus = await hasApprovedKyc(user.id, input.ownerRole) ? 'verified' : 'pending';
+    input.owner = user.id;
+    const created = await strapi.entityService.create(LISTING_UID, { data: input, populate: { owner: { fields: ['id', 'username', 'fullName', 'phone'] } } });
+    return { data: publicListing(created, { canSeeContact: true }) };
+  },
+
+  async updateListing(ctx) {
+    if (!ctx.state.user) return ctx.unauthorized('Login required');
+    const user = await fullUser(ctx.state.user.id);
+    const listing = await findListing(ctx.params.id, { owner: { fields: ['id', 'phone', 'username', 'fullName'] } });
+    if (!listing) return ctx.notFound('Listing not found');
+    if (!isAdmin(user) && Number(listing.owner?.id || 0) !== Number(user.id)) return ctx.forbidden('You can only edit your own listings');
+
+    const input = listingInput(bodyData(ctx), user, listing);
+    if (!isAdmin(user)) input.status = listing.status === 'published' ? 'published' : 'pending_review';
+    input.verificationStatus = await hasApprovedKyc(user.id, input.ownerRole) ? 'verified' : listing.verificationStatus || 'pending';
+
+    const updated = await strapi.entityService.update(LISTING_UID, listing.id, { data: input, populate: { owner: { fields: ['id', 'username', 'fullName', 'phone'] } } });
+    return { data: publicListing(updated, { canSeeContact: true }) };
+  },
+
+  async submitKyc(ctx) {
+    if (!ctx.state.user) return ctx.unauthorized('Login required');
+    const input = bodyData(ctx);
+    const role = OWNER_ROLES.includes(input.role) ? input.role : 'landlord';
+    const location = cleanString(input.location, 140);
+    if (!cleanString(input.idNumber, 80) || !location) return ctx.badRequest('ID number and location are required');
+
+    const rows = await strapi.entityService.findMany(KYC_UID, { filters: { user: { id: ctx.state.user.id }, role }, limit: 1 });
+    const data = {
+      user: ctx.state.user.id,
+      role,
+      status: 'pending',
+      idNumber: cleanString(input.idNumber, 80),
+      businessName: cleanString(input.businessName, 140),
+      location,
+      documentImages: normalizeJsonArray(input.documentImages),
+    };
+    const entry = rows?.[0]
+      ? await strapi.entityService.update(KYC_UID, rows[0].id, { data })
+      : await strapi.entityService.create(KYC_UID, { data });
+    return { data: entry };
+  },
+
+  async myKyc(ctx) {
+    if (!ctx.state.user) return ctx.unauthorized('Login required');
+    const rows = await strapi.entityService.findMany(KYC_UID, { filters: { user: { id: ctx.state.user.id } }, sort: { createdAt: 'desc' } });
+    return { data: rows };
+  },
+
+  async reviewKyc(ctx) {
+    if (!ctx.state.user) return ctx.unauthorized('Login required');
+    const user = await fullUser(ctx.state.user.id);
+    if (!isAdmin(user)) return ctx.forbidden('Admin only');
+    const input = bodyData(ctx);
+    const status = ['approved', 'rejected', 'pending'].includes(input.status) ? input.status : 'pending';
+    const updated = await strapi.entityService.update(KYC_UID, ctx.params.id, { data: { status, notes: cleanString(input.notes, 1000), reviewer: user.id, reviewedAt: new Date().toISOString() } });
+    return { data: updated };
+  },
+
+  async unlockContact(ctx) {
+    if (!ctx.state.user) return ctx.unauthorized('Login required');
+    const input = bodyData(ctx);
+    const listing = await findListing(ctx.params.id || input.listingId, { owner: { fields: ['id', 'phone', 'username', 'fullName'] } });
+    if (!listing || listing.status !== 'published') return ctx.notFound('Listing not found');
+    if (Number(listing.owner?.id || 0) === Number(ctx.state.user.id)) return ctx.badRequest('You already own this listing');
+
+    const active = await strapi.entityService.findMany(CONTACT_UID, { filters: { requester: { id: ctx.state.user.id }, listing: { id: listing.id }, status: 'active' }, limit: 1 });
+    if (active?.[0]) return { data: { unlock: active[0], ownerPhone: listing.ownerPhone || listing.owner?.phone || null, alreadyUnlocked: true } };
+
+    const amount = Number(listing.contactUnlockFeeUGX || 0);
+    const entry = await strapi.entityService.create(CONTACT_UID, {
+      data: { listing: listing.id, requester: ctx.state.user.id, owner: listing.owner?.id || null, amountUGX: amount, paymentPhone: cleanString(input.paymentPhone, 40), status: amount > 0 ? 'pending' : 'active', unlockedAt: amount > 0 ? null : new Date().toISOString() },
+    });
+    if (amount <= 0) return { data: { unlock: entry, ownerPhone: listing.ownerPhone || listing.owner?.phone || null } };
+
+    const payment = await submitHomesPayment(ctx, entry, amount, 'HCU', `Homes contact unlock: ${listing.title}`, cleanString(input.paymentPhone, 40));
+    if (payment?.data || payment?.status) return payment;
+    return { data: { unlockId: entry.id, ...payment } };
+  },
+
+  async createBooking(ctx) {
+    if (!ctx.state.user) return ctx.unauthorized('Login required');
+    const input = bodyData(ctx);
+    const listing = await findListing(ctx.params.id || input.listingId, { owner: { fields: ['id', 'phone', 'username', 'fullName'] } });
+    if (!listing || listing.status !== 'published' || listing.kind !== 'stay') return ctx.notFound('Short stay home not found');
+
+    const checkIn = cleanString(input.checkIn, 20);
+    const checkOut = cleanString(input.checkOut, 20);
+    const inDate = new Date(`${checkIn}T00:00:00.000Z`);
+    const outDate = new Date(`${checkOut}T00:00:00.000Z`);
+    const nights = Math.ceil((outDate.getTime() - inDate.getTime()) / 86400000);
+    if (!checkIn || !checkOut || !Number.isFinite(nights) || nights < 1) return ctx.badRequest('Valid check-in and checkout dates are required');
+
+    const guests = Math.max(1, positiveInt(input.guests, 1));
+    if (guests > Number(listing.guests || 1)) return ctx.badRequest('Guest count is above this home capacity');
+
+    const amount = Number(listing.priceUGX || 0) * nights;
+    const entry = await strapi.entityService.create(BOOKING_UID, {
+      data: { listing: listing.id, guest: ctx.state.user.id, host: listing.owner?.id || null, checkIn, checkOut, guests, nights, amountUGX: amount, paymentPhone: cleanString(input.paymentPhone, 40), status: amount > 0 ? 'pending' : 'confirmed', specialRequests: cleanString(input.specialRequests, 1000) },
+    });
+    if (amount <= 0) return { data: { booking: entry } };
+
+    const payment = await submitHomesPayment(ctx, entry, amount, 'HBOOK', `Homes booking: ${listing.title}`, cleanString(input.paymentPhone, 40));
+    if (payment?.data || payment?.status) return payment;
+    return { data: { bookingId: entry.id, ...payment } };
+  },
+
+  async myBookings(ctx) {
+    if (!ctx.state.user) return ctx.unauthorized('Login required');
+    const rows = await strapi.entityService.findMany(BOOKING_UID, {
+      filters: { $or: [{ guest: { id: ctx.state.user.id } }, { host: { id: ctx.state.user.id } }] },
+      populate: { listing: true, guest: { fields: ['id', 'username', 'fullName', 'phone'] }, host: { fields: ['id', 'username', 'fullName', 'phone'] } },
+      sort: { createdAt: 'desc' },
+      limit: 200,
+    });
+    return { data: rows };
+  },
+
+  async toggleSave(ctx) {
+    if (!ctx.state.user) return ctx.unauthorized('Login required');
+    const listing = await findListing(ctx.params.id, {});
+    if (!listing || listing.status !== 'published') return ctx.notFound('Listing not found');
+
+    const rows = await strapi.entityService.findMany(SAVE_UID, { filters: { user: { id: ctx.state.user.id }, listing: { id: listing.id } }, limit: 1 });
+    if (rows?.[0]) {
+      await strapi.entityService.delete(SAVE_UID, rows[0].id);
+      return { data: { saved: false } };
+    }
+    const saved = await strapi.entityService.create(SAVE_UID, { data: { user: ctx.state.user.id, listing: listing.id } });
+    return { data: { saved: true, save: saved } };
+  },
+
+  async mySaves(ctx) {
+    if (!ctx.state.user) return ctx.unauthorized('Login required');
+    const rows = await strapi.entityService.findMany(SAVE_UID, { filters: { user: { id: ctx.state.user.id } }, populate: { listing: true }, sort: { createdAt: 'desc' } });
+    return { data: rows.map((row) => ({ ...row, listing: publicListing(row.listing) })) };
+  },
+
+  async checkPaymentStatus(ctx) {
+    if (!ctx.state.user) return ctx.unauthorized('Login required');
+    const { transactionId } = ctx.query || {};
+    if (!transactionId) return ctx.badRequest('transactionId is required');
+
+    const filters = { transactionId, $or: [{ requester: { id: ctx.state.user.id } }, { guest: { id: ctx.state.user.id } }] };
+    const [unlocks, bookings] = await Promise.all([
+      strapi.entityService.findMany(CONTACT_UID, { filters: { transactionId, requester: { id: ctx.state.user.id } }, limit: 1 }),
+      strapi.entityService.findMany(BOOKING_UID, { filters: { transactionId, guest: { id: ctx.state.user.id } }, limit: 1 }),
+    ]);
+    const record = unlocks?.[0] || bookings?.[0];
+    if (!record) return ctx.notFound('Homes payment not found');
+
+    if (record.status === 'pending' && (record.pesapalTrackingId || record.dgatewayReference || record.yoReference)) {
+      try {
+        const gatewayResult = await checkGatewayPaymentStatus(strapi, {
+          pesapalTrackingId: record.pesapalTrackingId,
+          dgatewayReference: record.dgatewayReference,
+          yoReference: record.yoReference,
+          gateway: record.yoReference ? 'yo' : record.dgatewayReference ? 'dgateway' : 'pesapal',
+          merchantReference: transactionId,
+        });
+        if (gatewayResult.status === 'completed') await activateHomesPaymentByFilter(strapi, { transactionId }, gatewayResult.paymentMethod || record.paymentMethod);
+        if (gatewayResult.status === 'failed') await failHomesPaymentByFilter(strapi, { transactionId });
+      } catch (error) {
+        strapi.log.warn(`[Homes payment status] gateway check failed: ${error.message}`);
+      }
+    }
+
+    const [updatedUnlocks, updatedBookings] = await Promise.all([
+      strapi.entityService.findMany(CONTACT_UID, { filters: { transactionId, requester: { id: ctx.state.user.id } }, limit: 1 }),
+      strapi.entityService.findMany(BOOKING_UID, { filters: { transactionId, guest: { id: ctx.state.user.id } }, limit: 1 }),
+    ]);
+    return { data: updatedUnlocks?.[0] || updatedBookings?.[0] || record };
+  },
+};

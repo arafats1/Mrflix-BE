@@ -1,0 +1,46 @@
+{
+  "kind": "collectionType",
+  "collectionName": "home_listings",
+  "info": {
+    "singularName": "home-listing",
+    "pluralName": "home-listings",
+    "displayName": "Home Listing",
+    "description": "Homes listings for rent, sale, and short stays"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "title": { "type": "string", "required": true },
+    "slug": { "type": "uid", "targetField": "title", "required": true },
+    "kind": { "type": "enumeration", "enum": ["rent", "sale", "stay"], "required": true },
+    "status": { "type": "enumeration", "enum": ["draft", "pending_review", "published", "rejected", "archived"], "default": "pending_review", "required": true },
+    "availabilityStatus": { "type": "enumeration", "enum": ["available", "taken"], "default": "available" },
+    "location": { "type": "string", "required": true },
+    "addressHint": { "type": "string" },
+    "priceUGX": { "type": "integer", "required": true, "min": 0 },
+    "priceLabel": { "type": "string" },
+    "bedrooms": { "type": "integer", "default": 0, "min": 0 },
+    "bathrooms": { "type": "integer", "default": 0, "min": 0 },
+    "guests": { "type": "integer", "default": 1, "min": 1 },
+    "sizeLabel": { "type": "string" },
+    "propertyType": { "type": "string", "required": true },
+    "description": { "type": "text", "required": true },
+    "ownerName": { "type": "string" },
+    "ownerRole": { "type": "enumeration", "enum": ["landlord", "broker", "host"], "required": true },
+    "ownerPhone": { "type": "string", "private": true },
+    "verificationStatus": { "type": "enumeration", "enum": ["pending", "verified", "rejected"], "default": "pending" },
+    "contactUnlockFeeUGX": { "type": "integer", "default": 10000, "min": 0 },
+    "visitFeeUGX": { "type": "integer", "default": 5000, "min": 0 },
+    "availableFrom": { "type": "string" },
+    "amenities": { "type": "json" },
+    "highlights": { "type": "json" },
+    "sections": { "type": "json" },
+    "rules": { "type": "json" },
+    "rating": { "type": "decimal" },
+    "reviews": { "type": "integer", "default": 0, "min": 0 },
+    "bookingCount": { "type": "integer", "default": 0, "min": 0 },
+    "owner": { "type": "relation", "relation": "manyToOne", "target": "plugin::users-permissions.user" }
+  }
+}

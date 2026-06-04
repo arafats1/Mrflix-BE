@@ -4,6 +4,7 @@ const { normalizePaymentMethod } = require('../../../utils/payment-methods');
 const { recordProviderMaterialSale } = require('../../../utils/provider-material-sales');
 const { activatePromotionByFilter, failPromotionByFilter } = require('../../../utils/marketplace-promotions');
 const { notifyProductOrderPlaced } = require('../../../utils/marketplace-notifications');
+const { activateHomesPaymentByFilter, failHomesPaymentByFilter } = require('../../../utils/homes-payments');
 
 const crypto = require('crypto');
 const dgateway = require('../../../utils/dgateway');
@@ -162,6 +163,12 @@ module.exports = {
         }
       }
 
+          if (purchaseType === 'unknown') {
+            const homesUnlocks = await strapi.entityService.findMany('api::home-contact-unlock.home-contact-unlock', { filters: { dgatewayReference: reference }, limit: 1 }).catch(() => []);
+            const homesBookings = await strapi.entityService.findMany('api::home-booking.home-booking', { filters: { dgatewayReference: reference }, limit: 1 }).catch(() => []);
+            if ((homesUnlocks && homesUnlocks.length > 0) || (homesBookings && homesBookings.length > 0)) purchaseType = 'homes';
+          }
+
       return {
         data: {
           status: normalizedStatus,
@@ -259,6 +266,7 @@ async function activateByReference(reference, paymentMethod) {
   }
 
   await activatePromotionByFilter(strapi, { dgatewayReference: reference }, paymentMethod);
+  await activateHomesPaymentByFilter(strapi, { dgatewayReference: reference }, paymentMethod);
 }
 
 /**
@@ -302,4 +310,5 @@ async function failByReference(reference) {
   }
 
   await failPromotionByFilter(strapi, { dgatewayReference: reference });
+  await failHomesPaymentByFilter(strapi, { dgatewayReference: reference });
 }

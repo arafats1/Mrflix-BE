@@ -2147,6 +2147,361 @@ export interface ApiFreeTrialWatchFreeTrialWatch
   };
 }
 
+export interface ApiHomeBookingHomeBooking extends Struct.CollectionTypeSchema {
+  collectionName: 'home_bookings';
+  info: {
+    description: 'Short stay Homes reservation records';
+    displayName: 'Home Booking';
+    pluralName: 'home-bookings';
+    singularName: 'home-booking';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    amountUGX: Schema.Attribute.Integer &
+      Schema.Attribute.Required &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0;
+        },
+        number
+      >;
+    checkIn: Schema.Attribute.Date & Schema.Attribute.Required;
+    checkOut: Schema.Attribute.Date & Schema.Attribute.Required;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    dgatewayReference: Schema.Attribute.String;
+    guest: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+    guests: Schema.Attribute.Integer &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 1;
+        },
+        number
+      > &
+      Schema.Attribute.DefaultTo<1>;
+    host: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+    listing: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::home-listing.home-listing'
+    >;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::home-booking.home-booking'
+    > &
+      Schema.Attribute.Private;
+    nights: Schema.Attribute.Integer &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 1;
+        },
+        number
+      > &
+      Schema.Attribute.DefaultTo<1>;
+    paymentMethod: Schema.Attribute.Enumeration<
+      ['pesapal', 'dgateway', 'yo', 'admin_granted']
+    > &
+      Schema.Attribute.DefaultTo<'pesapal'>;
+    paymentPhone: Schema.Attribute.String;
+    pesapalTrackingId: Schema.Attribute.String;
+    publishedAt: Schema.Attribute.DateTime;
+    specialRequests: Schema.Attribute.Text;
+    status: Schema.Attribute.Enumeration<
+      ['pending', 'confirmed', 'cancelled', 'failed', 'completed']
+    > &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<'pending'>;
+    transactionId: Schema.Attribute.String;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    yoReference: Schema.Attribute.String;
+  };
+}
+
+export interface ApiHomeContactUnlockHomeContactUnlock
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'home_contact_unlocks';
+  info: {
+    description: 'Paid Homes contact unlock records';
+    displayName: 'Home Contact Unlock';
+    pluralName: 'home-contact-unlocks';
+    singularName: 'home-contact-unlock';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    amountUGX: Schema.Attribute.Integer &
+      Schema.Attribute.Required &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0;
+        },
+        number
+      >;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    dgatewayReference: Schema.Attribute.String;
+    listing: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::home-listing.home-listing'
+    >;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::home-contact-unlock.home-contact-unlock'
+    > &
+      Schema.Attribute.Private;
+    owner: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+    paymentMethod: Schema.Attribute.Enumeration<
+      ['pesapal', 'dgateway', 'yo', 'admin_granted']
+    > &
+      Schema.Attribute.DefaultTo<'pesapal'>;
+    paymentPhone: Schema.Attribute.String;
+    pesapalTrackingId: Schema.Attribute.String;
+    publishedAt: Schema.Attribute.DateTime;
+    requester: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+    status: Schema.Attribute.Enumeration<
+      ['pending', 'active', 'failed', 'cancelled']
+    > &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<'pending'>;
+    transactionId: Schema.Attribute.String;
+    unlockedAt: Schema.Attribute.DateTime;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    yoReference: Schema.Attribute.String;
+  };
+}
+
+export interface ApiHomeKycHomeKyc extends Struct.CollectionTypeSchema {
+  collectionName: 'home_kycs';
+  info: {
+    description: 'KYC submissions for Homes landlords, brokers, and hosts';
+    displayName: 'Home KYC';
+    pluralName: 'home-kycs';
+    singularName: 'home-kyc';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    businessName: Schema.Attribute.String;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    documentImages: Schema.Attribute.JSON;
+    idNumber: Schema.Attribute.String & Schema.Attribute.Private;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::home-kyc.home-kyc'
+    > &
+      Schema.Attribute.Private;
+    location: Schema.Attribute.String & Schema.Attribute.Required;
+    notes: Schema.Attribute.Text;
+    publishedAt: Schema.Attribute.DateTime;
+    reviewedAt: Schema.Attribute.DateTime;
+    reviewer: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+    role: Schema.Attribute.Enumeration<['landlord', 'broker', 'host']> &
+      Schema.Attribute.Required;
+    status: Schema.Attribute.Enumeration<['pending', 'approved', 'rejected']> &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<'pending'>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    user: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+  };
+}
+
+export interface ApiHomeListingHomeListing extends Struct.CollectionTypeSchema {
+  collectionName: 'home_listings';
+  info: {
+    description: 'Homes listings for rent, sale, and short stays';
+    displayName: 'Home Listing';
+    pluralName: 'home-listings';
+    singularName: 'home-listing';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    addressHint: Schema.Attribute.String;
+    amenities: Schema.Attribute.JSON;
+    availabilityStatus: Schema.Attribute.Enumeration<['available', 'taken']> &
+      Schema.Attribute.DefaultTo<'available'>;
+    availableFrom: Schema.Attribute.String;
+    bathrooms: Schema.Attribute.Integer &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0;
+        },
+        number
+      > &
+      Schema.Attribute.DefaultTo<0>;
+    bedrooms: Schema.Attribute.Integer &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0;
+        },
+        number
+      > &
+      Schema.Attribute.DefaultTo<0>;
+    bookingCount: Schema.Attribute.Integer &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0;
+        },
+        number
+      > &
+      Schema.Attribute.DefaultTo<0>;
+    contactUnlockFeeUGX: Schema.Attribute.Integer &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0;
+        },
+        number
+      > &
+      Schema.Attribute.DefaultTo<10000>;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    description: Schema.Attribute.Text & Schema.Attribute.Required;
+    guests: Schema.Attribute.Integer &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 1;
+        },
+        number
+      > &
+      Schema.Attribute.DefaultTo<1>;
+    highlights: Schema.Attribute.JSON;
+    kind: Schema.Attribute.Enumeration<['rent', 'sale', 'stay']> &
+      Schema.Attribute.Required;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::home-listing.home-listing'
+    > &
+      Schema.Attribute.Private;
+    location: Schema.Attribute.String & Schema.Attribute.Required;
+    owner: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+    ownerName: Schema.Attribute.String;
+    ownerPhone: Schema.Attribute.String & Schema.Attribute.Private;
+    ownerRole: Schema.Attribute.Enumeration<['landlord', 'broker', 'host']> &
+      Schema.Attribute.Required;
+    priceLabel: Schema.Attribute.String;
+    priceUGX: Schema.Attribute.Integer &
+      Schema.Attribute.Required &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0;
+        },
+        number
+      >;
+    propertyType: Schema.Attribute.String & Schema.Attribute.Required;
+    publishedAt: Schema.Attribute.DateTime;
+    rating: Schema.Attribute.Decimal;
+    reviews: Schema.Attribute.Integer &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0;
+        },
+        number
+      > &
+      Schema.Attribute.DefaultTo<0>;
+    rules: Schema.Attribute.JSON;
+    sections: Schema.Attribute.JSON;
+    sizeLabel: Schema.Attribute.String;
+    slug: Schema.Attribute.UID<'title'> & Schema.Attribute.Required;
+    status: Schema.Attribute.Enumeration<
+      ['draft', 'pending_review', 'published', 'rejected', 'archived']
+    > &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<'pending_review'>;
+    title: Schema.Attribute.String & Schema.Attribute.Required;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    verificationStatus: Schema.Attribute.Enumeration<
+      ['pending', 'verified', 'rejected']
+    > &
+      Schema.Attribute.DefaultTo<'pending'>;
+    visitFeeUGX: Schema.Attribute.Integer &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0;
+        },
+        number
+      > &
+      Schema.Attribute.DefaultTo<5000>;
+  };
+}
+
+export interface ApiHomeSaveHomeSave extends Struct.CollectionTypeSchema {
+  collectionName: 'home_saves';
+  info: {
+    description: 'Saved Homes listings';
+    displayName: 'Home Save';
+    pluralName: 'home-saves';
+    singularName: 'home-save';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    listing: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::home-listing.home-listing'
+    >;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::home-save.home-save'
+    > &
+      Schema.Attribute.Private;
+    publishedAt: Schema.Attribute.DateTime;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    user: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+  };
+}
+
 export interface ApiMarketplaceAdMarketplaceAd
   extends Struct.CollectionTypeSchema {
   collectionName: 'marketplace_ads';
@@ -4145,6 +4500,9 @@ export interface PluginUsersPermissionsUser
     fullName: Schema.Attribute.String;
     hasBookLibraryAccess: Schema.Attribute.Boolean &
       Schema.Attribute.DefaultTo<false>;
+    homesRole: Schema.Attribute.Enumeration<
+      ['guest', 'landlord', 'broker', 'host']
+    >;
     isKeypUser: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
     isParent: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<true>;
     keypActivatedAt: Schema.Attribute.DateTime;
@@ -4264,6 +4622,11 @@ declare module '@strapi/strapi' {
       'api::exclusive-subscription.exclusive-subscription': ApiExclusiveSubscriptionExclusiveSubscription;
       'api::expo-push-token.expo-push-token': ApiExpoPushTokenExpoPushToken;
       'api::free-trial-watch.free-trial-watch': ApiFreeTrialWatchFreeTrialWatch;
+      'api::home-booking.home-booking': ApiHomeBookingHomeBooking;
+      'api::home-contact-unlock.home-contact-unlock': ApiHomeContactUnlockHomeContactUnlock;
+      'api::home-kyc.home-kyc': ApiHomeKycHomeKyc;
+      'api::home-listing.home-listing': ApiHomeListingHomeListing;
+      'api::home-save.home-save': ApiHomeSaveHomeSave;
       'api::marketplace-ad.marketplace-ad': ApiMarketplaceAdMarketplaceAd;
       'api::marketplace-model.marketplace-model': ApiMarketplaceModelMarketplaceModel;
       'api::marketplace-promotion.marketplace-promotion': ApiMarketplacePromotionMarketplacePromotion;

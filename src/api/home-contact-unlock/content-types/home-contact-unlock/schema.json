@@ -1,0 +1,26 @@
+{
+  "kind": "collectionType",
+  "collectionName": "home_contact_unlocks",
+  "info": {
+    "singularName": "home-contact-unlock",
+    "pluralName": "home-contact-unlocks",
+    "displayName": "Home Contact Unlock",
+    "description": "Paid Homes contact unlock records"
+  },
+  "options": { "draftAndPublish": false },
+  "pluginOptions": {},
+  "attributes": {
+    "listing": { "type": "relation", "relation": "manyToOne", "target": "api::home-listing.home-listing" },
+    "requester": { "type": "relation", "relation": "manyToOne", "target": "plugin::users-permissions.user" },
+    "owner": { "type": "relation", "relation": "manyToOne", "target": "plugin::users-permissions.user" },
+    "amountUGX": { "type": "integer", "required": true, "min": 0 },
+    "paymentMethod": { "type": "enumeration", "enum": ["pesapal", "dgateway", "yo", "admin_granted"], "default": "pesapal" },
+    "paymentPhone": { "type": "string" },
+    "transactionId": { "type": "string" },
+    "pesapalTrackingId": { "type": "string" },
+    "dgatewayReference": { "type": "string" },
+    "yoReference": { "type": "string" },
+    "status": { "type": "enumeration", "enum": ["pending", "active", "failed", "cancelled"], "default": "pending", "required": true },
+    "unlockedAt": { "type": "datetime" }
+  }
+}

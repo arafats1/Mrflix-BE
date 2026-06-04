@@ -1,0 +1,24 @@
+{
+  "kind": "collectionType",
+  "collectionName": "home_kycs",
+  "info": {
+    "singularName": "home-kyc",
+    "pluralName": "home-kycs",
+    "displayName": "Home KYC",
+    "description": "KYC submissions for Homes landlords, brokers, and hosts"
+  },
+  "options": { "draftAndPublish": false },
+  "pluginOptions": {},
+  "attributes": {
+    "user": { "type": "relation", "relation": "manyToOne", "target": "plugin::users-permissions.user" },
+    "role": { "type": "enumeration", "enum": ["landlord", "broker", "host"], "required": true },
+    "status": { "type": "enumeration", "enum": ["pending", "approved", "rejected"], "default": "pending", "required": true },
+    "idNumber": { "type": "string", "private": true },
+    "businessName": { "type": "string" },
+    "location": { "type": "string", "required": true },
+    "documentImages": { "type": "json" },
+    "notes": { "type": "text" },
+    "reviewedAt": { "type": "datetime" },
+    "reviewer": { "type": "relation", "relation": "manyToOne", "target": "plugin::users-permissions.user" }
+  }
+}

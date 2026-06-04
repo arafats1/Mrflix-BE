@@ -5,6 +5,7 @@ const { normalizePaymentMethod } = require('../../../utils/payment-methods');
 const { recordProviderMaterialSale } = require('../../../utils/provider-material-sales');
 const { activatePromotionByFilter, failPromotionByFilter } = require('../../../utils/marketplace-promotions');
 const { notifyProductOrderPlaced } = require('../../../utils/marketplace-notifications');
+const { activateHomesPaymentByFilter, failHomesPaymentByFilter } = require('../../../utils/homes-payments');
 
 module.exports = {
   /**
@@ -82,6 +83,9 @@ module.exports = {
         } else if (ref.startsWith('PROMO_')) {
           await activatePromotionByFilter(strapi, { transactionId: ref }, paymentMethod);
           strapi.log.info(`[Pesapal IPN] Marketplace promotion activated for ref ${ref}`);
+        } else if (ref.startsWith('HCU_') || ref.startsWith('HBOOK_')) {
+          await activateHomesPaymentByFilter(strapi, { transactionId: ref }, paymentMethod);
+          strapi.log.info(`[Pesapal IPN] Homes payment activated for ref ${ref}`);
         } else {
           // Purchase(s) — could be single (PUR_) or cart (CART_)
           const purchases = await strapi.db.query('api::purchase.purchase').findMany({
@@ -147,6 +151,8 @@ module.exports = {
           }
         } else if (ref.startsWith('PROMO_')) {
           await failPromotionByFilter(strapi, { transactionId: ref });
+        } else if (ref.startsWith('HCU_') || ref.startsWith('HBOOK_')) {
+          await failHomesPaymentByFilter(strapi, { transactionId: ref });
         } else {
           const purchases = await strapi.db.query('api::purchase.purchase').findMany({
             where: { transactionId: ref },
@@ -228,6 +234,10 @@ module.exports = {
             });
           }
         } else {
+          if (ref.startsWith('HCU_') || ref.startsWith('HBOOK_')) {
+            purchaseType = 'homes';
+            await activateHomesPaymentByFilter(strapi, { transactionId: ref }, actualPaymentMethod);
+          } else {
           purchaseType = 'purchase';
           const purchases = await strapi.db.query('api::purchase.purchase').findMany({
             where: { transactionId: ref },
@@ -268,6 +278,7 @@ module.exports = {
           } else if (purchases.length > 1) {
             purchaseType = 'bulk_purchase';
           }
+          }
         }
       } else {
         // Still determine type from reference even if not completed
@@ -275,6 +286,7 @@ module.exports = {
         else if (ref.startsWith('EXCL_')) purchaseType = 'exclusive';
         else if (ref.startsWith('PUR_')) purchaseType = 'purchase';
         else if (ref.startsWith('BULK_')) purchaseType = 'bulk_purchase';
+        else if (ref.startsWith('HCU_') || ref.startsWith('HBOOK_')) purchaseType = 'homes';
       }
 
       return {

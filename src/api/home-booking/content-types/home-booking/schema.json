@@ -1,0 +1,30 @@
+{
+  "kind": "collectionType",
+  "collectionName": "home_bookings",
+  "info": {
+    "singularName": "home-booking",
+    "pluralName": "home-bookings",
+    "displayName": "Home Booking",
+    "description": "Short stay Homes reservation records"
+  },
+  "options": { "draftAndPublish": false },
+  "pluginOptions": {},
+  "attributes": {
+    "listing": { "type": "relation", "relation": "manyToOne", "target": "api::home-listing.home-listing" },
+    "guest": { "type": "relation", "relation": "manyToOne", "target": "plugin::users-permissions.user" },
+    "host": { "type": "relation", "relation": "manyToOne", "target": "plugin::users-permissions.user" },
+    "checkIn": { "type": "date", "required": true },
+    "checkOut": { "type": "date", "required": true },
+    "guests": { "type": "integer", "default": 1, "min": 1 },
+    "nights": { "type": "integer", "default": 1, "min": 1 },
+    "amountUGX": { "type": "integer", "required": true, "min": 0 },
+    "paymentMethod": { "type": "enumeration", "enum": ["pesapal", "dgateway", "yo", "admin_granted"], "default": "pesapal" },
+    "paymentPhone": { "type": "string" },
+    "transactionId": { "type": "string" },
+    "pesapalTrackingId": { "type": "string" },
+    "dgatewayReference": { "type": "string" },
+    "yoReference": { "type": "string" },
+    "status": { "type": "enumeration", "enum": ["pending", "confirmed", "cancelled", "failed", "completed"], "default": "pending", "required": true },
+    "specialRequests": { "type": "text" }
+  }
+}
