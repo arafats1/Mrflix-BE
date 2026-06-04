@@ -2467,6 +2467,55 @@ export interface ApiHomeListingHomeListing extends Struct.CollectionTypeSchema {
   };
 }
 
+export interface ApiHomeReportHomeReport extends Struct.CollectionTypeSchema {
+  collectionName: 'home_reports';
+  info: {
+    description: 'Guest reports about Homes listings';
+    displayName: 'Home Report';
+    pluralName: 'home-reports';
+    singularName: 'home-report';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    details: Schema.Attribute.Text;
+    listing: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::home-listing.home-listing'
+    >;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::home-report.home-report'
+    > &
+      Schema.Attribute.Private;
+    owner: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+    publishedAt: Schema.Attribute.DateTime;
+    reason: Schema.Attribute.String & Schema.Attribute.Required;
+    reporter: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+    reporterName: Schema.Attribute.String;
+    reporterPhone: Schema.Attribute.String;
+    status: Schema.Attribute.Enumeration<
+      ['open', 'reviewing', 'resolved', 'dismissed']
+    > &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<'open'>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface ApiHomeReviewHomeReview extends Struct.CollectionTypeSchema {
   collectionName: 'home_reviews';
   info: {
@@ -4674,6 +4723,7 @@ declare module '@strapi/strapi' {
       'api::home-contact-unlock.home-contact-unlock': ApiHomeContactUnlockHomeContactUnlock;
       'api::home-kyc.home-kyc': ApiHomeKycHomeKyc;
       'api::home-listing.home-listing': ApiHomeListingHomeListing;
+      'api::home-report.home-report': ApiHomeReportHomeReport;
       'api::home-review.home-review': ApiHomeReviewHomeReview;
       'api::home-save.home-save': ApiHomeSaveHomeSave;
       'api::marketplace-ad.marketplace-ad': ApiMarketplaceAdMarketplaceAd;

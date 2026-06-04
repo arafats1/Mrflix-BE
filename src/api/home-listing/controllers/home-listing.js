@@ -9,6 +9,7 @@ const CONTACT_UID = 'api::home-contact-unlock.home-contact-unlock';
 const BOOKING_UID = 'api::home-booking.home-booking';
 const SAVE_UID = 'api::home-save.home-save';
 const REVIEW_UID = 'api::home-review.home-review';
+const REPORT_UID = 'api::home-report.home-report';
 
 const LISTING_KINDS = ['rent', 'sale', 'stay'];
 const OWNER_ROLES = ['landlord', 'broker', 'host'];
@@ -163,6 +164,15 @@ async function hasActiveUnlock(userId, listingId) {
   return rows?.length > 0;
 }
 
+async function hasConfirmedBooking(userId, listingId) {
+  if (!userId || !listingId) return false;
+  const rows = await strapi.entityService.findMany(BOOKING_UID, {
+    filters: { guest: { id: userId }, listing: { id: listingId }, status: 'confirmed' },
+    limit: 1,
+  });
+  return rows?.length > 0;
+}
+
 function publicListing(listing, options = {}) {
   if (!listing) return listing;
   const canSeeContact = !!options.canSeeContact;
@@ -188,6 +198,7 @@ function publicListing(listing, options = {}) {
     description: listing.description || '',
     ownerName: listing.ownerName || owner?.fullName || owner?.username || 'Homes provider',
     ownerId: owner?.id || null,
+    ownerDocumentId: owner?.documentId || null,
     ownerRole: listing.ownerRole,
     ownerPhone: canSeeContact ? (listing.ownerPhone || owner?.phone || null) : null,
     contactLocked: !canSeeContact,
@@ -349,7 +360,7 @@ module.exports = {
 
     const rows = await strapi.entityService.findMany(LISTING_UID, {
       filters,
-      populate: { owner: { fields: ['id', 'username', 'fullName'] } },
+      populate: { owner: { fields: ['id', 'documentId', 'username', 'fullName'] } },
       sort: { createdAt: 'desc' },
       limit: 500,
     });
@@ -372,13 +383,18 @@ module.exports = {
 
   async findOnePublic(ctx) {
     const user = await authUser(ctx);
-    const listing = await findListing(ctx.params.id, { owner: { fields: ['id', 'username', 'fullName', 'phone'] } });
+    const listing = await findListing(ctx.params.id, { owner: { fields: ['id', 'documentId', 'username', 'fullName', 'phone'] } });
     if (!listing) return ctx.notFound('Listing not found');
     const isOwner = user?.id && Number(listing.owner?.id || 0) === Number(user.id);
     const canViewUnpublished = isOwner || isAdmin(user);
     if (listing.status !== 'published' && !canViewUnpublished) return ctx.notFound('Listing not found');
 
-    const canSeeContact = user?.id && (await hasActiveUnlock(user.id, listing.id) || Number(listing.owner?.id || 0) === Number(user.id) || isAdmin(await fullUser(user.id)));
+    const canSeeContact = !!(user?.id && (
+      Number(listing.owner?.id || 0) === Number(user.id)
+      || await hasActiveUnlock(user.id, listing.id)
+      || (listing.kind === 'stay' && await hasConfirmedBooking(user.id, listing.id))
+      || isAdmin(await fullUser(user.id))
+    ));
     return { data: publicListing(listing, { canSeeContact }) };
   },
 
@@ -386,7 +402,7 @@ module.exports = {
     if (!ctx.state.user) return ctx.unauthorized('Login required');
     const rows = await strapi.entityService.findMany(LISTING_UID, {
       filters: { owner: { id: ctx.state.user.id } },
-      populate: { owner: { fields: ['id', 'username', 'fullName', 'phone'] } },
+      populate: { owner: { fields: ['id', 'documentId', 'username', 'fullName', 'phone'] } },
       sort: { createdAt: 'desc' },
       limit: 200,
     });
@@ -402,7 +418,7 @@ module.exports = {
 
     input.verificationStatus = await hasApprovedKyc(user.id, input.ownerRole) ? 'verified' : 'pending';
     input.owner = user.id;
-    const created = await strapi.entityService.create(LISTING_UID, { data: input, populate: { owner: { fields: ['id', 'username', 'fullName', 'phone'] } } });
+    const created = await strapi.entityService.create(LISTING_UID, { data: input, populate: { owner: { fields: ['id', 'documentId', 'username', 'fullName', 'phone'] } } });
     return { data: publicListing(created, { canSeeContact: true }) };
   },
 
@@ -417,7 +433,7 @@ module.exports = {
     if (!isAdmin(user)) input.status = listing.status === 'published' ? 'published' : 'pending_review';
     input.verificationStatus = await hasApprovedKyc(user.id, input.ownerRole) ? 'verified' : listing.verificationStatus || 'pending';
 
-    const updated = await strapi.entityService.update(LISTING_UID, listing.id, { data: input, populate: { owner: { fields: ['id', 'username', 'fullName', 'phone'] } } });
+    const updated = await strapi.entityService.update(LISTING_UID, listing.id, { data: input, populate: { owner: { fields: ['id', 'documentId', 'username', 'fullName', 'phone'] } } });
     return { data: publicListing(updated, { canSeeContact: true }) };
   },
 
@@ -443,7 +459,7 @@ module.exports = {
       return ctx.badRequest('Unknown action');
     }
 
-    const updated = await strapi.entityService.update(LISTING_UID, listing.id, { data: { status }, populate: { owner: { fields: ['id', 'username', 'fullName', 'phone'] } } });
+    const updated = await strapi.entityService.update(LISTING_UID, listing.id, { data: { status }, populate: { owner: { fields: ['id', 'documentId', 'username', 'fullName', 'phone'] } } });
     return { data: publicListing(updated, { canSeeContact: true }) };
   },
 
@@ -558,7 +574,7 @@ module.exports = {
         limit: 500,
       }),
       strapi.entityService.findMany(LISTING_UID, {
-        populate: { owner: { fields: ['id', 'username', 'fullName', 'email', 'phone', 'location', 'homesRole'] } },
+        populate: { owner: { fields: ['id', 'documentId', 'username', 'fullName', 'email', 'phone', 'location', 'homesRole'] } },
         sort: { createdAt: 'desc' },
         limit: 500,
       }),
@@ -655,6 +671,55 @@ module.exports = {
     const payment = await submitHomesPayment(ctx, entry, amount, 'HBOOK', `Homes booking: ${listing.title}`, cleanString(input.paymentPhone, 40));
     if (payment?.data || payment?.status) return payment;
     return { data: { bookingId: entry.id, ...payment } };
+  },
+
+  async reportListing(ctx) {
+    const input = bodyData(ctx);
+    const listing = await findListing(ctx.params.id || input.listingId, { owner: { fields: ['id'] } });
+    if (!listing) return ctx.notFound('Listing not found');
+    const reason = cleanString(input.reason, 160);
+    if (!reason) return ctx.badRequest('A reason is required');
+    const reporterId = ctx.state.user?.id || null;
+    const entry = await strapi.entityService.create(REPORT_UID, {
+      data: {
+        listing: listing.id,
+        owner: listing.owner?.id || null,
+        reporter: reporterId,
+        reason,
+        details: cleanString(input.details, 2000),
+        reporterName: cleanString(input.reporterName, 120),
+        reporterPhone: cleanString(input.reporterPhone, 40),
+        status: 'open',
+      },
+    });
+    return { data: { id: entry.id, status: entry.status } };
+  },
+
+  async myReports(ctx) {
+    const user = await authUser(ctx);
+    if (!user) return ctx.unauthorized('Login required');
+    const filters = isAdmin(user) ? {} : { owner: { id: user.id } };
+    const rows = await strapi.entityService.findMany(REPORT_UID, {
+      filters,
+      populate: {
+        listing: { fields: ['id', 'documentId', 'slug', 'title', 'location', 'kind'] },
+        reporter: { fields: ['id', 'username', 'fullName', 'phone'] },
+      },
+      sort: { createdAt: 'desc' },
+      limit: 500,
+    });
+    return {
+      data: (rows || []).map((row) => ({
+        id: row.id,
+        reason: row.reason,
+        details: row.details || '',
+        reporterName: row.reporterName || row.reporter?.fullName || row.reporter?.username || 'Anonymous',
+        reporterPhone: row.reporterPhone || row.reporter?.phone || '',
+        status: row.status,
+        createdAt: row.createdAt,
+        listing: row.listing ? { id: row.listing.documentId || row.listing.slug || String(row.listing.id), title: row.listing.title, location: row.listing.location, kind: row.listing.kind } : null,
+      })),
+    };
   },
 
   async myBookings(ctx) {

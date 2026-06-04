@@ -31,6 +31,8 @@ const AUTHENTICATED_ACTIONS = [
   'api::home-listing.home-listing.adminOverview',
   'api::home-listing.home-listing.unlockContact',
   'api::home-listing.home-listing.createBooking',
+  'api::home-listing.home-listing.reportListing',
+  'api::home-listing.home-listing.myReports',
   'api::home-listing.home-listing.myBookings',
   'api::home-listing.home-listing.toggleSave',
   'api::home-listing.home-listing.mySaves',

@@ -15,6 +15,8 @@ module.exports = {
     { method: 'PUT', path: '/homes/kyc/:id/review', handler: 'home-listing.reviewKyc', config: { auth: false } },
     { method: 'POST', path: '/homes/listings/:id/unlock-contact', handler: 'home-listing.unlockContact', config: { auth: { scope: [] } } },
     { method: 'POST', path: '/homes/listings/:id/bookings', handler: 'home-listing.createBooking', config: { auth: { scope: [] } } },
+    { method: 'POST', path: '/homes/listings/:id/report', handler: 'home-listing.reportListing', config: { auth: false } },
+    { method: 'GET', path: '/homes/reports/me', handler: 'home-listing.myReports', config: { auth: { scope: [] } } },
     { method: 'GET', path: '/homes/bookings/me', handler: 'home-listing.myBookings', config: { auth: { scope: [] } } },
     { method: 'POST', path: '/homes/listings/:id/save', handler: 'home-listing.toggleSave', config: { auth: { scope: [] } } },
     { method: 'GET', path: '/homes/saves/me', handler: 'home-listing.mySaves', config: { auth: { scope: [] } } },

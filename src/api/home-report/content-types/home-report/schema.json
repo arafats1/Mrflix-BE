@@ -1,0 +1,22 @@
+{
+  "kind": "collectionType",
+  "collectionName": "home_reports",
+  "info": {
+    "singularName": "home-report",
+    "pluralName": "home-reports",
+    "displayName": "Home Report",
+    "description": "Guest reports about Homes listings"
+  },
+  "options": { "draftAndPublish": false },
+  "pluginOptions": {},
+  "attributes": {
+    "listing": { "type": "relation", "relation": "manyToOne", "target": "api::home-listing.home-listing" },
+    "reporter": { "type": "relation", "relation": "manyToOne", "target": "plugin::users-permissions.user" },
+    "owner": { "type": "relation", "relation": "manyToOne", "target": "plugin::users-permissions.user" },
+    "reason": { "type": "string", "required": true },
+    "details": { "type": "text" },
+    "reporterName": { "type": "string" },
+    "reporterPhone": { "type": "string" },
+    "status": { "type": "enumeration", "enum": ["open", "reviewing", "resolved", "dismissed"], "default": "open", "required": true }
+  }
+}
