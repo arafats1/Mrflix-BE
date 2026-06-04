@@ -422,11 +422,13 @@ module.exports = {
   },
 
   async setListingStatus(ctx) {
-    if (!ctx.state.user) return ctx.unauthorized('Login required');
-    const user = await fullUser(ctx.state.user.id);
+    const user = await authUser(ctx);
+    if (!user) return ctx.unauthorized('Login required');
+    const currentUser = ctx.state.user || {};
+    const isAdminLike = isAdmin(user) || currentUser.role?.type === 'admin' || currentUser.role?.name === 'Admin';
     const listing = await findListing(ctx.params.id, { owner: { fields: ['id', 'phone', 'username', 'fullName'] } });
     if (!listing) return ctx.notFound('Listing not found');
-    if (!isAdmin(user) && Number(listing.owner?.id || 0) !== Number(user.id)) return ctx.forbidden('You can only manage your own listings');
+    if (!isAdminLike && Number(listing.owner?.id || 0) !== Number(user.id)) return ctx.forbidden('You can only manage your own listings');
 
     const action = cleanString(bodyData(ctx).action, 20);
     let status = listing.status;
@@ -435,7 +437,7 @@ module.exports = {
       status = 'archived';
     } else if (action === 'publish') {
       if (listing.status === 'archived') status = 'published';
-      else if (isAdmin(user)) status = 'published';
+      else if (isAdminLike) status = 'published';
       else return ctx.badRequest('This listing is awaiting admin approval before it can go live');
     } else {
       return ctx.badRequest('Unknown action');
@@ -446,8 +448,8 @@ module.exports = {
   },
 
   async deleteListing(ctx) {
-    if (!ctx.state.user) return ctx.unauthorized('Login required');
-    const user = await fullUser(ctx.state.user.id);
+    const user = await authUser(ctx);
+    if (!user) return ctx.unauthorized('Login required');
     const listing = await findListing(ctx.params.id, { owner: { fields: ['id'] } });
     if (!listing) return ctx.notFound('Listing not found');
     if (!isAdmin(user) && Number(listing.owner?.id || 0) !== Number(user.id)) return ctx.forbidden('You can only delete your own listings');
