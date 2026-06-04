@@ -371,9 +371,12 @@ module.exports = {
   },
 
   async findOnePublic(ctx) {
-    const user = ctx.state.user || null;
+    const user = await authUser(ctx);
     const listing = await findListing(ctx.params.id, { owner: { fields: ['id', 'username', 'fullName', 'phone'] } });
-    if (!listing || listing.status !== 'published') return ctx.notFound('Listing not found');
+    if (!listing) return ctx.notFound('Listing not found');
+    const isOwner = user?.id && Number(listing.owner?.id || 0) === Number(user.id);
+    const canViewUnpublished = isOwner || isAdmin(user);
+    if (listing.status !== 'published' && !canViewUnpublished) return ctx.notFound('Listing not found');
 
     const canSeeContact = user?.id && (await hasActiveUnlock(user.id, listing.id) || Number(listing.owner?.id || 0) === Number(user.id) || isAdmin(await fullUser(user.id)));
     return { data: publicListing(listing, { canSeeContact }) };
