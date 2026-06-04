@@ -344,6 +344,66 @@ module.exports = {
     return { data: publicListing(updated, { canSeeContact: true }) };
   },
 
+  async setListingStatus(ctx) {
+    if (!ctx.state.user) return ctx.unauthorized('Login required');
+    const user = await fullUser(ctx.state.user.id);
+    const listing = await findListing(ctx.params.id, { owner: { fields: ['id', 'phone', 'username', 'fullName'] } });
+    if (!listing) return ctx.notFound('Listing not found');
+    if (!isAdmin(user) && Number(listing.owner?.id || 0) !== Number(user.id)) return ctx.forbidden('You can only manage your own listings');
+
+    const action = cleanString(bodyData(ctx).action, 20);
+    let status = listing.status;
+    if (action === 'unpublish') {
+      if (listing.status !== 'published') return ctx.badRequest('Only published listings can be unpublished');
+      status = 'archived';
+    } else if (action === 'publish') {
+      if (listing.status === 'archived') status = 'published';
+      else if (isAdmin(user)) status = 'published';
+      else return ctx.badRequest('This listing is awaiting admin approval before it can go live');
+    } else {
+      return ctx.badRequest('Unknown action');
+    }
+
+    const updated = await strapi.entityService.update(LISTING_UID, listing.id, { data: { status }, populate: { owner: { fields: ['id', 'username', 'fullName', 'phone'] } } });
+    return { data: publicListing(updated, { canSeeContact: true }) };
+  },
+
+  async deleteListing(ctx) {
+    if (!ctx.state.user) return ctx.unauthorized('Login required');
+    const user = await fullUser(ctx.state.user.id);
+    const listing = await findListing(ctx.params.id, { owner: { fields: ['id'] } });
+    if (!listing) return ctx.notFound('Listing not found');
+    if (!isAdmin(user) && Number(listing.owner?.id || 0) !== Number(user.id)) return ctx.forbidden('You can only delete your own listings');
+    await strapi.entityService.delete(LISTING_UID, listing.id);
+    return { data: { id: listing.id, deleted: true } };
+  },
+
+  async homesAccount(ctx) {
+    if (!ctx.state.user) return ctx.unauthorized('Login required');
+    const user = await fullUser(ctx.state.user.id);
+    return { data: { homesRole: user?.homesRole || null } };
+  },
+
+  async activateHomesAccount(ctx) {
+    if (!ctx.state.user) return ctx.unauthorized('Login required');
+    const requested = cleanString(bodyData(ctx).role, 20);
+    const allowed = ['guest', 'landlord', 'broker', 'host'];
+    if (!allowed.includes(requested)) return ctx.badRequest('Choose a valid Homes account type');
+
+    const user = await fullUser(ctx.state.user.id);
+    const current = user?.homesRole || null;
+    // Providers should not be silently downgraded to guest; keep the stronger role.
+    const providerRoles = ['landlord', 'broker', 'host'];
+    let nextRole = requested;
+    if (requested === 'guest' && providerRoles.includes(current)) nextRole = current;
+
+    await strapi.db.query('plugin::users-permissions.user').update({
+      where: { id: ctx.state.user.id },
+      data: { homesRole: nextRole },
+    });
+    return { data: { homesRole: nextRole } };
+  },
+
   async submitKyc(ctx) {
     if (!ctx.state.user) return ctx.unauthorized('Login required');
     const input = bodyData(ctx);
