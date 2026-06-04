@@ -13,6 +13,11 @@ module.exports = {
     { method: 'GET', path: '/homes/bookings/me', handler: 'home-listing.myBookings', config: { auth: { scope: [] } } },
     { method: 'POST', path: '/homes/listings/:id/save', handler: 'home-listing.toggleSave', config: { auth: { scope: [] } } },
     { method: 'GET', path: '/homes/saves/me', handler: 'home-listing.mySaves', config: { auth: { scope: [] } } },
+    { method: 'GET', path: '/homes/listings/:id/availability', handler: 'home-listing.getAvailability', config: { auth: false } },
+    { method: 'PUT', path: '/homes/listings/:id/availability', handler: 'home-listing.setAvailability', config: { auth: { scope: [] } } },
+    { method: 'GET', path: '/homes/owners/:id', handler: 'home-listing.ownerProfile', config: { auth: false } },
+    { method: 'GET', path: '/homes/listings/:id/reviews', handler: 'home-listing.listReviews', config: { auth: false } },
+    { method: 'POST', path: '/homes/listings/:id/reviews', handler: 'home-listing.createReview', config: { auth: { scope: [] } } },
     { method: 'GET', path: '/homes/payments/check-status', handler: 'home-listing.checkPaymentStatus', config: { auth: { scope: [] } } },
   ],
 };

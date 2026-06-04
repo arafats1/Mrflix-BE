@@ -1,0 +1,19 @@
+{
+  "kind": "collectionType",
+  "collectionName": "home_reviews",
+  "info": {
+    "singularName": "home-review",
+    "pluralName": "home-reviews",
+    "displayName": "Home Review",
+    "description": "Guest reviews and ratings for Homes listings"
+  },
+  "options": { "draftAndPublish": false },
+  "pluginOptions": {},
+  "attributes": {
+    "listing": { "type": "relation", "relation": "manyToOne", "target": "api::home-listing.home-listing" },
+    "user": { "type": "relation", "relation": "manyToOne", "target": "plugin::users-permissions.user" },
+    "rating": { "type": "integer", "required": true, "min": 1, "max": 5 },
+    "comment": { "type": "text" },
+    "authorName": { "type": "string" }
+  }
+}

@@ -2353,6 +2353,7 @@ export interface ApiHomeListingHomeListing extends Struct.CollectionTypeSchema {
   attributes: {
     addressHint: Schema.Attribute.String;
     amenities: Schema.Attribute.JSON;
+    availabilityDates: Schema.Attribute.JSON;
     availabilityStatus: Schema.Attribute.Enumeration<['available', 'taken']> &
       Schema.Attribute.DefaultTo<'available'>;
     availableFrom: Schema.Attribute.String;
@@ -2463,6 +2464,53 @@ export interface ApiHomeListingHomeListing extends Struct.CollectionTypeSchema {
         number
       > &
       Schema.Attribute.DefaultTo<5000>;
+  };
+}
+
+export interface ApiHomeReviewHomeReview extends Struct.CollectionTypeSchema {
+  collectionName: 'home_reviews';
+  info: {
+    description: 'Guest reviews and ratings for Homes listings';
+    displayName: 'Home Review';
+    pluralName: 'home-reviews';
+    singularName: 'home-review';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    authorName: Schema.Attribute.String;
+    comment: Schema.Attribute.Text;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    listing: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::home-listing.home-listing'
+    >;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::home-review.home-review'
+    > &
+      Schema.Attribute.Private;
+    publishedAt: Schema.Attribute.DateTime;
+    rating: Schema.Attribute.Integer &
+      Schema.Attribute.Required &
+      Schema.Attribute.SetMinMax<
+        {
+          max: 5;
+          min: 1;
+        },
+        number
+      >;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    user: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
   };
 }
 
@@ -4626,6 +4674,7 @@ declare module '@strapi/strapi' {
       'api::home-contact-unlock.home-contact-unlock': ApiHomeContactUnlockHomeContactUnlock;
       'api::home-kyc.home-kyc': ApiHomeKycHomeKyc;
       'api::home-listing.home-listing': ApiHomeListingHomeListing;
+      'api::home-review.home-review': ApiHomeReviewHomeReview;
       'api::home-save.home-save': ApiHomeSaveHomeSave;
       'api::marketplace-ad.marketplace-ad': ApiMarketplaceAdMarketplaceAd;
       'api::marketplace-model.marketplace-model': ApiMarketplaceModelMarketplaceModel;

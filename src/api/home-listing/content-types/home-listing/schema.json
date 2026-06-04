@@ -41,6 +41,7 @@
     "rating": { "type": "decimal" },
     "reviews": { "type": "integer", "default": 0, "min": 0 },
     "bookingCount": { "type": "integer", "default": 0, "min": 0 },
+    "availabilityDates": { "type": "json" },
     "owner": { "type": "relation", "relation": "manyToOne", "target": "plugin::users-permissions.user" }
   }
 }
