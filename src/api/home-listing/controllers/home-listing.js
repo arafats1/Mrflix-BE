@@ -32,6 +32,11 @@ function positiveInt(value, fallback = 0) {
   return Math.max(0, intValue(value, fallback));
 }
 
+function floatValue(value) {
+  const parsed = parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function normalizeList(input) {
   if (Array.isArray(input)) return input.map((item) => cleanString(item, 120)).filter(Boolean);
   if (typeof input === 'string') return input.split(/[\n,]+/).map((item) => cleanString(item, 120)).filter(Boolean);
@@ -42,17 +47,61 @@ function normalizeJsonArray(input) {
   return Array.isArray(input) ? input : [];
 }
 
+function normalizeKycDocuments(input) {
+  const raw = input && typeof input === 'object' && !Array.isArray(input) ? input : {};
+  const normalizeUrls = (value) => (Array.isArray(value) ? value.map((item) => cleanString(item, 1000)).filter(Boolean) : []);
+  return {
+    nationalIdImages: normalizeUrls(raw.nationalIdImages),
+    ownershipProofImages: normalizeUrls(raw.ownershipProofImages),
+    tenancyAgreementImages: normalizeUrls(raw.tenancyAgreementImages),
+    phoneNumber: cleanString(raw.phoneNumber, 40),
+    locationLabel: cleanString(raw.locationLabel, 160),
+    latitude: floatValue(raw.latitude),
+    longitude: floatValue(raw.longitude),
+  };
+}
+
 function slugify(value) {
   return cleanString(value, 140).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-+)|(-+$)/g, '') || `home-${Date.now()}`;
 }
 
 function isAdmin(user) {
-  return user?.role?.type === 'admin' || user?.role?.name === 'Admin';
+  return user?.role?.type === 'admin' || user?.role?.name === 'Admin' || user?.isApiTokenAdmin === true;
 }
 
 async function fullUser(userId) {
   if (!userId) return null;
-  return strapi.entityService.findOne('plugin::users-permissions.user', userId, { populate: ['role'] });
+  return strapi.query('plugin::users-permissions.user').findOne({
+    where: { id: userId },
+    populate: ['role'],
+  });
+}
+
+async function authUser(ctx) {
+  if (ctx.state.user?.id) {
+    const current = ctx.state.user;
+    const hydrated = await fullUser(current.id).catch(() => null);
+    if (hydrated) {
+      return {
+        ...hydrated,
+        role: hydrated.role || current.role,
+        isApiTokenAdmin: hydrated.isApiTokenAdmin === true || current.isApiTokenAdmin === true,
+      };
+    }
+    return current;
+  }
+
+  const authHeader = ctx.request.header?.authorization || ctx.request.headers?.authorization;
+  if (!authHeader?.startsWith('Bearer ')) return null;
+
+  try {
+    const token = authHeader.slice(7);
+    const { id } = await strapi.plugins['users-permissions'].services.jwt.verify(token);
+    if (!id) return null;
+    return await fullUser(id);
+  } catch {
+    return null;
+  }
 }
 
 async function findListing(identifier, populate = {}) {
@@ -79,6 +128,30 @@ async function hasApprovedKyc(userId, role) {
     limit: 1,
   });
   return rows?.length > 0;
+}
+
+async function hasSubmittedKyc(userId, role) {
+  if (!userId || !role) return false;
+  const rows = await strapi.entityService.findMany(KYC_UID, {
+    filters: { user: { id: userId }, role, status: { $in: ['pending', 'approved'] } },
+    limit: 1,
+  });
+  return rows?.length > 0;
+}
+
+function publicProvider(user) {
+  if (!user) return null;
+  return {
+    id: user.id,
+    username: user.username || '',
+    fullName: user.fullName || '',
+    email: user.email || '',
+    phone: user.phone || '',
+    location: user.location || '',
+    homesRole: user.homesRole || null,
+    createdAt: user.createdAt,
+    updatedAt: user.updatedAt,
+  };
 }
 
 async function hasActiveUnlock(userId, listingId) {
@@ -322,6 +395,7 @@ module.exports = {
     const user = await fullUser(ctx.state.user.id);
     const input = listingInput(bodyData(ctx), user);
     if (!input.title || !input.location || !input.propertyType || !input.description || !input.priceUGX) return ctx.badRequest('Title, location, property type, description, and price are required');
+    if (!(await hasSubmittedKyc(user.id, input.ownerRole))) return ctx.badRequest('Complete Homes KYC before listing this property');
 
     input.verificationStatus = await hasApprovedKyc(user.id, input.ownerRole) ? 'verified' : 'pending';
     input.owner = user.id;
@@ -408,18 +482,25 @@ module.exports = {
     if (!ctx.state.user) return ctx.unauthorized('Login required');
     const input = bodyData(ctx);
     const role = OWNER_ROLES.includes(input.role) ? input.role : 'landlord';
-    const location = cleanString(input.location, 140);
-    if (!cleanString(input.idNumber, 80) || !location) return ctx.badRequest('ID number and location are required');
+    const documents = normalizeKycDocuments(input.documentImages);
+    const location = cleanString(input.location || documents.locationLabel, 140);
+    const idNumber = cleanString(input.idNumber, 80);
+    const businessName = cleanString(input.businessName, 140);
+    if (!idNumber || !location || !documents.phoneNumber) return ctx.badRequest('National ID, location, and active phone number are required');
+    if (!Number.isFinite(documents.latitude) || !Number.isFinite(documents.longitude)) return ctx.badRequest('Pin the exact location on the map before submitting KYC');
+    if (role === 'landlord' && documents.ownershipProofImages.length === 0) return ctx.badRequest('Upload proof of ownership before submitting KYC');
+    if (role === 'host' && documents.tenancyAgreementImages.length === 0) return ctx.badRequest('Upload the tenancy agreement before submitting KYC');
+    if (role === 'broker' && !businessName) return ctx.badRequest('Business name is required for broker verification');
 
     const rows = await strapi.entityService.findMany(KYC_UID, { filters: { user: { id: ctx.state.user.id }, role }, limit: 1 });
     const data = {
       user: ctx.state.user.id,
       role,
       status: 'pending',
-      idNumber: cleanString(input.idNumber, 80),
-      businessName: cleanString(input.businessName, 140),
+      idNumber,
+      businessName,
       location,
-      documentImages: normalizeJsonArray(input.documentImages),
+      documentImages: documents,
     };
     const entry = rows?.[0]
       ? await strapi.entityService.update(KYC_UID, rows[0].id, { data })
@@ -434,13 +515,82 @@ module.exports = {
   },
 
   async reviewKyc(ctx) {
-    if (!ctx.state.user) return ctx.unauthorized('Login required');
-    const user = await fullUser(ctx.state.user.id);
+    const user = await authUser(ctx);
+    if (!user) return ctx.unauthorized('Login required');
     if (!isAdmin(user)) return ctx.forbidden('Admin only');
     const input = bodyData(ctx);
     const status = ['approved', 'rejected', 'pending'].includes(input.status) ? input.status : 'pending';
+    const existing = await strapi.entityService.findOne(KYC_UID, ctx.params.id, { populate: { user: { fields: ['id'] } } });
+    if (!existing) return ctx.notFound('KYC submission not found');
     const updated = await strapi.entityService.update(KYC_UID, ctx.params.id, { data: { status, notes: cleanString(input.notes, 1000), reviewer: user.id, reviewedAt: new Date().toISOString() } });
+
+    if (existing.user?.id && existing.role) {
+      const listings = await strapi.entityService.findMany(LISTING_UID, {
+        filters: { owner: { id: existing.user.id }, ownerRole: existing.role },
+        limit: 500,
+      });
+      const nextVerificationStatus = status === 'approved' ? 'verified' : 'pending';
+      await Promise.all((listings || []).map((listing) => strapi.entityService.update(LISTING_UID, listing.id, { data: { verificationStatus: nextVerificationStatus } })));
+    }
     return { data: updated };
+  },
+
+  async adminOverview(ctx) {
+    const user = await authUser(ctx);
+    if (!user) return ctx.unauthorized('Login required');
+    if (!isAdmin(user)) return ctx.forbidden('Admin only');
+
+    const [providers, kycRows, listings] = await Promise.all([
+      strapi.entityService.findMany('plugin::users-permissions.user', {
+        filters: { homesRole: { $in: OWNER_ROLES } },
+        populate: ['role'],
+        sort: { createdAt: 'desc' },
+        limit: 500,
+      }),
+      strapi.entityService.findMany(KYC_UID, {
+        populate: { user: { fields: ['id', 'username', 'fullName', 'email', 'phone', 'location', 'homesRole'] }, reviewer: { fields: ['id', 'username', 'fullName'] } },
+        sort: { createdAt: 'desc' },
+        limit: 500,
+      }),
+      strapi.entityService.findMany(LISTING_UID, {
+        populate: { owner: { fields: ['id', 'username', 'fullName', 'email', 'phone', 'location', 'homesRole'] } },
+        sort: { createdAt: 'desc' },
+        limit: 500,
+      }),
+    ]);
+
+    const shapedProviders = (providers || []).map((entry) => publicProvider(entry));
+    const shapedKyc = (kycRows || []).map((entry) => ({
+      id: entry.id,
+      role: entry.role,
+      status: entry.status,
+      idNumber: entry.idNumber || '',
+      businessName: entry.businessName || '',
+      location: entry.location || '',
+      documentImages: entry.documentImages || {},
+      notes: entry.notes || '',
+      reviewedAt: entry.reviewedAt || null,
+      createdAt: entry.createdAt,
+      updatedAt: entry.updatedAt,
+      user: publicProvider(entry.user),
+      reviewer: entry.reviewer ? { id: entry.reviewer.id, username: entry.reviewer.username || '', fullName: entry.reviewer.fullName || '' } : null,
+    }));
+    const shapedListings = (listings || []).map((entry) => publicListing(entry, { canSeeContact: true }));
+
+    return {
+      data: {
+        providers: shapedProviders,
+        kyc: shapedKyc,
+        listings: shapedListings,
+        stats: {
+          providers: shapedProviders.length,
+          pendingKyc: shapedKyc.filter((entry) => entry.status === 'pending').length,
+          approvedKyc: shapedKyc.filter((entry) => entry.status === 'approved').length,
+          pendingListings: shapedListings.filter((entry) => entry.status === 'pending_review').length,
+          publishedListings: shapedListings.filter((entry) => entry.status === 'published').length,
+        },
+      },
+    };
   },
 
   async unlockContact(ctx) {

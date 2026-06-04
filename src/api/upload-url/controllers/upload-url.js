@@ -37,6 +37,7 @@ async function requireUploadUser(ctx) {
 
 const OPEN_UPLOAD_FOLDERS = ['stories', 'entrep-documents', 'entrep-course-media', 'entrep-community-media', 'entrep-profile-media', 'entrep-assignments', 'entrep-lesson-question-responses', 'marketplace-chat', 'profile-pictures'];
 const PROVIDER_UPLOAD_FOLDERS = ['provider-materials', 'product-images', 'product-videos'];
+const HOMES_UPLOAD_FOLDERS = ['homes-kyc', 'homes-listings'];
 
 function folderMatchesPrefix(folder, prefix) {
   return folder === prefix || folder.startsWith(`${prefix}/`);
@@ -46,6 +47,7 @@ function resolveUploadFolderType(folder) {
   if (!folder) return 'other';
   if (OPEN_UPLOAD_FOLDERS.some((prefix) => folderMatchesPrefix(folder, prefix))) return 'open';
   if (PROVIDER_UPLOAD_FOLDERS.some((prefix) => folderMatchesPrefix(folder, prefix))) return 'provider';
+  if (HOMES_UPLOAD_FOLDERS.some((prefix) => folderMatchesPrefix(folder, prefix))) return 'homes';
   return 'other';
 }
 
@@ -68,6 +70,10 @@ async function isEntrepreneurUploadUser(authUser) {
   return !!profiles?.[0];
 }
 
+function isHomesUploadUser(authUser) {
+  return ['landlord', 'broker', 'host'].includes(authUser?.homesRole);
+}
+
 async function ensureFolderAccess(ctx, authUser, folder) {
   const folderType = resolveUploadFolderType(folder);
 
@@ -78,6 +84,13 @@ async function ensureFolderAccess(ctx, authUser, folder) {
     if ((folderMatchesPrefix(folder, 'product-images') || folderMatchesPrefix(folder, 'product-videos')) && await isEntrepreneurUploadUser(authUser)) return true;
     if (await isAdminUploadUser(authUser)) return true;
     ctx.forbidden('Provider/Seller access required for this folder');
+    return false;
+  }
+
+  if (folderType === 'homes') {
+    if (isHomesUploadUser(authUser)) return true;
+    if (await isAdminUploadUser(authUser)) return true;
+    ctx.forbidden('Homes provider access required for this folder');
     return false;
   }
 
