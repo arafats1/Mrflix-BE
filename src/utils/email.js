@@ -205,7 +205,7 @@ async function sendSubscriptionExpiredEmail(user) {
   const html = subscriptionExpiredHtml(user);
   return sendEmail({
     to: user.email,
-    subject: "Your Mr.Flix subscription has ended — renew today! 🎬",
+    subject: "Your Movo Brands subscription has ended — renew today! 🎬",
     html,
   });
 }

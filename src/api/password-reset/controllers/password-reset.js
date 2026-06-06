@@ -187,7 +187,7 @@ module.exports = {
     try {
       await sendSms({
         to: user.phone,
-        message: `Your Mr.Flix password reset code is ${code}. It expires in 15 minutes.`,
+        message: `Your Movo Brands password reset code is ${code}. It expires in 15 minutes.`,
       });
       strapi.log.info(`[Password Reset] SMS code sent to ${user.phone}`);
     } catch (err) {

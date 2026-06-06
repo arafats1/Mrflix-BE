@@ -65,7 +65,7 @@ module.exports = {
     try {
       await sendSms({
         to: user.phone,
-        message: `Your Mr.Flix verification code is ${code}. It expires in 10 minutes.`,
+        message: `Your Movo Brands verification code is ${code}. It expires in 10 minutes.`,
       });
     } catch (err) {
       strapi.log.error('[PhoneVerification] SMS send failed:', err.message);
