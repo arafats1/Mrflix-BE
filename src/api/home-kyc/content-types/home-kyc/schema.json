@@ -12,7 +12,7 @@
   "attributes": {
     "user": { "type": "relation", "relation": "manyToOne", "target": "plugin::users-permissions.user" },
     "role": { "type": "enumeration", "enum": ["landlord", "broker", "host"], "required": true },
-    "status": { "type": "enumeration", "enum": ["pending", "approved", "rejected"], "default": "pending", "required": true },
+    "status": { "type": "enumeration", "enum": ["draft", "pending", "approved", "rejected"], "default": "draft", "required": true },
     "idNumber": { "type": "string", "private": true },
     "businessName": { "type": "string" },
     "location": { "type": "string", "required": true },

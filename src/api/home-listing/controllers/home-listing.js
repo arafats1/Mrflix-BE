@@ -173,6 +173,100 @@ async function hasConfirmedBooking(userId, listingId) {
   return rows?.length > 0;
 }
 
+async function getHomesContactUnlockFeeUGX() {
+  const settings = await strapi.entityService.findMany('api::site-setting.site-setting');
+  const entry = Array.isArray(settings) ? settings[0] : settings;
+  return positiveInt(entry?.homesContactUnlockFeeUGX, 10000);
+}
+
+function mergeKycPayload(existing, input) {
+  const existingDocs = normalizeKycDocuments(existing?.documentImages);
+  const inputDocs = normalizeKycDocuments(input.documentImages);
+  const locationLabel = cleanString(inputDocs.locationLabel || existingDocs.locationLabel || input.location || existing?.location, 160);
+  return {
+    idNumber: cleanString(input.idNumber ?? existing?.idNumber, 80),
+    businessName: cleanString(input.businessName ?? existing?.businessName, 140),
+    location: cleanString(input.location || locationLabel || existing?.location, 140),
+    documentImages: {
+      nationalIdImages: inputDocs.nationalIdImages.length ? inputDocs.nationalIdImages : existingDocs.nationalIdImages,
+      ownershipProofImages: inputDocs.ownershipProofImages.length ? inputDocs.ownershipProofImages : existingDocs.ownershipProofImages,
+      tenancyAgreementImages: inputDocs.tenancyAgreementImages.length ? inputDocs.tenancyAgreementImages : existingDocs.tenancyAgreementImages,
+      phoneNumber: cleanString(inputDocs.phoneNumber || existingDocs.phoneNumber, 40),
+      locationLabel,
+      latitude: Number.isFinite(inputDocs.latitude) ? inputDocs.latitude : existingDocs.latitude,
+      longitude: Number.isFinite(inputDocs.longitude) ? inputDocs.longitude : existingDocs.longitude,
+    },
+  };
+}
+
+function getKycCompletion(role, payload) {
+  const documents = normalizeKycDocuments(payload.documentImages);
+  const idNumber = cleanString(payload.idNumber, 80);
+  const businessName = cleanString(payload.businessName, 140);
+  const location = cleanString(payload.location || documents.locationLabel, 140);
+  const checks = [
+    { key: 'idNumber', label: 'National ID', done: !!idNumber },
+  ];
+  if (role === 'broker') {
+    checks.push({ key: 'businessName', label: 'Business name', done: !!businessName });
+  } else if (role === 'host') {
+    checks.push({ key: 'tenancyAgreement', label: 'Tenancy agreement', done: documents.tenancyAgreementImages.length > 0 });
+  } else {
+    checks.push({ key: 'ownershipProof', label: 'Proof of ownership', done: documents.ownershipProofImages.length > 0 });
+  }
+  checks.push(
+    { key: 'location', label: 'Location on map', done: !!location && Number.isFinite(documents.latitude) && Number.isFinite(documents.longitude) },
+    { key: 'phone', label: 'Active phone number', done: documents.phoneNumber.replace(/\D/g, '').length >= 10 },
+  );
+  const doneCount = checks.filter((item) => item.done).length;
+  const percent = checks.length ? Math.round((doneCount / checks.length) * 100) : 0;
+  return { checks, percent, complete: percent === 100 };
+}
+
+function shapeKycEntry(entry) {
+  if (!entry) return entry;
+  const completion = getKycCompletion(entry.role, {
+    idNumber: entry.idNumber,
+    businessName: entry.businessName,
+    location: entry.location,
+    documentImages: entry.documentImages,
+  });
+  const status = entry.status === 'approved' || completion.complete
+    ? 'approved'
+    : entry.status === 'rejected'
+      ? 'rejected'
+      : completion.percent > 0 || entry.idNumber || entry.location
+        ? 'draft'
+        : 'draft';
+  return {
+    id: entry.id,
+    role: entry.role,
+    status,
+    completionPercent: completion.percent,
+    checks: completion.checks,
+    isVerified: status === 'approved',
+    idNumber: entry.idNumber || '',
+    businessName: entry.businessName || '',
+    location: entry.location || '',
+    documentImages: entry.documentImages || {},
+    notes: entry.notes || '',
+    reviewedAt: entry.reviewedAt || null,
+    createdAt: entry.createdAt,
+    updatedAt: entry.updatedAt,
+    user: entry.user ? publicProvider(entry.user) : entry.user,
+    reviewer: entry.reviewer ? { id: entry.reviewer.id, username: entry.reviewer.username || '', fullName: entry.reviewer.fullName || '' } : null,
+  };
+}
+
+async function syncListingVerificationForUser(userId, role, verificationStatus) {
+  if (!userId || !role) return;
+  const listings = await strapi.entityService.findMany(LISTING_UID, {
+    filters: { owner: { id: userId }, ownerRole: role },
+    limit: 500,
+  });
+  await Promise.all((listings || []).map((listing) => strapi.entityService.update(LISTING_UID, listing.id, { data: { verificationStatus } })));
+}
+
 function publicListing(listing, options = {}) {
   if (!listing) return listing;
   const canSeeContact = !!options.canSeeContact;
@@ -203,7 +297,7 @@ function publicListing(listing, options = {}) {
     ownerPhone: canSeeContact ? (listing.ownerPhone || owner?.phone || null) : null,
     contactLocked: !canSeeContact,
     verificationStatus: listing.verificationStatus || 'pending',
-    contactUnlockFeeUGX: Number(listing.contactUnlockFeeUGX || 0),
+    contactUnlockFeeUGX: Number(options.contactUnlockFeeUGX ?? listing.contactUnlockFeeUGX ?? 10000),
     visitFeeUGX: Number(listing.visitFeeUGX || 0),
     availableFrom: listing.availableFrom || '',
     amenities: Array.isArray(listing.amenities) ? listing.amenities : [],
@@ -223,7 +317,9 @@ function listingInput(input, user, existing = {}) {
   const kind = LISTING_KINDS.includes(input.kind) ? input.kind : existing.kind || 'rent';
   const ownerRole = OWNER_ROLES.includes(input.ownerRole) ? input.ownerRole : existing.ownerRole || (kind === 'stay' ? 'host' : 'landlord');
   const title = cleanString(input.title || existing.title, 160);
-  const status = STATUSES.includes(input.status) && isAdmin(user) ? input.status : existing.status || 'pending_review';
+  const status = STATUSES.includes(input.status) && isAdmin(user)
+    ? input.status
+    : existing.status || 'published';
   const availabilityStatus = AVAILABILITY.includes(input.availabilityStatus) ? input.availabilityStatus : existing.availabilityStatus || 'available';
 
   return {
@@ -378,7 +474,8 @@ module.exports = {
     const start = (currentPage - 1) * size;
     const paged = data.slice(start, start + size);
 
-    return { data: paged.map((item) => publicListing(item)), meta: { pagination: { page: currentPage, pageSize: size, pageCount: Math.ceil(data.length / size), total: data.length } } };
+    const contactUnlockFeeUGX = await getHomesContactUnlockFeeUGX();
+    return { data: paged.map((item) => publicListing(item, { contactUnlockFeeUGX })), meta: { pagination: { page: currentPage, pageSize: size, pageCount: Math.ceil(data.length / size), total: data.length } } };
   },
 
   async findOnePublic(ctx) {
@@ -395,7 +492,8 @@ module.exports = {
       || (listing.kind === 'stay' && await hasConfirmedBooking(user.id, listing.id))
       || isAdmin(await fullUser(user.id))
     ));
-    return { data: publicListing(listing, { canSeeContact }) };
+    const contactUnlockFeeUGX = await getHomesContactUnlockFeeUGX();
+    return { data: publicListing(listing, { canSeeContact, contactUnlockFeeUGX }) };
   },
 
   async myListings(ctx) {
@@ -406,7 +504,8 @@ module.exports = {
       sort: { createdAt: 'desc' },
       limit: 200,
     });
-    return { data: rows.map((item) => publicListing(item, { canSeeContact: true })) };
+    const contactUnlockFeeUGX = await getHomesContactUnlockFeeUGX();
+    return { data: rows.map((item) => publicListing(item, { canSeeContact: true, contactUnlockFeeUGX })) };
   },
 
   async createListing(ctx) {
@@ -414,12 +513,14 @@ module.exports = {
     const user = await fullUser(ctx.state.user.id);
     const input = listingInput(bodyData(ctx), user);
     if (!input.title || !input.location || !input.propertyType || !input.description || !input.priceUGX) return ctx.badRequest('Title, location, property type, description, and price are required');
-    if (!(await hasSubmittedKyc(user.id, input.ownerRole))) return ctx.badRequest('Complete Homes KYC before listing this property');
 
-    input.verificationStatus = await hasApprovedKyc(user.id, input.ownerRole) ? 'verified' : 'pending';
+    input.status = 'published';
+    input.verificationStatus = (await hasApprovedKyc(user.id, input.ownerRole)) ? 'verified' : 'pending';
     input.owner = user.id;
+    input.contactUnlockFeeUGX = await getHomesContactUnlockFeeUGX();
     const created = await strapi.entityService.create(LISTING_UID, { data: input, populate: { owner: { fields: ['id', 'documentId', 'username', 'fullName', 'phone'] } } });
-    return { data: publicListing(created, { canSeeContact: true }) };
+    const contactUnlockFeeUGX = input.contactUnlockFeeUGX;
+    return { data: publicListing(created, { canSeeContact: true, contactUnlockFeeUGX }) };
   },
 
   async updateListing(ctx) {
@@ -430,11 +531,13 @@ module.exports = {
     if (!isAdmin(user) && Number(listing.owner?.id || 0) !== Number(user.id)) return ctx.forbidden('You can only edit your own listings');
 
     const input = listingInput(bodyData(ctx), user, listing);
-    if (!isAdmin(user)) input.status = listing.status === 'published' ? 'published' : 'pending_review';
-    input.verificationStatus = await hasApprovedKyc(user.id, input.ownerRole) ? 'verified' : listing.verificationStatus || 'pending';
+    if (!isAdmin(user)) input.status = listing.status || 'published';
+    input.verificationStatus = (await hasApprovedKyc(user.id, input.ownerRole)) ? 'verified' : (listing.verificationStatus || 'pending');
+    input.contactUnlockFeeUGX = await getHomesContactUnlockFeeUGX();
 
     const updated = await strapi.entityService.update(LISTING_UID, listing.id, { data: input, populate: { owner: { fields: ['id', 'documentId', 'username', 'fullName', 'phone'] } } });
-    return { data: publicListing(updated, { canSeeContact: true }) };
+    const contactUnlockFeeUGX = input.contactUnlockFeeUGX;
+    return { data: publicListing(updated, { canSeeContact: true, contactUnlockFeeUGX }) };
   },
 
   async setListingStatus(ctx) {
@@ -452,15 +555,14 @@ module.exports = {
       if (listing.status !== 'published') return ctx.badRequest('Only published listings can be unpublished');
       status = 'archived';
     } else if (action === 'publish') {
-      if (listing.status === 'archived') status = 'published';
-      else if (isAdminLike) status = 'published';
-      else return ctx.badRequest('This listing is awaiting admin approval before it can go live');
+      status = 'published';
     } else {
       return ctx.badRequest('Unknown action');
     }
 
     const updated = await strapi.entityService.update(LISTING_UID, listing.id, { data: { status }, populate: { owner: { fields: ['id', 'documentId', 'username', 'fullName', 'phone'] } } });
-    return { data: publicListing(updated, { canSeeContact: true }) };
+    const contactUnlockFeeUGX = await getHomesContactUnlockFeeUGX();
+    return { data: publicListing(updated, { canSeeContact: true, contactUnlockFeeUGX }) };
   },
 
   async deleteListing(ctx) {
@@ -502,37 +604,39 @@ module.exports = {
   async submitKyc(ctx) {
     if (!ctx.state.user) return ctx.unauthorized('Login required');
     const input = bodyData(ctx);
+    const isDraft = input.draft === true || input.saveDraft === true;
     const role = OWNER_ROLES.includes(input.role) ? input.role : 'landlord';
-    const documents = normalizeKycDocuments(input.documentImages);
-    const location = cleanString(input.location || documents.locationLabel, 140);
-    const idNumber = cleanString(input.idNumber, 80);
-    const businessName = cleanString(input.businessName, 140);
-    if (!idNumber || !location || !documents.phoneNumber) return ctx.badRequest('National ID, location, and active phone number are required');
-    if (!Number.isFinite(documents.latitude) || !Number.isFinite(documents.longitude)) return ctx.badRequest('Pin the exact location on the map before submitting KYC');
-    if (role === 'landlord' && documents.ownershipProofImages.length === 0) return ctx.badRequest('Upload proof of ownership before submitting KYC');
-    if (role === 'host' && documents.tenancyAgreementImages.length === 0) return ctx.badRequest('Upload the tenancy agreement before submitting KYC');
-    if (role === 'broker' && !businessName) return ctx.badRequest('Business name is required for broker verification');
-
     const rows = await strapi.entityService.findMany(KYC_UID, { filters: { user: { id: ctx.state.user.id }, role }, limit: 1 });
+    const existing = rows?.[0] || null;
+    const merged = mergeKycPayload(existing, input);
+    const completion = getKycCompletion(role, merged);
+
+    if (!isDraft && !completion.complete) {
+      return ctx.badRequest('Complete every verification requirement before submitting for the verified badge.');
+    }
+
+    const status = completion.complete ? 'approved' : 'draft';
     const data = {
       user: ctx.state.user.id,
       role,
-      status: 'pending',
-      idNumber,
-      businessName,
-      location,
-      documentImages: documents,
+      status,
+      idNumber: merged.idNumber,
+      businessName: merged.businessName,
+      location: merged.location,
+      documentImages: merged.documentImages,
     };
-    const entry = rows?.[0]
-      ? await strapi.entityService.update(KYC_UID, rows[0].id, { data })
+    const entry = existing
+      ? await strapi.entityService.update(KYC_UID, existing.id, { data })
       : await strapi.entityService.create(KYC_UID, { data });
-    return { data: entry };
+
+    await syncListingVerificationForUser(ctx.state.user.id, role, completion.complete ? 'verified' : 'pending');
+    return { data: shapeKycEntry(entry) };
   },
 
   async myKyc(ctx) {
     if (!ctx.state.user) return ctx.unauthorized('Login required');
     const rows = await strapi.entityService.findMany(KYC_UID, { filters: { user: { id: ctx.state.user.id } }, sort: { createdAt: 'desc' } });
-    return { data: rows };
+    return { data: (rows || []).map((entry) => shapeKycEntry(entry)) };
   },
 
   async reviewKyc(ctx) {
@@ -540,20 +644,16 @@ module.exports = {
     if (!user) return ctx.unauthorized('Login required');
     if (!isAdmin(user)) return ctx.forbidden('Admin only');
     const input = bodyData(ctx);
-    const status = ['approved', 'rejected', 'pending'].includes(input.status) ? input.status : 'pending';
+    const status = ['approved', 'rejected', 'pending', 'draft'].includes(input.status) ? input.status : 'draft';
     const existing = await strapi.entityService.findOne(KYC_UID, ctx.params.id, { populate: { user: { fields: ['id'] } } });
     if (!existing) return ctx.notFound('KYC submission not found');
     const updated = await strapi.entityService.update(KYC_UID, ctx.params.id, { data: { status, notes: cleanString(input.notes, 1000), reviewer: user.id, reviewedAt: new Date().toISOString() } });
 
     if (existing.user?.id && existing.role) {
-      const listings = await strapi.entityService.findMany(LISTING_UID, {
-        filters: { owner: { id: existing.user.id }, ownerRole: existing.role },
-        limit: 500,
-      });
       const nextVerificationStatus = status === 'approved' ? 'verified' : 'pending';
-      await Promise.all((listings || []).map((listing) => strapi.entityService.update(LISTING_UID, listing.id, { data: { verificationStatus: nextVerificationStatus } })));
+      await syncListingVerificationForUser(existing.user.id, existing.role, nextVerificationStatus);
     }
-    return { data: updated };
+    return { data: shapeKycEntry(updated) };
   },
 
   async adminOverview(ctx) {
@@ -580,33 +680,34 @@ module.exports = {
       }),
     ]);
 
-    const shapedProviders = (providers || []).map((entry) => publicProvider(entry));
-    const shapedKyc = (kycRows || []).map((entry) => ({
-      id: entry.id,
-      role: entry.role,
-      status: entry.status,
-      idNumber: entry.idNumber || '',
-      businessName: entry.businessName || '',
-      location: entry.location || '',
-      documentImages: entry.documentImages || {},
-      notes: entry.notes || '',
-      reviewedAt: entry.reviewedAt || null,
-      createdAt: entry.createdAt,
-      updatedAt: entry.updatedAt,
-      user: publicProvider(entry.user),
-      reviewer: entry.reviewer ? { id: entry.reviewer.id, username: entry.reviewer.username || '', fullName: entry.reviewer.fullName || '' } : null,
-    }));
-    const shapedListings = (listings || []).map((entry) => publicListing(entry, { canSeeContact: true }));
+    const shapedProviders = (providers || []).map((entry) => {
+      const provider = publicProvider(entry);
+      const roleKyc = (kycRows || []).find((row) => Number(row.user?.id || 0) === Number(entry.id) && row.role === entry.homesRole);
+      const shapedKycRow = roleKyc ? shapeKycEntry({ ...roleKyc, user: roleKyc.user }) : null;
+      return {
+        ...provider,
+        kycStatus: shapedKycRow?.status || 'not_started',
+        completionPercent: shapedKycRow?.completionPercent || 0,
+        isVerified: shapedKycRow?.isVerified === true,
+      };
+    });
+    const shapedKyc = (kycRows || []).map((entry) => shapeKycEntry({ ...entry, user: entry.user }));
+    const contactUnlockFeeUGX = await getHomesContactUnlockFeeUGX();
+    const shapedListings = (listings || []).map((entry) => publicListing(entry, { canSeeContact: true, contactUnlockFeeUGX }));
 
     return {
       data: {
         providers: shapedProviders,
         kyc: shapedKyc,
         listings: shapedListings,
+        settings: { contactUnlockFeeUGX },
         stats: {
           providers: shapedProviders.length,
-          pendingKyc: shapedKyc.filter((entry) => entry.status === 'pending').length,
+          verifiedProviders: shapedProviders.filter((entry) => entry.isVerified).length,
+          unverifiedProviders: shapedProviders.filter((entry) => !entry.isVerified).length,
+          draftKyc: shapedKyc.filter((entry) => entry.status === 'draft').length,
           approvedKyc: shapedKyc.filter((entry) => entry.status === 'approved').length,
+          pendingKyc: shapedKyc.filter((entry) => entry.status === 'pending').length,
           pendingListings: shapedListings.filter((entry) => entry.status === 'pending_review').length,
           publishedListings: shapedListings.filter((entry) => entry.status === 'published').length,
         },
@@ -619,12 +720,13 @@ module.exports = {
     const input = bodyData(ctx);
     const listing = await findListing(ctx.params.id || input.listingId, { owner: { fields: ['id', 'phone', 'username', 'fullName'] } });
     if (!listing || listing.status !== 'published') return ctx.notFound('Listing not found');
+    if (listing.availabilityStatus === 'taken') return ctx.badRequest('This property is fully occupied. Contact unlock is not available.');
     if (Number(listing.owner?.id || 0) === Number(ctx.state.user.id)) return ctx.badRequest('You already own this listing');
 
     const active = await strapi.entityService.findMany(CONTACT_UID, { filters: { requester: { id: ctx.state.user.id }, listing: { id: listing.id }, status: 'active' }, limit: 1 });
     if (active?.[0]) return { data: { unlock: active[0], ownerPhone: listing.ownerPhone || listing.owner?.phone || null, alreadyUnlocked: true } };
 
-    const amount = Number(listing.contactUnlockFeeUGX || 0);
+    const amount = await getHomesContactUnlockFeeUGX();
     const entry = await strapi.entityService.create(CONTACT_UID, {
       data: { listing: listing.id, requester: ctx.state.user.id, owner: listing.owner?.id || null, amountUGX: amount, paymentPhone: cleanString(input.paymentPhone, 40), status: amount > 0 ? 'pending' : 'active', unlockedAt: amount > 0 ? null : new Date().toISOString() },
     });
@@ -640,6 +742,7 @@ module.exports = {
     const input = bodyData(ctx);
     const listing = await findListing(ctx.params.id || input.listingId, { owner: { fields: ['id', 'phone', 'username', 'fullName'] } });
     if (!listing || listing.status !== 'published' || listing.kind !== 'stay') return ctx.notFound('Short stay home not found');
+    if (listing.availabilityStatus === 'taken') return ctx.badRequest('This property is fully occupied and not accepting bookings.');
 
     const checkIn = cleanString(input.checkIn, 20);
     const checkOut = cleanString(input.checkOut, 20);
@@ -750,7 +853,8 @@ module.exports = {
   async mySaves(ctx) {
     if (!ctx.state.user) return ctx.unauthorized('Login required');
     const rows = await strapi.entityService.findMany(SAVE_UID, { filters: { user: { id: ctx.state.user.id } }, populate: { listing: true }, sort: { createdAt: 'desc' } });
-    return { data: rows.map((row) => ({ ...row, listing: publicListing(row.listing) })) };
+    const contactUnlockFeeUGX = await getHomesContactUnlockFeeUGX();
+    return { data: rows.map((row) => ({ ...row, listing: publicListing(row.listing, { contactUnlockFeeUGX }) })) };
   },
 
   async checkPaymentStatus(ctx) {
@@ -819,7 +923,8 @@ module.exports = {
       sort: { createdAt: 'desc' },
       limit: 200,
     });
-    const shaped = (listings || []).map((item) => publicListing(item));
+    const contactUnlockFeeUGX = await getHomesContactUnlockFeeUGX();
+    const shaped = (listings || []).map((item) => publicListing(item, { contactUnlockFeeUGX }));
     const verified = shaped.some((item) => item.verificationStatus === 'verified');
     const roles = Array.from(new Set(shaped.map((item) => item.ownerRole).filter(Boolean)));
     return {

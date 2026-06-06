@@ -148,6 +148,11 @@
       "type": "integer",
       "default": 100000
     },
+    "homesContactUnlockFeeUGX": {
+      "type": "integer",
+      "default": 10000,
+      "min": 0
+    },
     "aboutPageContent": {
       "type": "json"
     }

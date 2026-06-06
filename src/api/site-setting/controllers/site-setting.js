@@ -125,6 +125,7 @@ module.exports = createCoreController('api::site-setting.site-setting', ({ strap
           storageEnabled: true,
           marketplacePromotionDailyPrice: 5000,
           marketplacePromotionMonthlyPrice: 100000,
+          homesContactUnlockFeeUGX: 10000,
           paymentGateway: 'pesapal',
         },
       };
@@ -133,6 +134,7 @@ module.exports = createCoreController('api::site-setting.site-setting', ({ strap
       data: {
         ...entry,
         bookSubscriptionPrice: entry.bookSubscriptionPrice ?? 10000,
+        homesContactUnlockFeeUGX: entry.homesContactUnlockFeeUGX ?? 10000,
       },
     };
   },

@@ -2326,9 +2326,11 @@ export interface ApiHomeKycHomeKyc extends Struct.CollectionTypeSchema {
     >;
     role: Schema.Attribute.Enumeration<['landlord', 'broker', 'host']> &
       Schema.Attribute.Required;
-    status: Schema.Attribute.Enumeration<['pending', 'approved', 'rejected']> &
+    status: Schema.Attribute.Enumeration<
+      ['draft', 'pending', 'approved', 'rejected']
+    > &
       Schema.Attribute.Required &
-      Schema.Attribute.DefaultTo<'pending'>;
+      Schema.Attribute.DefaultTo<'draft'>;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -3720,6 +3722,14 @@ export interface ApiSiteSettingSiteSetting extends Struct.SingleTypeSchema {
       Schema.Attribute.Required &
       Schema.Attribute.DefaultTo<2>;
     freeWatchMovieIds: Schema.Attribute.JSON;
+    homesContactUnlockFeeUGX: Schema.Attribute.Integer &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0;
+        },
+        number
+      > &
+      Schema.Attribute.DefaultTo<10000>;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
       'oneToMany',
