@@ -422,6 +422,113 @@ function canManageProduct(ctx, product) {
   return product.seller.id === ctx.state.user.id;
 }
 
+function resolveListingStatus(input = {}, existingProduct = null) {
+  if (input.status === 'draft') return 'draft';
+  if (input.status === 'active') return 'active';
+  if (input.status === 'out_of_stock' || input.status === 'discontinued') return input.status;
+  if (existingProduct?.status === 'draft') return 'active';
+  return existingProduct?.status || 'active';
+}
+
+function applyDraftDefaults(payload = {}, input = {}, existingProduct = null) {
+  const fallbackName = String(
+    payload.name
+    ?? input.name
+    ?? existingProduct?.name
+    ?? ''
+  ).trim();
+
+  const images = Array.isArray(payload.images)
+    ? payload.images
+    : (Array.isArray(existingProduct?.images) ? existingProduct.images : []);
+
+  const featuredImage = String(
+    payload.featuredImage
+    ?? input.featuredImage
+    ?? input.productVideoThumbnailUrl
+    ?? input.productVideoUrl
+    ?? existingProduct?.featuredImage
+    ?? images[0]?.original
+    ?? images[0]
+    ?? ''
+  ).trim();
+
+  return {
+    ...payload,
+    status: 'draft',
+    name: fallbackName || 'Untitled listing',
+    description: String(payload.description ?? input.description ?? existingProduct?.description ?? '').trim(),
+    priceUGX: Math.max(0, Number(payload.priceUGX ?? input.priceUGX ?? existingProduct?.priceUGX ?? 0) || 0),
+    category: String(payload.category ?? input.category ?? existingProduct?.category ?? 'Other').trim() || 'Other',
+    stockQuantity: Math.max(0, Number(
+      payload.stockQuantity ?? input.stockQuantity ?? existingProduct?.stockQuantity ?? 1
+    ) || 0),
+    images,
+    featuredImage,
+    ...(Object.prototype.hasOwnProperty.call(input, 'draftMeta')
+      ? { draftMeta: input.draftMeta }
+      : existingProduct?.draftMeta
+        ? { draftMeta: existingProduct.draftMeta }
+        : {}),
+  };
+}
+
+function validateProductForPublish(payload = {}, existingProduct = null) {
+  const errors = [];
+  const name = String(payload.name ?? existingProduct?.name ?? '').trim();
+  const description = String(payload.description ?? existingProduct?.description ?? '').trim();
+  const category = String(payload.category ?? existingProduct?.category ?? '').trim();
+  const priceUGX = Number(payload.priceUGX ?? existingProduct?.priceUGX ?? 0);
+  const images = Array.isArray(payload.images)
+    ? payload.images
+    : (Array.isArray(existingProduct?.images) ? existingProduct.images : []);
+  const featuredImage = String(payload.featuredImage ?? existingProduct?.featuredImage ?? '').trim();
+  const productVideoUrl = String(payload.productVideoUrl ?? existingProduct?.productVideoUrl ?? '').trim();
+  const itemType = payload.itemType ?? existingProduct?.itemType ?? 'product';
+
+  if (!name) errors.push('Name is required');
+  if (!description) errors.push('Description is required');
+  if (!category) errors.push('Category is required');
+  if (!Number.isFinite(priceUGX) || priceUGX <= 0) errors.push('Valid price is required');
+
+  const hasImages = images.length > 0;
+  const hasVideo = Boolean(productVideoUrl);
+  if (!hasImages && !hasVideo) errors.push('At least one image or video is required');
+  if (!featuredImage && !hasVideo) errors.push('Featured image is required');
+
+  if (itemType !== 'service') {
+    const stockQuantity = Number(payload.stockQuantity ?? existingProduct?.stockQuantity ?? 0);
+    if (!Number.isFinite(stockQuantity) || stockQuantity < 0) {
+      errors.push('Stock quantity is required');
+    }
+  }
+
+  return errors;
+}
+
+function finalizeProductWritePayload(input = {}, existingProduct = null) {
+  const listingStatus = resolveListingStatus(input, existingProduct);
+  const payload = buildProductPayload(input, existingProduct);
+
+  if (listingStatus === 'draft') {
+    return applyDraftDefaults(payload, input, existingProduct);
+  }
+
+  const errors = validateProductForPublish(payload, existingProduct);
+  if (errors.length) {
+    const error = new Error(errors.join('. '));
+    error.name = 'ValidationError';
+    throw error;
+  }
+
+  return {
+    ...payload,
+    status: listingStatus === 'out_of_stock' || listingStatus === 'discontinued'
+      ? listingStatus
+      : 'active',
+  };
+}
+
 function buildProductPayload(input = {}, existingProduct = null) {
   const nextItemType = Object.prototype.hasOwnProperty.call(input, 'itemType')
     ? normalizeItemType(input.itemType)
@@ -492,6 +599,7 @@ function buildProductPayload(input = {}, existingProduct = null) {
     ...(Object.prototype.hasOwnProperty.call(input, 'paymentCode') ? { paymentCode: input.paymentCode } : {}),
     ...(Object.prototype.hasOwnProperty.call(input, 'marketplaceSource') ? { marketplaceSource: normalizeMarketplaceSource(input.marketplaceSource) } : {}),
     ...(Object.prototype.hasOwnProperty.call(input, 'status') ? { status: input.status || 'active' } : {}),
+    ...(Object.prototype.hasOwnProperty.call(input, 'draftMeta') ? { draftMeta: input.draftMeta } : {}),
     ...(nextItemType === 'service' || Object.prototype.hasOwnProperty.call(input, 'serviceAvailabilityDates') ? { serviceAvailabilityDates: nextAvailabilityDates } : {}),
     ...(nextItemType === 'service' || Object.prototype.hasOwnProperty.call(input, 'serviceBookedDates') ? { serviceBookedDates: nextBookedDates } : {}),
   };
@@ -531,12 +639,19 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
     }
 
     const input = ctx.request.body?.data || {};
-    const payload = buildProductPayload({
-      ...input,
-      audience: input.itemType === 'service' ? 'adults' : (input.audience || 'children'),
-      stockQuantity: input.itemType === 'service' ? 1 : input.stockQuantity,
-      serviceBookedDates: [],
-    });
+    let payload;
+
+    try {
+      payload = finalizeProductWritePayload({
+        ...input,
+        audience: input.itemType === 'service' ? 'adults' : (input.audience || 'children'),
+        stockQuantity: input.itemType === 'service' ? 1 : input.stockQuantity,
+        serviceBookedDates: [],
+      });
+    } catch (err) {
+      if (err.name === 'ValidationError') return ctx.badRequest(err.message);
+      throw err;
+    }
 
     const created = await strapi.documents('api::product.product').create({
       data: {
@@ -549,7 +664,9 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
       status: 'published',
     });
 
-    scheduleProductImageProcessing(strapi, { documentId: created.documentId, id: created.id });
+    if (Array.isArray(payload.images) && payload.images.length > 0) {
+      scheduleProductImageProcessing(strapi, { documentId: created.documentId, id: created.id });
+    }
 
     return { data: await attachReviewSummary(strapi, await withSoldCount(strapi, created)) };
   },
@@ -575,6 +692,10 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
     );
 
     if (!ctx.state.user) {
+      filters.status = 'active';
+    } else if (filters.status === 'draft' || filters.status?.$eq === 'draft') {
+      filters.status = 'active';
+    } else if (!filters.status) {
       filters.status = 'active';
     }
 
@@ -696,16 +817,25 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
     }
 
     const input = ctx.request.body?.data || {};
+    let payload;
+
+    try {
+      payload = finalizeProductWritePayload(input, existingProduct);
+    } catch (err) {
+      if (err.name === 'ValidationError') return ctx.badRequest(err.message);
+      throw err;
+    }
+
     const updated = await strapi.documents('api::product.product').update({
       documentId: existingProduct.documentId,
-      data: buildProductPayload(input, existingProduct),
+      data: payload,
       populate: {
         seller: true,
       },
       status: 'published',
     });
 
-    if (Object.prototype.hasOwnProperty.call(input, 'images')) {
+    if (Object.prototype.hasOwnProperty.call(input, 'images') && Array.isArray(payload.images) && payload.images.length > 0) {
       scheduleProductImageProcessing(strapi, { documentId: updated.documentId, id: updated.id });
     }
 
@@ -719,7 +849,11 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
       return ctx.notFound('Product not found');
     }
 
-    if (!ctx.state.user && product.status !== 'active') {
+    if (product.status === 'draft') {
+      if (!canManageProduct(ctx, product)) {
+        return ctx.notFound('Product not found');
+      }
+    } else if (!ctx.state.user && product.status !== 'active') {
       return ctx.notFound('Product not found');
     }
 

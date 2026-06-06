@@ -3112,7 +3112,7 @@ export interface ApiProductProduct extends Struct.CollectionTypeSchema {
     > &
       Schema.Attribute.DefaultTo<'UGX'>;
     deliveryAreas: Schema.Attribute.JSON;
-    description: Schema.Attribute.Text & Schema.Attribute.Required;
+    description: Schema.Attribute.Text;
     discountPercent: Schema.Attribute.Integer &
       Schema.Attribute.SetMinMax<
         {
@@ -3121,6 +3121,7 @@ export interface ApiProductProduct extends Struct.CollectionTypeSchema {
         },
         number
       >;
+    draftMeta: Schema.Attribute.JSON;
     engineSize: Schema.Attribute.Enumeration<
       [
         'Engine 3000 cc',
@@ -3160,7 +3161,7 @@ export interface ApiProductProduct extends Struct.CollectionTypeSchema {
         'Engine 1000 cc',
       ]
     >;
-    featuredImage: Schema.Attribute.String & Schema.Attribute.Required;
+    featuredImage: Schema.Attribute.String & Schema.Attribute.DefaultTo<''>;
     fuelType: Schema.Attribute.Enumeration<
       [
         'Plug-in Hybrid',
@@ -3172,7 +3173,7 @@ export interface ApiProductProduct extends Struct.CollectionTypeSchema {
         'CNG',
       ]
     >;
-    images: Schema.Attribute.JSON & Schema.Attribute.Required;
+    images: Schema.Attribute.JSON & Schema.Attribute.DefaultTo<[]>;
     itemType: Schema.Attribute.Enumeration<['product', 'service']> &
       Schema.Attribute.DefaultTo<'product'>;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
@@ -3187,7 +3188,14 @@ export interface ApiProductProduct extends Struct.CollectionTypeSchema {
     negotiable: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
     paymentCode: Schema.Attribute.String;
     paymentPhone: Schema.Attribute.String;
-    priceUGX: Schema.Attribute.Integer & Schema.Attribute.Required;
+    priceUGX: Schema.Attribute.Integer &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0;
+        },
+        number
+      > &
+      Schema.Attribute.DefaultTo<0>;
     productType: Schema.Attribute.String;
     productVideoComments: Schema.Attribute.JSON;
     productVideoLikes: Schema.Attribute.Integer &
@@ -3230,7 +3238,7 @@ export interface ApiProductProduct extends Struct.CollectionTypeSchema {
     size: Schema.Attribute.String;
     specifications: Schema.Attribute.Text;
     status: Schema.Attribute.Enumeration<
-      ['active', 'out_of_stock', 'discontinued']
+      ['draft', 'active', 'out_of_stock', 'discontinued']
     > &
       Schema.Attribute.DefaultTo<'active'>;
     stockQuantity: Schema.Attribute.Integer &

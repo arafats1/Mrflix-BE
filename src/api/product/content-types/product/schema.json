@@ -17,15 +17,15 @@
       "required": true
     },
     "description": {
-      "type": "text",
-      "required": true
+      "type": "text"
     },
     "specifications": {
       "type": "text"
     },
     "priceUGX": {
       "type": "integer",
-      "required": true
+      "default": 0,
+      "min": 0
     },
     "currency": {
       "type": "enumeration",
@@ -49,11 +49,11 @@
     },
     "images": {
       "type": "json",
-      "required": true
+      "default": []
     },
     "featuredImage": {
       "type": "string",
-      "required": true
+      "default": ""
     },
     "productVideoUrl": {
       "type": "string"
@@ -238,11 +238,15 @@
     "status": {
       "type": "enumeration",
       "enum": [
+        "draft",
         "active",
         "out_of_stock",
         "discontinued"
       ],
       "default": "active"
+    },
+    "draftMeta": {
+      "type": "json"
     },
     "paymentPhone": {
       "type": "string"

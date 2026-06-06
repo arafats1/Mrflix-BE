@@ -81,6 +81,16 @@ function normalizeCreativeCopy(value, fallbackName) {
   };
 }
 
+const OPENAI_IMAGE_MODEL_OPTIONS = ['gpt-image-2', 'gpt-image-1.5', 'gpt-image-1'];
+
+/** Resolve the OpenAI image model from OPENAI_IMAGE_MODEL (default: gpt-image-2). */
+function resolveOpenAIImageModel() {
+  const raw = String(process.env.OPENAI_IMAGE_MODEL || 'gpt-image-2').trim();
+  if (OPENAI_IMAGE_MODEL_OPTIONS.includes(raw)) return raw;
+  strapi.log.warn(`Invalid OPENAI_IMAGE_MODEL "${raw}". Using gpt-image-2. Allowed: ${OPENAI_IMAGE_MODEL_OPTIONS.join(', ')}`);
+  return 'gpt-image-2';
+}
+
 /** @param {unknown} value */
 function normalizeMarketplaceImagePurpose(value) {
   const raw = String(value || '').trim();
@@ -368,7 +378,7 @@ async function buildAdCreatives(payload) {
       'Avoid clutter, tiny text, distorted product shapes, fake platform UI, celebrity likenesses, and third-party logos unless they are already on the product.',
     ].filter(Boolean).join(' ');
 
-  const imageModel = 'gpt-image-2';
+  const imageModel = resolveOpenAIImageModel();
   const sourceImages = [sourceImage, modelImage, marketplaceLogo, movoBrandsLogo].filter((image) => Boolean(image));
   const imageEndpoint = sourceImages.length
     ? 'https://api.openai.com/v1/images/edits'
