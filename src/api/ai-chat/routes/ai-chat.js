@@ -29,5 +29,14 @@ module.exports = {
         policies: [],
       },
     },
+    {
+      method: 'GET',
+      path: '/ai-chat/marketplace-ad-creatives/:jobId',
+      handler: 'ai-chat.getMarketplaceAdCreativesJob',
+      config: {
+        auth: false,
+        policies: [],
+      },
+    },
   ],
 };

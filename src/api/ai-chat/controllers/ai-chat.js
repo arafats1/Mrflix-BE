@@ -1,5 +1,7 @@
 'use strict';
 
+const { createJob, getJob, completeJob, failJob } = require('../job-store');
+
 /**
  * AI Movie Assistant Controller
  * Uses OpenAI to help users discover movies based on natural language queries
@@ -165,6 +167,297 @@ async function resolveUser(ctx) {
   } catch {
     return null;
   }
+}
+
+/**
+ * Heavy marketplace ad-creative generation. Runs in the background (no Koa ctx)
+ * so Railway's ~60s proxy idle timeout never aborts the request. Resolves with
+ * the data payload ({ copy, creatives, source, purpose }) or throws on failure.
+ * @param {any} payload
+ */
+async function buildAdCreatives(payload) {
+  const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+  if (!OPENAI_API_KEY) {
+    throw new Error('AI image generation is not configured');
+  }
+
+  const productName = String(payload.productName || payload.name || '').trim();
+  const description = String(payload.description || '').trim();
+  const category = String(payload.category || '').trim();
+  const audience = String(payload.audience || '').trim();
+  const purpose = normalizeMarketplaceImagePurpose(payload.purpose || 'ad_creatives');
+  const priceLabel = String(payload.priceLabel || '').trim();
+  const sourceImageDataUrl = String(payload.sourceImageDataUrl || '').trim();
+  const sourceImageUrl = String(payload.sourceImageUrl || '').trim();
+  const modelImageDataUrl = String(payload.modelImageDataUrl || '').trim();
+  const modelImageUrl = String(payload.modelImageUrl || '').trim();
+  const marketplaceLogoUrl = String(payload.marketplaceLogoUrl || '').trim();
+  const movoBrandsLogoUrl = String(payload.movoBrandsLogoUrl || '').trim();
+  const posterStyle = String(payload.posterStyle || '').trim();
+  const count = clampNumber(payload.count, 1, 4, 3);
+
+  if (!productName || productName.length < 2) {
+    throw new Error('Product name is required');
+  }
+
+  let sourceImage = parseDataUrlImage(sourceImageDataUrl);
+  if (!sourceImage && sourceImageUrl) {
+    try {
+      sourceImage = await fetchImageForOpenAI(sourceImageUrl);
+    } catch (err) {
+      strapi.log.warn(`Could not fetch source product image: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  let modelImage = parseDataUrlImage(modelImageDataUrl);
+  if (!modelImage && modelImageUrl) {
+    try {
+      modelImage = await fetchImageForOpenAI(modelImageUrl);
+    } catch (err) {
+      strapi.log.warn(`Could not fetch model image: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  let marketplaceLogo = null;
+  if (marketplaceLogoUrl && purpose !== 'model_poster' && purpose !== 'model_carousel') {
+    try {
+      marketplaceLogo = await fetchImageForOpenAI(marketplaceLogoUrl);
+    } catch (err) {
+      strapi.log.warn(`Could not fetch marketplace logo: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  let movoBrandsLogo = null;
+  if (movoBrandsLogoUrl && purpose !== 'model_poster' && purpose !== 'model_carousel') {
+    try {
+      movoBrandsLogo = await fetchImageForOpenAI(movoBrandsLogoUrl);
+    } catch (err) {
+      strapi.log.warn(`Could not fetch MOVO Brands logo: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  if (purpose === 'model_poster' && (!sourceImage || !modelImage)) {
+    throw new Error('A model image and product image are required for model poster generation');
+  }
+
+  if (purpose === 'model_carousel' && !sourceImage) {
+    throw new Error('A product image is required for carousel image generation');
+  }
+
+  const copyResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${OPENAI_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: 'gpt-4o-mini',
+      temperature: 0.75,
+      max_tokens: 280,
+      response_format: { type: 'json_object' },
+      messages: [
+        {
+          role: 'system',
+          content: [
+            'You create concise paid social ad copy for MOVO marketplace sellers in Uganda.',
+            'Return only JSON with headline, primaryText, description, callToAction, and overlayTexts array.',
+            'Keep the wording direct, credible, and sales-focused. Do not include hashtags or emojis.',
+          ].join(' '),
+        },
+        {
+          role: 'user',
+          content: [
+            `Product: ${productName}`,
+            category ? `Category: ${category}` : null,
+            priceLabel ? `Price: ${priceLabel}` : null,
+            description ? `Description: ${description.slice(0, 700)}` : null,
+            audience ? `Audience: ${audience}` : null,
+            purpose === 'product_images' || purpose === 'product_polish' || purpose === 'model_poster' || purpose === 'model_carousel'
+              ? 'Create short product gallery copy for seller reference. The generated images themselves should not need marketing text.'
+              : 'Create ad copy and 2-4 short overlay text options for attractive Facebook, Instagram, TikTok, and X ads.',
+          ].filter(Boolean).join('\n'),
+        },
+      ],
+    }),
+  });
+
+  if (!copyResponse.ok) {
+    const err = await copyResponse.json().catch(() => ({}));
+    strapi.log.error('OpenAI marketplace ad copy error:', err);
+    throw new Error('AI ad copy is temporarily unavailable');
+  }
+
+  const copyData = await copyResponse.json();
+  let parsedCopy = {};
+  try {
+    parsedCopy = JSON.parse(stripCodeFence(copyData?.choices?.[0]?.message?.content));
+  } catch {
+    parsedCopy = {};
+  }
+  const copy = normalizeCreativeCopy(parsedCopy, productName);
+
+  const imagePrompt = purpose === 'model_carousel'
+    ? [
+      `Create ${count} premium MOVO Marketplace carousel hero image using the attached product photo${modelImage ? ' and model photo' : ''}.`,
+      'The first source image is the product reference. Keep the real product recognizable, clear, and large enough for buyers to inspect.',
+      modelImage ? 'The second source image is the model reference. If using the model, keep the face, skin tone, hairstyle, and outfit realistic while composing a premium lifestyle advert.' : 'A model is optional for this creative; a product-only enhanced scene is acceptable.',
+      `Product: ${productName}.`,
+      category ? `Category: ${category}.` : null,
+      description ? `Product context: ${description.slice(0, 500)}.` : null,
+      posterStyle ? `Desired visual direction: ${posterStyle}.` : null,
+      'Design for a wide marketplace carousel/banner crop, with the main product and focal subject centered safely so it still looks good when cover-cropped on mobile. Keep the product prominent but not oversized, with breathing room around it. Leave clean empty space near the top-left for the exact MOVO Marketplace logo overlay and near the lower-left for exact product price text.',
+      'Use attractive rich backgrounds such as garden, flowers, ocean graphics, showroom lighting, reflective surfaces, city scenery, marble, soft mist, or premium lifestyle environments. Do not use plain solid color backgrounds.',
+      'Do not generate readable text, URLs, prices, badges, or final logos inside the image. The app may add exact branding later.',
+      'Avoid distorted faces, duplicate products, wrong labels, fake brand marks, clutter, and low-quality collage edges.',
+    ].filter(Boolean).join(' ')
+    : purpose === 'model_poster'
+    ? [
+      `Create ${count} premium vertical MOVO Marketplace fashion/editorial advert poster background images using the attached model photo and product photo.`,
+      'The first source image is the product reference. The second source image is the model reference. Keep the same real product recognizable and keep the model face, pose identity, skin tone, hairstyle, and outfit realistic.',
+      marketplaceLogo ? 'Use the supplied MOVO Marketplace logo only as brand reference; leave clean space near the top-left for the app to overlay the exact logo later.' : 'Leave clean space near the top-left for a MOVO Marketplace logo overlay.',
+      movoBrandsLogo ? 'Use the supplied MOVO Brands logo only as brand reference; leave a clean bottom footer area for the app to overlay exact MOVO Brands branding later.' : 'Leave a clean bottom footer area for MOVO Brands branding.',
+      `Product: ${productName}.`,
+      category ? `Category: ${category}.` : null,
+      description ? `Product context: ${description.slice(0, 500)}.` : null,
+      priceLabel ? `The app will overlay this exact price after generation: ${priceLabel}. Leave clean space for it near the lower-left and do not draw the price yourself.` : null,
+      posterStyle ? `Desired visual direction: ${posterStyle}.` : null,
+      'Compose the model and product like a polished social media advert: the product must be large enough to inspect but not oversized, placed clearly in the foreground or beside the model, with natural contact shadows, realistic scale, and breathing room around the subject.',
+      'Keep the top-left corner clean and empty for an exact logo overlay. Do not place any fake text, grey marks, logo fragments, cropped letters, UI, or decorative content in the top-left corner.',
+      'Each generated poster must have a different attractive background and mood, such as garden, flowers, luxury vanity, ocean-inspired graphics, city night, showroom lighting, marble surface, reflective black surface, soft mist, or elegant scenic backdrop. Do not use plain solid color backgrounds.',
+      'Do not generate readable text, URLs, badges, prices, or final logos inside the image. The app will overlay exact branding and footer text after generation.',
+      'Avoid distorted faces, extra fingers, duplicate products, wrong product labels, fake brand marks, low-quality collage edges, and cluttered layouts.',
+    ].filter(Boolean).join(' ')
+    : purpose === 'product_polish'
+    ? [
+      'Polish and improve the attached seller product photo for an ecommerce marketplace listing.',
+      'Preserve the exact product identity, shape, color, labels, logos, materials, and important visible details from the source image.',
+      'Improve clarity, sharpness, lighting, white balance, exposure, and noise. Make the product look clean, realistic, and professionally photographed.',
+      'If the background is messy, replace it with a clean neutral studio or subtle lifestyle background that does not distract from the product.',
+      category ? `Category: ${category}.` : null,
+      productName ? `Product name: ${productName}.` : null,
+      description ? `Product context: ${description.slice(0, 500)}.` : null,
+      posterStyle ? `Seller requested scene direction: ${posterStyle}. Use this direction for the background and styling while preserving the product.` : null,
+      'Do not add marketing text, prices, badges, watermarks, UI, fake labels, extra products, or change the product into a different item.',
+    ].filter(Boolean).join(' ')
+    : purpose === 'product_images'
+    ? [
+      `Create ${count} distinct ecommerce product gallery images as a varied set from the attached seller product photo.`,
+      sourceImage ? 'Keep the same product recognizable and preserve its main shape, color, labels, material, proportions, and important details.' : `The product is: ${productName}.`,
+      category ? `Category: ${category}.` : null,
+      audience ? `Intended audience: ${audience}.` : null,
+      description ? `Product context: ${description.slice(0, 500)}.` : null,
+      posterStyle ? `Seller requested scene direction: ${posterStyle}. Use this direction for the generated scenes while preserving the product.` : null,
+      'Each generated image must use a clearly different product pose, action, camera angle, or presentation. Do not repeat the same side, stance, crop, or plain background across the set.',
+      'Use attractive ecommerce graphics and realistic lifestyle scenes, not just flat color studio backgrounds. Include premium visual ideas such as reflective surfaces, water splash, soft smoke or mist, ocean-inspired graphic backgrounds, elegant product pedestals, outdoor use scenes, showroom lighting, or contextual props when they fit the product category.',
+      'For vehicles, vary between front view, rear view, three-quarter view, motion on a road, splash of water, and polished mirrored surface scenes. For perfume or beauty items, show spray mist, ocean or floral graphic scenes, luxury vanity surfaces, and close-up hero angles. For clothing, show worn, folded, hanging, and styled outfit views. For food, show serving, packaging, ingredient, and table scenes. For live animals, show natural varied poses and actions such as standing, walking, grazing, front view, side view, and a clean farm or outdoor setting.',
+      'The product should remain the main subject and fill the frame enough for buyers to inspect it clearly.',
+      'Vary camera angle, crop, product placement, scene, lighting, and background style while keeping the product truthful and recognizable.',
+      'Improve the product presentation if the source photo is unclear, but do not invent a different product or alter brand-critical details.',
+      'Do not add marketing text, prices, call-to-action buttons, platform UI, logos, watermarks, fake badges, or extra unrelated objects.',
+    ].filter(Boolean).join(' ')
+    : [
+      'Create a polished paid social media product advertisement image.',
+      sourceImage ? 'Use the attached product photo as the visual reference and keep the product recognizable.' : `The product is: ${productName}.`,
+      category ? `Category: ${category}.` : null,
+      audience ? `Audience: ${audience}.` : null,
+      description ? `Product context: ${description.slice(0, 500)}.` : null,
+      priceLabel ? `Include price cue if it fits naturally: ${priceLabel}.` : null,
+      'Use clean premium composition, realistic lighting, modern ecommerce styling, and readable marketing typography.',
+      `Include one of these short text overlays: ${copy.overlayTexts.join(' | ')}.`,
+      `Call to action: ${copy.callToAction}.`,
+      'Avoid clutter, tiny text, distorted product shapes, fake platform UI, celebrity likenesses, and third-party logos unless they are already on the product.',
+    ].filter(Boolean).join(' ');
+
+  const imageModel = 'gpt-image-2';
+  const sourceImages = [sourceImage, modelImage, marketplaceLogo, movoBrandsLogo].filter((image) => Boolean(image));
+  const imageEndpoint = sourceImages.length
+    ? 'https://api.openai.com/v1/images/edits'
+    : 'https://api.openai.com/v1/images/generations';
+
+  /**
+   * @param {string} prompt
+   * @param {number} imageCount
+   */
+  const requestImages = async (prompt, imageCount) => {
+    const imageForm = new FormData();
+    imageForm.append('model', imageModel);
+    imageForm.append('prompt', prompt);
+    imageForm.append('n', String(imageCount));
+    imageForm.append('size', purpose === 'model_poster' ? '1024x1536' : purpose === 'model_carousel' ? '1536x1024' : '1024x1024');
+    imageForm.append('quality', purpose === 'ad_creatives' ? 'medium' : 'high');
+
+    if (sourceImages.length === 1) {
+      const singleSourceImage = sourceImages[0];
+      if (singleSourceImage) {
+        imageForm.append('image', new Blob([singleSourceImage.buffer], { type: singleSourceImage.mime }), singleSourceImage.filename);
+      }
+    } else if (sourceImages.length > 1) {
+      sourceImages.forEach((image, index) => {
+        if (!image) return;
+        imageForm.append('image[]', new Blob([image.buffer], { type: image.mime }), image.filename || `poster-source-${index + 1}.png`);
+      });
+    }
+
+    const imageResponse = await fetch(imageEndpoint, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
+      },
+      body: imageForm,
+    });
+
+    if (!imageResponse.ok) {
+      const err = await imageResponse.json().catch(() => ({}));
+      strapi.log.error('OpenAI marketplace ad image error:', err);
+      throw new Error(err?.error?.message || 'AI image generation is temporarily unavailable');
+    }
+
+    const imageData = await imageResponse.json();
+    return Array.isArray(imageData?.data) ? imageData.data : [];
+  };
+
+  let imageItems = [];
+  if (purpose === 'product_images' && count > 1) {
+    const sceneDirections = extractProductImageDirections(posterStyle, count);
+    for (let index = 0; index < count; index += 1) {
+      const sceneDirection = sceneDirections[index] || fallbackProductImageDirection(index, count, category);
+      const prompt = [
+        imagePrompt,
+        `Generate only image ${index + 1} of ${count} for this response.`,
+        `Specific required shot for this image: ${sceneDirection}`,
+        'Do not reuse the same camera angle, product crop, or scene from the other requested images.',
+      ].join(' ');
+      const items = await requestImages(prompt, 1);
+      imageItems.push(...items);
+    }
+  } else {
+    imageItems = await requestImages(imagePrompt, purpose === 'product_polish' ? 1 : count);
+  }
+
+  const creatives = imageItems
+    .map(/** @param {any} item @param {number} index */(item, index) => ({
+      id: `${Date.now()}_${index}`,
+      format: 'square_feed',
+      imageDataUrl: item?.b64_json ? `data:image/png;base64,${item.b64_json}` : '',
+      imageUrl: item?.url || '',
+      headline: copy.headline,
+      primaryText: copy.primaryText,
+      description: copy.description,
+      callToAction: copy.callToAction,
+      purpose,
+    }))
+    .filter(/** @param {{ imageDataUrl?: string, imageUrl?: string }} item */(item) => item.imageDataUrl || item.imageUrl);
+
+  if (!creatives.length) {
+    throw new Error('AI image generation returned no images');
+  }
+
+  return {
+    copy,
+    creatives,
+    source: sourceImages.length ? 'uploaded_or_product_image' : 'text_prompt',
+    purpose,
+  };
 }
 
 module.exports = {
@@ -657,7 +950,13 @@ LUGANDA MODE ACTIVE: The user is browsing the Luganda section. When recommending
     }
   },
 
-  /** @param {any} ctx */
+  /**
+   * Kick off marketplace ad-creative generation as a background job and return
+   * a job id immediately. Image generation can run well past Railway's ~60s
+   * proxy idle timeout, so we never hold the HTTP connection open for it — the
+   * client polls getMarketplaceAdCreativesJob for the result instead.
+   * @param {any} ctx
+   */
   async generateMarketplaceAdCreatives(ctx) {
     const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
     if (!OPENAI_API_KEY) {
@@ -672,292 +971,63 @@ LUGANDA MODE ACTIVE: The user is browsing the Luganda section. When recommending
 
     const payload = ctx.request.body || {};
     const productName = String(payload.productName || payload.name || '').trim();
-    const description = String(payload.description || '').trim();
-    const category = String(payload.category || '').trim();
-    const audience = String(payload.audience || '').trim();
     const purpose = normalizeMarketplaceImagePurpose(payload.purpose || 'ad_creatives');
-    const priceLabel = String(payload.priceLabel || '').trim();
-    const sourceImageDataUrl = String(payload.sourceImageDataUrl || '').trim();
-    const sourceImageUrl = String(payload.sourceImageUrl || '').trim();
-    const modelImageDataUrl = String(payload.modelImageDataUrl || '').trim();
-    const modelImageUrl = String(payload.modelImageUrl || '').trim();
-    const marketplaceLogoUrl = String(payload.marketplaceLogoUrl || '').trim();
-    const movoBrandsLogoUrl = String(payload.movoBrandsLogoUrl || '').trim();
-    const posterStyle = String(payload.posterStyle || '').trim();
-    const count = clampNumber(payload.count, 1, 4, 3);
+    const hasSourceImage = Boolean(String(payload.sourceImageDataUrl || '').trim() || String(payload.sourceImageUrl || '').trim());
+    const hasModelImage = Boolean(String(payload.modelImageDataUrl || '').trim() || String(payload.modelImageUrl || '').trim());
 
+    // Fast, synchronous validation so obvious mistakes return an immediate error
+    // instead of a "pending" job that fails seconds later.
     if (!productName || productName.length < 2) {
       return ctx.badRequest('Product name is required');
     }
-
-    let sourceImage = parseDataUrlImage(sourceImageDataUrl);
-    if (!sourceImage && sourceImageUrl) {
-      try {
-        sourceImage = await fetchImageForOpenAI(sourceImageUrl);
-      } catch (err) {
-        strapi.log.warn(`Could not fetch source product image: ${err instanceof Error ? err.message : String(err)}`);
-      }
-    }
-
-    let modelImage = parseDataUrlImage(modelImageDataUrl);
-    if (!modelImage && modelImageUrl) {
-      try {
-        modelImage = await fetchImageForOpenAI(modelImageUrl);
-      } catch (err) {
-        strapi.log.warn(`Could not fetch model image: ${err instanceof Error ? err.message : String(err)}`);
-      }
-    }
-
-    let marketplaceLogo = null;
-    if (marketplaceLogoUrl && purpose !== 'model_poster' && purpose !== 'model_carousel') {
-      try {
-        marketplaceLogo = await fetchImageForOpenAI(marketplaceLogoUrl);
-      } catch (err) {
-        strapi.log.warn(`Could not fetch marketplace logo: ${err instanceof Error ? err.message : String(err)}`);
-      }
-    }
-
-    let movoBrandsLogo = null;
-    if (movoBrandsLogoUrl && purpose !== 'model_poster' && purpose !== 'model_carousel') {
-      try {
-        movoBrandsLogo = await fetchImageForOpenAI(movoBrandsLogoUrl);
-      } catch (err) {
-        strapi.log.warn(`Could not fetch MOVO Brands logo: ${err instanceof Error ? err.message : String(err)}`);
-      }
-    }
-
-    if (purpose === 'model_poster' && (!sourceImage || !modelImage)) {
+    if (purpose === 'model_poster' && (!hasSourceImage || !hasModelImage)) {
       return ctx.badRequest('A model image and product image are required for model poster generation');
     }
-
-    if (purpose === 'model_carousel' && !sourceImage) {
+    if (purpose === 'model_carousel' && !hasSourceImage) {
       return ctx.badRequest('A product image is required for carousel image generation');
     }
 
-    try {
-      const copyResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${OPENAI_API_KEY}`,
-        },
-        body: JSON.stringify({
-          model: 'gpt-4o-mini',
-          temperature: 0.75,
-          max_tokens: 280,
-          response_format: { type: 'json_object' },
-          messages: [
-            {
-              role: 'system',
-              content: [
-                'You create concise paid social ad copy for MOVO marketplace sellers in Uganda.',
-                'Return only JSON with headline, primaryText, description, callToAction, and overlayTexts array.',
-                'Keep the wording direct, credible, and sales-focused. Do not include hashtags or emojis.',
-              ].join(' '),
-            },
-            {
-              role: 'user',
-              content: [
-                `Product: ${productName}`,
-                category ? `Category: ${category}` : null,
-                priceLabel ? `Price: ${priceLabel}` : null,
-                description ? `Description: ${description.slice(0, 700)}` : null,
-                audience ? `Audience: ${audience}` : null,
-                purpose === 'product_images' || purpose === 'product_polish' || purpose === 'model_poster' || purpose === 'model_carousel'
-                  ? 'Create short product gallery copy for seller reference. The generated images themselves should not need marketing text.'
-                  : 'Create ad copy and 2-4 short overlay text options for attractive Facebook, Instagram, TikTok, and X ads.',
-              ].filter(Boolean).join('\n'),
-            },
-          ],
-        }),
+    const jobId = createJob(user.id);
+
+    // Fire-and-forget: the work continues after we respond. Results land in the
+    // in-memory job store for the client to poll.
+    Promise.resolve()
+      .then(() => buildAdCreatives(payload))
+      .then((data) => {
+        completeJob(jobId, data);
+      })
+      .catch((err) => {
+        strapi.log.error('Marketplace ad creative job failed:', err);
+        const message = err instanceof Error && err.message ? err.message : 'AI ad creative generation is temporarily unavailable';
+        failJob(jobId, message);
       });
 
-      if (!copyResponse.ok) {
-        const err = await copyResponse.json().catch(() => ({}));
-        strapi.log.error('OpenAI marketplace ad copy error:', err);
-        return ctx.badRequest('AI ad copy is temporarily unavailable');
-      }
+    ctx.status = 202;
+    return { data: { jobId, status: 'pending' } };
+  },
 
-      const copyData = await copyResponse.json();
-      let parsedCopy = {};
-      try {
-        parsedCopy = JSON.parse(stripCodeFence(copyData?.choices?.[0]?.message?.content));
-      } catch {
-        parsedCopy = {};
-      }
-      const copy = normalizeCreativeCopy(parsedCopy, productName);
-
-      const imagePrompt = purpose === 'model_carousel'
-        ? [
-          `Create ${count} premium MOVO Marketplace carousel hero image using the attached product photo${modelImage ? ' and model photo' : ''}.`,
-          'The first source image is the product reference. Keep the real product recognizable, clear, and large enough for buyers to inspect.',
-          modelImage ? 'The second source image is the model reference. If using the model, keep the face, skin tone, hairstyle, and outfit realistic while composing a premium lifestyle advert.' : 'A model is optional for this creative; a product-only enhanced scene is acceptable.',
-          `Product: ${productName}.`,
-          category ? `Category: ${category}.` : null,
-          description ? `Product context: ${description.slice(0, 500)}.` : null,
-          posterStyle ? `Desired visual direction: ${posterStyle}.` : null,
-          'Design for a wide marketplace carousel/banner crop, with the main product and focal subject centered safely so it still looks good when cover-cropped on mobile. Keep the product prominent but not oversized, with breathing room around it. Leave clean empty space near the top-left for the exact MOVO Marketplace logo overlay and near the lower-left for exact product price text.',
-          'Use attractive rich backgrounds such as garden, flowers, ocean graphics, showroom lighting, reflective surfaces, city scenery, marble, soft mist, or premium lifestyle environments. Do not use plain solid color backgrounds.',
-          'Do not generate readable text, URLs, prices, badges, or final logos inside the image. The app may add exact branding later.',
-          'Avoid distorted faces, duplicate products, wrong labels, fake brand marks, clutter, and low-quality collage edges.',
-        ].filter(Boolean).join(' ')
-        : purpose === 'model_poster'
-        ? [
-          `Create ${count} premium vertical MOVO Marketplace fashion/editorial advert poster background images using the attached model photo and product photo.`,
-          'The first source image is the product reference. The second source image is the model reference. Keep the same real product recognizable and keep the model face, pose identity, skin tone, hairstyle, and outfit realistic.',
-          marketplaceLogo ? 'Use the supplied MOVO Marketplace logo only as brand reference; leave clean space near the top-left for the app to overlay the exact logo later.' : 'Leave clean space near the top-left for a MOVO Marketplace logo overlay.',
-          movoBrandsLogo ? 'Use the supplied MOVO Brands logo only as brand reference; leave a clean bottom footer area for the app to overlay exact MOVO Brands branding later.' : 'Leave a clean bottom footer area for MOVO Brands branding.',
-          `Product: ${productName}.`,
-          category ? `Category: ${category}.` : null,
-          description ? `Product context: ${description.slice(0, 500)}.` : null,
-          priceLabel ? `The app will overlay this exact price after generation: ${priceLabel}. Leave clean space for it near the lower-left and do not draw the price yourself.` : null,
-          posterStyle ? `Desired visual direction: ${posterStyle}.` : null,
-          'Compose the model and product like a polished social media advert: the product must be large enough to inspect but not oversized, placed clearly in the foreground or beside the model, with natural contact shadows, realistic scale, and breathing room around the subject.',
-          'Keep the top-left corner clean and empty for an exact logo overlay. Do not place any fake text, grey marks, logo fragments, cropped letters, UI, or decorative content in the top-left corner.',
-          'Each generated poster must have a different attractive background and mood, such as garden, flowers, luxury vanity, ocean-inspired graphics, city night, showroom lighting, marble surface, reflective black surface, soft mist, or elegant scenic backdrop. Do not use plain solid color backgrounds.',
-          'Do not generate readable text, URLs, badges, prices, or final logos inside the image. The app will overlay exact branding and footer text after generation.',
-          'Avoid distorted faces, extra fingers, duplicate products, wrong product labels, fake brand marks, low-quality collage edges, and cluttered layouts.',
-        ].filter(Boolean).join(' ')
-        : purpose === 'product_polish'
-        ? [
-          'Polish and improve the attached seller product photo for an ecommerce marketplace listing.',
-          'Preserve the exact product identity, shape, color, labels, logos, materials, and important visible details from the source image.',
-          'Improve clarity, sharpness, lighting, white balance, exposure, and noise. Make the product look clean, realistic, and professionally photographed.',
-          'If the background is messy, replace it with a clean neutral studio or subtle lifestyle background that does not distract from the product.',
-          category ? `Category: ${category}.` : null,
-          productName ? `Product name: ${productName}.` : null,
-          description ? `Product context: ${description.slice(0, 500)}.` : null,
-          posterStyle ? `Seller requested scene direction: ${posterStyle}. Use this direction for the background and styling while preserving the product.` : null,
-          'Do not add marketing text, prices, badges, watermarks, UI, fake labels, extra products, or change the product into a different item.',
-        ].filter(Boolean).join(' ')
-        : purpose === 'product_images'
-        ? [
-          `Create ${count} distinct ecommerce product gallery images as a varied set from the attached seller product photo.`,
-          sourceImage ? 'Keep the same product recognizable and preserve its main shape, color, labels, material, proportions, and important details.' : `The product is: ${productName}.`,
-          category ? `Category: ${category}.` : null,
-          audience ? `Intended audience: ${audience}.` : null,
-          description ? `Product context: ${description.slice(0, 500)}.` : null,
-          posterStyle ? `Seller requested scene direction: ${posterStyle}. Use this direction for the generated scenes while preserving the product.` : null,
-          'Each generated image must use a clearly different product pose, action, camera angle, or presentation. Do not repeat the same side, stance, crop, or plain background across the set.',
-          'Use attractive ecommerce graphics and realistic lifestyle scenes, not just flat color studio backgrounds. Include premium visual ideas such as reflective surfaces, water splash, soft smoke or mist, ocean-inspired graphic backgrounds, elegant product pedestals, outdoor use scenes, showroom lighting, or contextual props when they fit the product category.',
-          'For vehicles, vary between front view, rear view, three-quarter view, motion on a road, splash of water, and polished mirrored surface scenes. For perfume or beauty items, show spray mist, ocean or floral graphic scenes, luxury vanity surfaces, and close-up hero angles. For clothing, show worn, folded, hanging, and styled outfit views. For food, show serving, packaging, ingredient, and table scenes. For live animals, show natural varied poses and actions such as standing, walking, grazing, front view, side view, and a clean farm or outdoor setting.',
-          'The product should remain the main subject and fill the frame enough for buyers to inspect it clearly.',
-          'Vary camera angle, crop, product placement, scene, lighting, and background style while keeping the product truthful and recognizable.',
-          'Improve the product presentation if the source photo is unclear, but do not invent a different product or alter brand-critical details.',
-          'Do not add marketing text, prices, call-to-action buttons, platform UI, logos, watermarks, fake badges, or extra unrelated objects.',
-        ].filter(Boolean).join(' ')
-        : [
-          'Create a polished paid social media product advertisement image.',
-          sourceImage ? 'Use the attached product photo as the visual reference and keep the product recognizable.' : `The product is: ${productName}.`,
-          category ? `Category: ${category}.` : null,
-          audience ? `Audience: ${audience}.` : null,
-          description ? `Product context: ${description.slice(0, 500)}.` : null,
-          priceLabel ? `Include price cue if it fits naturally: ${priceLabel}.` : null,
-          'Use clean premium composition, realistic lighting, modern ecommerce styling, and readable marketing typography.',
-          `Include one of these short text overlays: ${copy.overlayTexts.join(' | ')}.`,
-          `Call to action: ${copy.callToAction}.`,
-          'Avoid clutter, tiny text, distorted product shapes, fake platform UI, celebrity likenesses, and third-party logos unless they are already on the product.',
-        ].filter(Boolean).join(' ');
-
-      const imageModel = 'gpt-image-2';
-      const sourceImages = [sourceImage, modelImage, marketplaceLogo, movoBrandsLogo].filter((image) => Boolean(image));
-      const imageEndpoint = sourceImages.length
-        ? 'https://api.openai.com/v1/images/edits'
-        : 'https://api.openai.com/v1/images/generations';
-
-      /**
-       * @param {string} prompt
-       * @param {number} imageCount
-       */
-      const requestImages = async (prompt, imageCount) => {
-        const imageForm = new FormData();
-        imageForm.append('model', imageModel);
-        imageForm.append('prompt', prompt);
-        imageForm.append('n', String(imageCount));
-        imageForm.append('size', purpose === 'model_poster' ? '1024x1536' : purpose === 'model_carousel' ? '1536x1024' : '1024x1024');
-        imageForm.append('quality', purpose === 'ad_creatives' ? 'medium' : 'high');
-
-        if (sourceImages.length === 1) {
-          const singleSourceImage = sourceImages[0];
-          if (singleSourceImage) {
-            imageForm.append('image', new Blob([singleSourceImage.buffer], { type: singleSourceImage.mime }), singleSourceImage.filename);
-          }
-        } else if (sourceImages.length > 1) {
-          sourceImages.forEach((image, index) => {
-            if (!image) return;
-            imageForm.append('image[]', new Blob([image.buffer], { type: image.mime }), image.filename || `poster-source-${index + 1}.png`);
-          });
-        }
-
-        const imageResponse = await fetch(imageEndpoint, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${OPENAI_API_KEY}`,
-          },
-          body: imageForm,
-        });
-
-        if (!imageResponse.ok) {
-          const err = await imageResponse.json().catch(() => ({}));
-          strapi.log.error('OpenAI marketplace ad image error:', err);
-          throw new Error(err?.error?.message || 'AI image generation is temporarily unavailable');
-        }
-
-        const imageData = await imageResponse.json();
-        return Array.isArray(imageData?.data) ? imageData.data : [];
-      };
-
-      let imageItems = [];
-      if (purpose === 'product_images' && count > 1) {
-        const sceneDirections = extractProductImageDirections(posterStyle, count);
-        for (let index = 0; index < count; index += 1) {
-          const sceneDirection = sceneDirections[index] || fallbackProductImageDirection(index, count, category);
-          const prompt = [
-            imagePrompt,
-            `Generate only image ${index + 1} of ${count} for this response.`,
-            `Specific required shot for this image: ${sceneDirection}`,
-            'Do not reuse the same camera angle, product crop, or scene from the other requested images.',
-          ].join(' ');
-          const items = await requestImages(prompt, 1);
-          imageItems.push(...items);
-        }
-      } else {
-        imageItems = await requestImages(imagePrompt, purpose === 'product_polish' ? 1 : count);
-      }
-
-      const creatives = imageItems
-        .map(/** @param {any} item @param {number} index */(item, index) => ({
-          id: `${Date.now()}_${index}`,
-          format: 'square_feed',
-          imageDataUrl: item?.b64_json ? `data:image/png;base64,${item.b64_json}` : '',
-          imageUrl: item?.url || '',
-          headline: copy.headline,
-          primaryText: copy.primaryText,
-          description: copy.description,
-          callToAction: copy.callToAction,
-          purpose,
-        }))
-        .filter(/** @param {{ imageDataUrl?: string, imageUrl?: string }} item */(item) => item.imageDataUrl || item.imageUrl);
-
-      if (!creatives.length) {
-        return ctx.badRequest('AI image generation returned no images');
-      }
-
-      return {
-        data: {
-          copy,
-          creatives,
-          source: sourceImages.length ? 'uploaded_or_product_image' : 'text_prompt',
-          purpose,
-        },
-      };
-    } catch (err) {
-      strapi.log.error('OpenAI marketplace ad creative exception:', err);
-      const message = err instanceof Error ? err.message : '';
-      if (message && /image generation|temporarily unavailable|OpenAI/i.test(message)) {
-        return ctx.badRequest(message);
-      }
-      return ctx.badRequest('AI ad creative generation is temporarily unavailable');
+  /**
+   * Poll the status/result of a marketplace ad-creative job.
+   * @param {any} ctx
+   */
+  async getMarketplaceAdCreativesJob(ctx) {
+    const user = await resolveUser(ctx);
+    if (!user?.id) {
+      return ctx.unauthorized('Authentication required');
     }
+
+    const jobId = String(ctx.params.jobId || '').trim();
+    const job = getJob(jobId);
+    if (!job || job.userId !== user.id) {
+      return ctx.notFound('Job not found');
+    }
+
+    if (job.status === 'completed') {
+      return { data: { status: 'completed', ...job.result } };
+    }
+    if (job.status === 'failed') {
+      return { data: { status: 'failed', error: job.error || 'AI ad creative generation failed' } };
+    }
+    return { data: { status: job.status } };
   },
 };

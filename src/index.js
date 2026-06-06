@@ -14,6 +14,7 @@ const ADMIN_ACADEMY_ACTIONS = [
 const AUTHENTICATED_ACTIONS = [
   'api::ai-chat.ai-chat.generateMarketplaceDescription',
   'api::ai-chat.ai-chat.generateMarketplaceAdCreatives',
+  'api::ai-chat.ai-chat.getMarketplaceAdCreativesJob',
   'api::product.product.commentVideo',
   'api::push-subscription.push-subscription.upsert',
   'api::push-subscription.push-subscription.remove',
