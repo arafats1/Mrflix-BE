@@ -1,7 +1,13 @@
 const corsOrigins = [
   process.env.FRONTEND_URL,
+  process.env.MRKEYP_URL,
+  process.env.PUBLIC_URL,
+  'https://www.movobrands.com',
+  'https://movobrands.com',
   'https://www.mymovokids.com',
   'https://mymovokids.com',
+  'https://mrflix.app',
+  'https://www.mrflix.app',
   ...(process.env.CORS_ORIGINS || '').split(',').map((origin) => origin.trim()).filter(Boolean),
 ].filter(Boolean);
 
@@ -42,7 +48,15 @@ module.exports = [
   {
     name: 'strapi::cors',
     config: {
-      origin: ['http://localhost:3000', 'http://localhost:3001', 'https://www.mymovokids.com', 'https://mymovokids.com', 'https://mrflix-ug.vercel.app', 'https://www.movobrands.com'],
+      origin: Array.from(new Set([
+        'http://localhost:3000',
+        'http://localhost:3001',
+        'http://localhost:3002',
+        'https://www.mymovokids.com',
+        'https://mymovokids.com',
+        'https://mrflix-ug.vercel.app',
+        ...corsOrigins,
+      ])),
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'],
       headers: ['Content-Type', 'Authorization', 'Origin', 'Accept', 'X-MrKeyp-Space-Owner', 'x-mrkeyp-space-owner', 'X-MrKeyp-Client', 'x-mrkeyp-client'],
       keepHeaderOnError: true,
