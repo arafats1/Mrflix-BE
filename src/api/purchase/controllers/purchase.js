@@ -506,6 +506,7 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
       deliveryAddress,
       deliveryPhone,
       contactName,
+      quantity: requestedQuantity,
       callbackUrl: rawCallbackUrl,
     } = ctx.request.body.data || ctx.request.body;
     const childProfileId = (ctx.request.body.data || ctx.request.body || {}).childProfileId;
@@ -585,11 +586,23 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
     }
 
     const settings = await strapi.entityService.findMany('api::site-setting.site-setting');
-    const amount = target.kind === 'provider_material' || target.kind === 'product'
+    const quantity = target.kind === 'product'
+      ? Math.max(1, parseInt(requestedQuantity, 10) || 1)
+      : 1;
+
+    let amount = target.kind === 'provider_material' || target.kind === 'product'
       ? target.amount
       : target.kind === 'book'
         ? getBookAmount(settings, purchaseType)
         : getMovieAmount(settings, target.movie, seasonNumber);
+
+    if (target.kind === 'product') {
+      amount = getDiscountedProductAmount(target.product) * quantity;
+      const stockQuantity = Number(target.product?.stockQuantity ?? 0);
+      if (target.product?.itemType !== 'service' && stockQuantity > 0 && quantity > stockQuantity) {
+        return ctx.badRequest(`Only ${stockQuantity} available in stock.`);
+      }
+    }
 
     if ((target.kind === 'provider_material' || target.kind === 'product') && amount <= 0) {
       return ctx.badRequest('This item is not available for purchase.');
@@ -634,6 +647,7 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
       buyer: ctx.state.user.id,
       childProfile: childProfile?.id || null,
       amount,
+      quantity: target.kind === 'product' ? quantity : 1,
       paymentMethod: manualSupplierPayment ? 'manual_supplier_payment' : payOnDeliveryOrder ? 'pay_on_delivery' : (paymentMethod || activeGateway),
       paymentPhone: paymentPhone || '',
       transactionId: merchantReference,

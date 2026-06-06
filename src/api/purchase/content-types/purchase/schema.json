@@ -36,6 +36,11 @@
       "type": "integer",
       "required": true
     },
+    "quantity": {
+      "type": "integer",
+      "default": 1,
+      "min": 1
+    },
     "paymentMethod": {
       "type": "enumeration",
       "enum": ["mtn_momo", "airtel_money", "pesapal", "dgateway", "yo", "pay_on_delivery", "manual_supplier_payment", "free_trial", "referral_referred", "referral_referrer"],

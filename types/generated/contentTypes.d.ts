@@ -3487,6 +3487,14 @@ export interface ApiPurchasePurchase extends Struct.CollectionTypeSchema {
     purchaseType: Schema.Attribute.Enumeration<
       ['read', 'download', 'book_subscription']
     >;
+    quantity: Schema.Attribute.Integer &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 1;
+        },
+        number
+      > &
+      Schema.Attribute.DefaultTo<1>;
     savingsDepositApplied: Schema.Attribute.Boolean &
       Schema.Attribute.DefaultTo<false>;
     seasonNumber: Schema.Attribute.Integer;
