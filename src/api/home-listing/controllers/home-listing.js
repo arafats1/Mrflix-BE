@@ -351,6 +351,50 @@ function listingInput(input, user, existing = {}) {
   };
 }
 
+function countListingPhotos(sections) {
+  return normalizeJsonArray(sections).reduce((sum, section) => sum + (Array.isArray(section?.images) ? section.images.filter(Boolean).length : 0), 0);
+}
+
+function hasMeaningfulDraftInput(raw, shaped = {}) {
+  const sections = normalizeJsonArray(raw.sections ?? shaped.sections);
+  return Boolean(
+    cleanString(raw.title ?? shaped.title, 160)
+    || cleanString(raw.location ?? shaped.location, 140)
+    || cleanString(raw.description ?? shaped.description, 4000)
+    || cleanString(raw.propertyType ?? shaped.propertyType, 80)
+    || positiveInt(raw.priceUGX ?? raw.price ?? shaped.priceUGX, 0) > 0
+    || countListingPhotos(sections) > 0
+  );
+}
+
+function applyDraftDefaults(input) {
+  const kind = input.kind || 'rent';
+  const title = input.title || 'Untitled listing';
+  return {
+    ...input,
+    title,
+    slug: input.slug || slugify(title),
+    location: input.location || 'Draft location',
+    propertyType: input.propertyType || (kind === 'stay' ? 'Entire home' : kind === 'sale' ? 'Other' : 'Apartment'),
+    description: input.description || 'Draft listing',
+  };
+}
+
+function validatePublishableListing(input) {
+  if (!input.title || input.title === 'Untitled listing') return 'Add a title before publishing';
+  if (!input.location || input.location === 'Draft location') return 'Add a location before publishing';
+  if (!input.propertyType) return 'Property type is required';
+  if (!input.description || input.description === 'Draft listing') return 'Add a description before publishing';
+  if (!input.priceUGX) return 'Price is required';
+  if (input.kind === 'sale' && !input.sizeLabel) return 'Size label is required for sale listings';
+  if (countListingPhotos(input.sections) === 0) return 'Add at least one photo before publishing';
+  return null;
+}
+
+function wantsDraftSave(raw) {
+  return raw.saveDraft === true || raw.status === 'draft' || raw.publish === false;
+}
+
 function normalizeDateList(input) {
   if (!Array.isArray(input)) return [];
   const seen = new Set();
@@ -511,10 +555,19 @@ module.exports = {
   async createListing(ctx) {
     if (!ctx.state.user) return ctx.unauthorized('Login required');
     const user = await fullUser(ctx.state.user.id);
-    const input = listingInput(bodyData(ctx), user);
-    if (!input.title || !input.location || !input.propertyType || !input.description || !input.priceUGX) return ctx.badRequest('Title, location, property type, description, and price are required');
+    const raw = bodyData(ctx);
+    const saveDraft = wantsDraftSave(raw);
+    let input = listingInput(raw, user);
+    if (saveDraft) {
+      if (!hasMeaningfulDraftInput(raw, input)) return ctx.badRequest('Add at least one field before saving a draft');
+      input = applyDraftDefaults(input);
+      input.status = 'draft';
+    } else {
+      const publishError = validatePublishableListing(input);
+      if (publishError) return ctx.badRequest(publishError);
+      input.status = 'published';
+    }
 
-    input.status = 'published';
     input.verificationStatus = (await hasApprovedKyc(user.id, input.ownerRole)) ? 'verified' : 'pending';
     input.owner = user.id;
     input.contactUnlockFeeUGX = await getHomesContactUnlockFeeUGX();
@@ -530,8 +583,23 @@ module.exports = {
     if (!listing) return ctx.notFound('Listing not found');
     if (!isAdmin(user) && Number(listing.owner?.id || 0) !== Number(user.id)) return ctx.forbidden('You can only edit your own listings');
 
-    const input = listingInput(bodyData(ctx), user, listing);
-    if (!isAdmin(user)) input.status = listing.status || 'published';
+    const raw = bodyData(ctx);
+    const saveDraft = wantsDraftSave(raw);
+    const publishNow = raw.publish === true || raw.status === 'published';
+    let input = listingInput(raw, user, listing);
+
+    if (saveDraft) {
+      if (!hasMeaningfulDraftInput(raw, input)) return ctx.badRequest('Add at least one field before saving a draft');
+      input = applyDraftDefaults(input);
+      input.status = 'draft';
+    } else if (publishNow) {
+      const publishError = validatePublishableListing(input);
+      if (publishError) return ctx.badRequest(publishError);
+      input.status = 'published';
+    } else if (!isAdmin(user)) {
+      input.status = listing.status || 'published';
+    }
+
     input.verificationStatus = (await hasApprovedKyc(user.id, input.ownerRole)) ? 'verified' : (listing.verificationStatus || 'pending');
     input.contactUnlockFeeUGX = await getHomesContactUnlockFeeUGX();
 
@@ -555,6 +623,8 @@ module.exports = {
       if (listing.status !== 'published') return ctx.badRequest('Only published listings can be unpublished');
       status = 'archived';
     } else if (action === 'publish') {
+      const publishError = validatePublishableListing(listingInput(listing, user, listing));
+      if (publishError) return ctx.badRequest(publishError);
       status = 'published';
     } else {
       return ctx.badRequest('Unknown action');
