@@ -1037,13 +1037,14 @@ module.exports = {
   },
 
   async impactStats(ctx) {
-    const [items, fundraisers, donorCount, beneficiaryCount] = await Promise.all([
+    const [items, receivedApplications, donorCount, beneficiaryCount] = await Promise.all([
       strapi.entityService.findMany(ITEM_UID, {
         fields: ['quantityTotal'],
         limit: 10000,
       }),
-      strapi.entityService.findMany(FUNDRAISER_UID, {
-        fields: ['quantityFulfilled'],
+      strapi.entityService.findMany(APPLICATION_UID, {
+        filters: { status: 'received' },
+        fields: ['quantityApproved', 'quantityRequested'],
         limit: 10000,
       }),
       strapi.db.query('plugin::users-permissions.user').count({
@@ -1055,14 +1056,17 @@ module.exports = {
     ]);
 
     const donatedItems = (items || []).reduce((sum, row) => sum + intValue(row.quantityTotal, 0), 0);
-    const collectedFundraiserItems = (fundraisers || []).reduce((sum, row) => sum + intValue(row.quantityFulfilled, 0), 0);
+    const itemsReceived = (receivedApplications || []).reduce(
+      (sum, row) => sum + intValue(row.quantityApproved || row.quantityRequested, 0),
+      0,
+    );
 
     return {
       data: {
         donatedItems,
         beneficiaries: Number(beneficiaryCount || 0),
         donors: Number(donorCount || 0),
-        collectedFundraiserItems,
+        itemsReceived,
       },
     };
   },
