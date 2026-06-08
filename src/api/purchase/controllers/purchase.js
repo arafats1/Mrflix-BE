@@ -460,11 +460,19 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
 
     const previousStatus = normalizeDeliveryStatus(purchase.deliveryStatus);
 
+    const updateData = {
+      deliveryStatus: nextStatus,
+    };
+
+    // Cash-on-delivery and direct supplier payments stay pending until the seller
+    // confirms delivery. Completing the purchase here keeps payment in sync with delivery.
+    if (nextStatus === 'delivered' && purchase.status === 'pending') {
+      updateData.status = 'completed';
+    }
+
     const updated = await strapi.documents('api::purchase.purchase').update({
       documentId: purchase.documentId,
-      data: {
-        deliveryStatus: nextStatus,
-      },
+      data: updateData,
       populate: {
         product: true,
         buyer: true,
