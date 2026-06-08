@@ -802,6 +802,10 @@ module.exports = {
     const fundraiser = await findFundraiserById(ctx.params.id);
     if (!fundraiser) return ctx.notFound('Fundraiser not found');
 
+    const viewer = await authUser(ctx);
+    const isCreator = viewer
+      && Number(fundraiser.creator?.id || fundraiser.creator) === Number(viewer.id);
+
     const pledges = await strapi.entityService.findMany(PLEDGE_UID, {
       filters: { fundraiser: fundraiser.id },
       sort: { createdAt: 'desc' },
@@ -823,7 +827,7 @@ module.exports = {
           id: row.id,
           quantity: row.quantity,
           itemDescription: row.itemDescription || null,
-          donorPhone: row.donorPhone || null,
+          donorPhone: isCreator ? (row.donorPhone || null) : null,
           createdAt: row.createdAt,
           donor: serializeUser(row.donor),
         })),
@@ -833,6 +837,7 @@ module.exports = {
           createdAt: row.createdAt,
           author: serializeUser(row.author),
         })),
+        isCreator,
       },
     };
   },
