@@ -430,6 +430,89 @@ module.exports = {
     return { data: { batchId, items: created } };
   },
 
+  async updateItem(ctx) {
+    const user = await requireUser(ctx);
+    if (!user) return;
+    if (user.foundationRole !== 'donor') return ctx.forbidden('Donor account required');
+
+    const item = await findItemById(ctx.params.id);
+    if (!item) return ctx.notFound('Item not found');
+    if (Number(item.donor?.id || item.donor) !== Number(user.id)) {
+      return ctx.forbidden('Not your listing');
+    }
+
+    const data = bodyData(ctx);
+    const update = {};
+    const committed = intValue(item.quantityTotal, 0) - intValue(item.quantityAvailable, 0);
+    const nextCategory = data.category !== undefined ? cleanString(data.category, 120) : item.category;
+
+    if (data.category !== undefined) {
+      if (!nextCategory) return ctx.badRequest('Category is required');
+      update.category = nextCategory === 'other' ? 'other' : nextCategory;
+    }
+    if (data.customItemName !== undefined || data.category !== undefined) {
+      const category = update.category || item.category;
+      const customItemName = cleanString(data.customItemName ?? item.customItemName, 160);
+      update.customItemName = category === 'other' ? customItemName : (customItemName || null);
+      if (category === 'other' && !update.customItemName) {
+        return ctx.badRequest('Specific item name is required for Other category');
+      }
+    }
+    if (data.condition !== undefined) {
+      if (!ITEM_CONDITIONS.includes(data.condition)) return ctx.badRequest('Invalid condition');
+      update.condition = data.condition;
+    }
+    if (data.details !== undefined) {
+      update.details = cleanString(data.details, 3000) || null;
+    }
+    if (data.photos !== undefined) {
+      update.photos = normalizeUrls(data.photos);
+    }
+    if (data.quantityTotal !== undefined) {
+      const quantityTotal = positiveInt(data.quantityTotal, 1);
+      if (quantityTotal < committed) {
+        return ctx.badRequest(`Quantity cannot be less than ${committed} (already allocated to beneficiaries)`);
+      }
+      const quantityAvailable = quantityTotal - committed;
+      update.quantityTotal = quantityTotal;
+      update.quantityAvailable = quantityAvailable;
+      update.status = computeItemStatus({ ...item, quantityTotal, quantityAvailable });
+    }
+
+    if (!Object.keys(update).length) return ctx.badRequest('No valid fields to update');
+
+    const updated = await strapi.entityService.update(ITEM_UID, item.id, { data: update });
+    return { data: serializeItem(updated) };
+  },
+
+  async deleteItem(ctx) {
+    const user = await requireUser(ctx);
+    if (!user) return;
+    if (user.foundationRole !== 'donor') return ctx.forbidden('Donor account required');
+
+    const item = await findItemById(ctx.params.id);
+    if (!item) return ctx.notFound('Item not found');
+    if (Number(item.donor?.id || item.donor) !== Number(user.id)) {
+      return ctx.forbidden('Not your listing');
+    }
+
+    const committed = intValue(item.quantityTotal, 0) - intValue(item.quantityAvailable, 0);
+    if (committed > 0) {
+      return ctx.badRequest('Cannot delete a listing that has already been allocated to beneficiaries');
+    }
+
+    const activeApps = await strapi.entityService.findMany(APPLICATION_UID, {
+      filters: { item: item.id, status: { $in: ['pending', 'booked'] } },
+      limit: 1,
+    });
+    if (activeApps?.length) {
+      return ctx.badRequest('Cannot delete a listing with active requests');
+    }
+
+    await strapi.entityService.delete(ITEM_UID, item.id);
+    return { data: { id: item.id, deleted: true } };
+  },
+
   async applyForItem(ctx) {
     const user = await requireUser(ctx);
     if (!user) return;

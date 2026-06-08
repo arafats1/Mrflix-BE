@@ -47,6 +47,8 @@ const AUTHENTICATED_ACTIONS = [
   'api::foundation-hub.foundation-hub.updateProfile',
   'api::foundation-hub.foundation-hub.myItems',
   'api::foundation-hub.foundation-hub.createItems',
+  'api::foundation-hub.foundation-hub.updateItem',
+  'api::foundation-hub.foundation-hub.deleteItem',
   'api::foundation-hub.foundation-hub.applyForItem',
   'api::foundation-hub.foundation-hub.myApplications',
   'api::foundation-hub.foundation-hub.myRequests',

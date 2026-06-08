@@ -9,6 +9,8 @@ module.exports = {
     { method: 'GET', path: '/foundation/items/:id', handler: 'foundation-hub.findItem', config: { auth: false } },
     { method: 'GET', path: '/foundation/me/items', handler: 'foundation-hub.myItems', config: { auth: { scope: [] } } },
     { method: 'POST', path: '/foundation/items', handler: 'foundation-hub.createItems', config: { auth: { scope: [] } } },
+    { method: 'PUT', path: '/foundation/items/:id', handler: 'foundation-hub.updateItem', config: { auth: { scope: [] } } },
+    { method: 'DELETE', path: '/foundation/items/:id', handler: 'foundation-hub.deleteItem', config: { auth: { scope: [] } } },
     { method: 'POST', path: '/foundation/items/:id/apply', handler: 'foundation-hub.applyForItem', config: { auth: { scope: [] } } },
     { method: 'GET', path: '/foundation/me/applications', handler: 'foundation-hub.myApplications', config: { auth: { scope: [] } } },
     { method: 'GET', path: '/foundation/me/requests', handler: 'foundation-hub.myRequests', config: { auth: { scope: [] } } },
