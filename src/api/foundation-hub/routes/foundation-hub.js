@@ -4,6 +4,7 @@ module.exports = {
     { method: 'POST', path: '/foundation/account', handler: 'foundation-hub.activateFoundationAccount', config: { auth: { scope: [] } } },
     { method: 'GET', path: '/foundation/profile/me', handler: 'foundation-hub.myProfile', config: { auth: { scope: [] } } },
     { method: 'PUT', path: '/foundation/profile', handler: 'foundation-hub.updateProfile', config: { auth: { scope: [] } } },
+    { method: 'GET', path: '/foundation/impact', handler: 'foundation-hub.impactStats', config: { auth: false } },
     { method: 'GET', path: '/foundation/items', handler: 'foundation-hub.listItems', config: { auth: false } },
     { method: 'GET', path: '/foundation/items/:id', handler: 'foundation-hub.findItem', config: { auth: false } },
     { method: 'GET', path: '/foundation/me/items', handler: 'foundation-hub.myItems', config: { auth: { scope: [] } } },

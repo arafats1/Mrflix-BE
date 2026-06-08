@@ -932,4 +932,35 @@ module.exports = {
       },
     };
   },
+
+  async impactStats(ctx) {
+    const [items, fundraisers, donorCount, beneficiaryCount] = await Promise.all([
+      strapi.entityService.findMany(ITEM_UID, {
+        fields: ['quantityTotal'],
+        limit: 10000,
+      }),
+      strapi.entityService.findMany(FUNDRAISER_UID, {
+        fields: ['quantityFulfilled'],
+        limit: 10000,
+      }),
+      strapi.db.query('plugin::users-permissions.user').count({
+        where: { foundationRole: 'donor' },
+      }),
+      strapi.db.query('plugin::users-permissions.user').count({
+        where: { foundationRole: 'beneficiary' },
+      }),
+    ]);
+
+    const donatedItems = (items || []).reduce((sum, row) => sum + intValue(row.quantityTotal, 0), 0);
+    const collectedFundraiserItems = (fundraisers || []).reduce((sum, row) => sum + intValue(row.quantityFulfilled, 0), 0);
+
+    return {
+      data: {
+        donatedItems,
+        beneficiaries: Number(beneficiaryCount || 0),
+        donors: Number(donorCount || 0),
+        collectedFundraiserItems,
+      },
+    };
+  },
 };
