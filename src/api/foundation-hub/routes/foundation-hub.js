@@ -18,6 +18,7 @@ module.exports = {
     { method: 'GET', path: '/foundation/fundraisers/:id', handler: 'foundation-hub.findFundraiser', config: { auth: false } },
     { method: 'GET', path: '/foundation/me/fundraisers', handler: 'foundation-hub.myFundraisers', config: { auth: { scope: [] } } },
     { method: 'POST', path: '/foundation/fundraisers', handler: 'foundation-hub.createFundraiser', config: { auth: { scope: [] } } },
+    { method: 'PUT', path: '/foundation/fundraisers/:id', handler: 'foundation-hub.updateFundraiser', config: { auth: { scope: [] } } },
     { method: 'POST', path: '/foundation/fundraisers/:id/pledge', handler: 'foundation-hub.pledgeFundraiser', config: { auth: { scope: [] } } },
     { method: 'POST', path: '/foundation/fundraisers/:id/comments', handler: 'foundation-hub.commentFundraiser', config: { auth: { scope: [] } } },
   ],

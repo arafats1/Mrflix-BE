@@ -1,7 +1,12 @@
 'use strict';
 
 const crypto = require('crypto');
-const { notifyDonorNewRequest, notifyBeneficiaryRequestApproved, notifyDonorItemReceived } = require('../../../utils/foundation-notifications');
+const {
+  notifyDonorNewRequest,
+  notifyBeneficiaryRequestApproved,
+  notifyDonorItemReceived,
+  notifyBeneficiaryFundraiserPledge,
+} = require('../../../utils/foundation-notifications');
 
 const PROFILE_UID = 'api::foundation-profile.foundation-profile';
 const ITEM_UID = 'api::foundation-item.foundation-item';
@@ -794,6 +799,55 @@ module.exports = {
     return { data: serializeFundraiser(fundraiser, { includeCreator: true }) };
   },
 
+  async updateFundraiser(ctx) {
+    const user = await requireUser(ctx);
+    if (!user) return;
+    if (user.foundationRole !== 'beneficiary') return ctx.forbidden('Beneficiary account required');
+
+    const fundraiser = await findFundraiserById(ctx.params.id);
+    if (!fundraiser) return ctx.notFound('Fundraiser not found');
+    if (Number(fundraiser.creator?.id || fundraiser.creator) !== Number(user.id)) {
+      return ctx.forbidden('Not your fundraiser');
+    }
+    if (fundraiser.status === 'archived') return ctx.badRequest('Archived fundraisers cannot be edited');
+
+    const data = bodyData(ctx);
+    const update = {};
+
+    if (data.title !== undefined) {
+      const title = cleanString(data.title, 200);
+      if (!title) return ctx.badRequest('Title is required');
+      update.title = title;
+      update.slug = slugify(title);
+    }
+    if (data.description !== undefined) {
+      const description = cleanString(data.description, 5000);
+      if (!description) return ctx.badRequest('Description is required');
+      update.description = description;
+    }
+    if (data.targetQuantity !== undefined) {
+      const targetQuantity = positiveInt(data.targetQuantity, 1);
+      const fulfilled = intValue(fundraiser.quantityFulfilled, 0);
+      if (targetQuantity < fulfilled) {
+        return ctx.badRequest(`Target must be at least ${fulfilled} (already pledged)`);
+      }
+      update.targetQuantity = targetQuantity;
+    }
+    if (data.photos !== undefined) {
+      update.photos = normalizeUrls(data.photos).slice(0, 6);
+    }
+
+    if (!Object.keys(update).length) return ctx.badRequest('No valid fields to update');
+
+    const updated = await strapi.entityService.update(FUNDRAISER_UID, fundraiser.id, {
+      data: update,
+      populate: { creator: { fields: ['id', 'documentId', 'fullName', 'username', 'email', 'phone', 'foundationRole'] } },
+    });
+    await syncFundraiserStatus(fundraiser.id);
+
+    return { data: serializeFundraiser(updated, { includeCreator: true }) };
+  },
+
   async pledgeFundraiser(ctx) {
     const user = await requireUser(ctx);
     if (!user) return;
@@ -829,13 +883,22 @@ module.exports = {
     });
     await syncFundraiserStatus(fundraiser.id);
 
+    const quantityRemaining = Math.max(0, intValue(fundraiser.targetQuantity, 0) - newFulfilled);
+    await notifyBeneficiaryFundraiserPledge(strapi, {
+      fundraiser,
+      pledge,
+      donor: user,
+      quantity,
+      quantityRemaining,
+    });
+
     return {
       data: {
         id: pledge.id,
         quantity: pledge.quantity,
         itemDescription: pledge.itemDescription || null,
         donorPhone: pledge.donorPhone || null,
-        quantityRemaining: Math.max(0, intValue(fundraiser.targetQuantity, 0) - newFulfilled),
+        quantityRemaining,
       },
     };
   },

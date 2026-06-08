@@ -89,8 +89,41 @@ async function notifyDonorItemReceived(strapi, { application, item, beneficiary,
   }
 }
 
+async function notifyBeneficiaryFundraiserPledge(strapi, { fundraiser, pledge, donor, quantity, quantityRemaining }) {
+  const beneficiaryId = Number(fundraiser?.creator?.id || fundraiser?.creator || 0);
+  const actorId = Number(donor?.id || 0);
+  if (!beneficiaryId || !actorId || beneficiaryId === actorId) return;
+
+  const donorName = donor?.fullName || donor?.username || 'A donor';
+  const campaignTitle = fundraiser?.title || 'your fundraiser';
+  const qty = Number(quantity || pledge?.quantity || 1);
+  const remaining = Math.max(0, Number(quantityRemaining ?? 0));
+  const progressHint = remaining > 0
+    ? ` ${remaining} still needed toward your goal.`
+    : ' Your fundraising goal is now fulfilled!';
+
+  try {
+    await createNotification(strapi, {
+      recipientId: beneficiaryId,
+      actorId,
+      type: 'system',
+      title: 'New fundraiser pledge',
+      message: `${donorName} pledged ${qty} toward "${campaignTitle}".${progressHint}`,
+      actionUrl: `/foundation/fundraisers/${fundraiser?.id || fundraiser?.documentId || ''}`,
+      metadata: {
+        category: 'foundation_fundraiser_pledge',
+        fundraiserId: fundraiser?.id || null,
+        pledgeId: pledge?.id || null,
+      },
+    });
+  } catch (err) {
+    strapi.log.warn(`Foundation pledge notification failed: ${err.message}`);
+  }
+}
+
 module.exports = {
   notifyDonorNewRequest,
   notifyBeneficiaryRequestApproved,
   notifyDonorItemReceived,
+  notifyBeneficiaryFundraiserPledge,
 };

@@ -55,6 +55,7 @@ const AUTHENTICATED_ACTIONS = [
   'api::foundation-hub.foundation-hub.markReceived',
   'api::foundation-hub.foundation-hub.myFundraisers',
   'api::foundation-hub.foundation-hub.createFundraiser',
+  'api::foundation-hub.foundation-hub.updateFundraiser',
   'api::foundation-hub.foundation-hub.pledgeFundraiser',
   'api::foundation-hub.foundation-hub.commentFundraiser',
 ];
