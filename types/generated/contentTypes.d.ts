@@ -2140,6 +2140,8 @@ export interface ApiFoundationApplicationFoundationApplication
       Schema.Attribute.Private;
     message: Schema.Attribute.Text;
     photos: Schema.Attribute.JSON & Schema.Attribute.DefaultTo<[]>;
+    pickupLocation: Schema.Attribute.String;
+    pickupPhone: Schema.Attribute.String;
     publishedAt: Schema.Attribute.DateTime;
     quantityApproved: Schema.Attribute.Integer &
       Schema.Attribute.SetMinMax<
@@ -2157,6 +2159,7 @@ export interface ApiFoundationApplicationFoundationApplication
         },
         number
       >;
+    receivedAt: Schema.Attribute.DateTime;
     status: Schema.Attribute.Enumeration<
       ['pending', 'approved', 'rejected', 'booked', 'received']
     > &
@@ -2226,6 +2229,7 @@ export interface ApiFoundationFundraiserPledgeFoundationFundraiserPledge
       'manyToOne',
       'plugin::users-permissions.user'
     >;
+    donorPhone: Schema.Attribute.String;
     fundraiser: Schema.Attribute.Relation<
       'manyToOne',
       'api::foundation-fundraiser.foundation-fundraiser'
@@ -2279,6 +2283,7 @@ export interface ApiFoundationFundraiserFoundationFundraiser
       'api::foundation-fundraiser.foundation-fundraiser'
     > &
       Schema.Attribute.Private;
+    photos: Schema.Attribute.JSON & Schema.Attribute.DefaultTo<[]>;
     publishedAt: Schema.Attribute.DateTime;
     quantityFulfilled: Schema.Attribute.Integer &
       Schema.Attribute.SetMinMax<

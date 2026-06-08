@@ -11,6 +11,7 @@
   "attributes": {
     "quantity": { "type": "integer", "required": true, "min": 1 },
     "itemDescription": { "type": "text" },
+    "donorPhone": { "type": "string" },
     "fundraiser": { "type": "relation", "relation": "manyToOne", "target": "api::foundation-fundraiser.foundation-fundraiser" },
     "donor": { "type": "relation", "relation": "manyToOne", "target": "plugin::users-permissions.user" }
   }

@@ -1,7 +1,7 @@
 'use strict';
 
 const crypto = require('crypto');
-const { notifyDonorNewRequest } = require('../../../utils/foundation-notifications');
+const { notifyDonorNewRequest, notifyBeneficiaryRequestApproved, notifyDonorItemReceived } = require('../../../utils/foundation-notifications');
 
 const PROFILE_UID = 'api::foundation-profile.foundation-profile';
 const ITEM_UID = 'api::foundation-item.foundation-item';
@@ -154,9 +154,12 @@ function serializeApplication(row) {
     quantityApproved: row.quantityApproved,
     message: row.message || null,
     photos: normalizeUrls(row.photos),
+    pickupLocation: row.pickupLocation || null,
+    pickupPhone: row.pickupPhone || null,
+    receivedAt: row.receivedAt || null,
     status: row.status,
     createdAt: row.createdAt,
-    item: serializeItem(row.item),
+    item: serializeItem(row.item, { includeDonor: true }),
     beneficiary: serializeUser(row.beneficiary),
   };
 }
@@ -174,6 +177,7 @@ function serializeFundraiser(row, { includeCreator = false } = {}) {
     quantityFulfilled: row.quantityFulfilled || 0,
     quantityRemaining: remaining,
     status: row.status,
+    photos: normalizeUrls(row.photos),
     createdAt: row.createdAt,
   };
   if (includeCreator && row.creator) payload.creator = serializeUser(row.creator);
@@ -340,11 +344,13 @@ module.exports = {
 
   async listItems(ctx) {
     const status = cleanString(ctx.query?.status, 40);
+    const donorId = intValue(ctx.query?.donorId, 0);
     const filters = {
       quantityAvailable: { $gt: 0 },
       status: { $in: ['available', 'partially_booked'] },
     };
     if (status && ITEM_STATUSES.includes(status)) filters.status = status;
+    if (donorId > 0) filters.donor = donorId;
 
     const rows = await strapi.entityService.findMany(ITEM_UID, {
       filters,
@@ -512,10 +518,10 @@ module.exports = {
     if (!itemIds.length) return { data: [] };
 
     const rows = await strapi.entityService.findMany(APPLICATION_UID, {
-      filters: { item: { id: { $in: itemIds } }, status: { $in: ['pending', 'approved', 'booked', 'received'] } },
+      filters: { item: { id: { $in: itemIds } }, status: { $in: ['pending', 'booked'] } },
       sort: { createdAt: 'desc' },
       populate: {
-        item: true,
+        item: { populate: { donor: { fields: ['id', 'documentId', 'fullName', 'username', 'email', 'phone', 'foundationRole'] } } },
         beneficiary: { fields: ['id', 'documentId', 'fullName', 'username', 'email', 'phone', 'foundationRole'] },
       },
       limit: 200,
@@ -599,9 +605,13 @@ module.exports = {
     }
 
     const approvedQty = positiveInt(data.quantityApproved || application.quantityRequested, application.quantityRequested);
+    const pickupLocation = cleanString(data.pickupLocation, 300);
+    const pickupPhone = cleanString(data.pickupPhone, 40);
     const available = intValue(item.quantityAvailable, 0);
     const finalQty = Math.min(approvedQty, available, application.quantityRequested);
     if (finalQty < 1) return ctx.badRequest('No quantity available to approve');
+    if (!pickupLocation) return ctx.badRequest('Pickup location is required');
+    if (!pickupPhone) return ctx.badRequest('Pickup phone number is required');
 
     const newAvailable = available - finalQty;
     const newItemStatus = computeItemStatus({ quantityAvailable: newAvailable, quantityTotal: item.quantityTotal });
@@ -616,9 +626,23 @@ module.exports = {
     const updated = await strapi.entityService.update(APPLICATION_UID, application.id, {
       data: {
         quantityApproved: finalQty,
+        pickupLocation,
+        pickupPhone,
         status: 'booked',
       },
-      populate: { item: true, beneficiary: true },
+      populate: {
+        item: { populate: { donor: { fields: ['id', 'documentId', 'fullName', 'username', 'email', 'phone', 'foundationRole'] } } },
+        beneficiary: { fields: ['id', 'documentId', 'fullName', 'username', 'email', 'phone', 'foundationRole'] },
+      },
+    });
+
+    await notifyBeneficiaryRequestApproved(strapi, {
+      application: updated,
+      item: updated.item || item,
+      beneficiary: updated.beneficiary || application.beneficiary,
+      donor: user,
+      pickupLocation,
+      pickupPhone,
     });
 
     return { data: serializeApplication(updated) };
@@ -632,7 +656,10 @@ module.exports = {
     const applicationId = ctx.params.id;
     const rows = await strapi.entityService.findMany(APPLICATION_UID, {
       filters: /^\d+$/.test(applicationId) ? { id: Number(applicationId) } : { documentId: applicationId },
-      populate: { item: true, beneficiary: true },
+      populate: {
+        item: { populate: { donor: { fields: ['id', 'documentId', 'fullName', 'username', 'email', 'phone', 'foundationRole'] } } },
+        beneficiary: { fields: ['id', 'documentId', 'fullName', 'username', 'email', 'phone', 'foundationRole'] },
+      },
       limit: 1,
     });
     const application = rows?.[0];
@@ -643,11 +670,22 @@ module.exports = {
     if (application.status !== 'booked') return ctx.badRequest('Item must be booked before confirming receipt');
 
     const updated = await strapi.entityService.update(APPLICATION_UID, application.id, {
-      data: { status: 'received' },
-      populate: { item: true, beneficiary: true },
+      data: { status: 'received', receivedAt: new Date().toISOString() },
+      populate: {
+        item: { populate: { donor: { fields: ['id', 'documentId', 'fullName', 'username', 'email', 'phone', 'foundationRole'] } } },
+        beneficiary: { fields: ['id', 'documentId', 'fullName', 'username', 'email', 'phone', 'foundationRole'] },
+      },
     });
 
-    const item = application.item;
+    const item = updated.item || application.item;
+    const donor = item?.donor;
+    await notifyDonorItemReceived(strapi, {
+      application: updated,
+      item,
+      beneficiary: user,
+      donor,
+    });
+
     const receivedApps = await strapi.entityService.findMany(APPLICATION_UID, {
       filters: { item: item.id, status: 'received' },
       fields: ['quantityApproved'],
@@ -697,6 +735,7 @@ module.exports = {
           id: row.id,
           quantity: row.quantity,
           itemDescription: row.itemDescription || null,
+          donorPhone: row.donorPhone || null,
           createdAt: row.createdAt,
           donor: serializeUser(row.donor),
         })),
@@ -736,6 +775,8 @@ module.exports = {
 
     if (!title || !description) return ctx.badRequest('Title and description are required');
 
+    const photos = normalizeUrls(data.photos).slice(0, 6);
+
     const fundraiser = await strapi.entityService.create(FUNDRAISER_UID, {
       data: {
         title,
@@ -744,6 +785,7 @@ module.exports = {
         targetQuantity,
         quantityFulfilled: 0,
         status: 'active',
+        photos,
         creator: user.id,
       },
       populate: { creator: { fields: ['id', 'documentId', 'fullName', 'username', 'email', 'phone', 'foundationRole'] } },
@@ -768,12 +810,16 @@ module.exports = {
     const quantity = positiveInt(data.quantity, 1);
     if (quantity > remaining) return ctx.badRequest(`Only ${remaining} remaining toward the goal`);
 
+    const donorPhone = cleanString(data.donorPhone, 40);
+    if (!donorPhone) return ctx.badRequest('Phone number is required to pledge');
+
     const pledge = await strapi.entityService.create(PLEDGE_UID, {
       data: {
         fundraiser: fundraiser.id,
         donor: user.id,
         quantity,
         itemDescription: cleanString(data.itemDescription, 2000) || null,
+        donorPhone,
       },
     });
 
@@ -788,6 +834,7 @@ module.exports = {
         id: pledge.id,
         quantity: pledge.quantity,
         itemDescription: pledge.itemDescription || null,
+        donorPhone: pledge.donorPhone || null,
         quantityRemaining: Math.max(0, intValue(fundraiser.targetQuantity, 0) - newFulfilled),
       },
     };

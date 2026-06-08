@@ -15,6 +15,7 @@
     "targetQuantity": { "type": "integer", "required": true, "min": 1 },
     "quantityFulfilled": { "type": "integer", "default": 0, "min": 0 },
     "status": { "type": "enumeration", "enum": ["active", "completed", "archived"], "default": "active", "required": true },
+    "photos": { "type": "json", "default": [] },
     "creator": { "type": "relation", "relation": "manyToOne", "target": "plugin::users-permissions.user" }
   }
 }
