@@ -3084,7 +3084,7 @@ export interface ApiProductProduct extends Struct.CollectionTypeSchema {
   };
   attributes: {
     ageRange: Schema.Attribute.String;
-    audience: Schema.Attribute.Enumeration<['children', 'adults']> &
+    audience: Schema.Attribute.Enumeration<['children', 'adults', 'both']> &
       Schema.Attribute.DefaultTo<'children'>;
     bodyType: Schema.Attribute.Enumeration<
       [
@@ -3214,7 +3214,7 @@ export interface ApiProductProduct extends Struct.CollectionTypeSchema {
     promotionBadgeLabel: Schema.Attribute.String;
     promotionKind: Schema.Attribute.Enumeration<['product', 'seller']>;
     publishedAt: Schema.Attribute.DateTime;
-    saleUnit: Schema.Attribute.Enumeration<['kilogram', 'piece', 'bundle']>;
+    saleUnit: Schema.Attribute.String;
     secondHandCondition: Schema.Attribute.Enumeration<
       [
         'After crash',

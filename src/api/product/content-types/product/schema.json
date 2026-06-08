@@ -78,12 +78,7 @@
       "default": "product"
     },
     "saleUnit": {
-      "type": "enumeration",
-      "enum": [
-        "kilogram",
-        "piece",
-        "bundle"
-      ]
+      "type": "string"
     },
     "size": {
       "type": "string"
@@ -212,7 +207,8 @@
       "type": "enumeration",
       "enum": [
         "children",
-        "adults"
+        "adults",
+        "both"
       ],
       "default": "children"
     },
