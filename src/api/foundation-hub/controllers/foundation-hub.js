@@ -351,8 +351,7 @@ module.exports = {
     const status = cleanString(ctx.query?.status, 40);
     const donorId = intValue(ctx.query?.donorId, 0);
     const filters = {
-      quantityAvailable: { $gt: 0 },
-      status: { $in: ['available', 'partially_booked'] },
+      status: { $in: ['available', 'partially_booked', 'booked'] },
     };
     if (status && ITEM_STATUSES.includes(status)) filters.status = status;
     if (donorId > 0) filters.donor = donorId;
@@ -649,6 +648,22 @@ module.exports = {
         beneficiary: { fields: ['id', 'documentId', 'fullName', 'username', 'email', 'phone', 'foundationRole'] },
       },
       limit: 200,
+    });
+
+    return { data: (rows || []).map((row) => serializeApplication(row)) };
+  },
+
+  async listReceivedDonations(ctx) {
+    const rows = await strapi.entityService.findMany(APPLICATION_UID, {
+      filters: { status: 'received' },
+      sort: { receivedAt: 'desc' },
+      populate: {
+        item: {
+          populate: { donor: { fields: ['id', 'documentId', 'fullName', 'username', 'email', 'phone', 'foundationRole'] } },
+        },
+        beneficiary: { fields: ['id', 'documentId', 'fullName', 'username', 'email', 'phone', 'foundationRole'] },
+      },
+      limit: Math.min(100, positiveInt(ctx.query?.limit, 50)),
     });
 
     return { data: (rows || []).map((row) => serializeApplication(row)) };

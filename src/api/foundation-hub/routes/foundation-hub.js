@@ -17,6 +17,7 @@ module.exports = {
     { method: 'GET', path: '/foundation/me/donation-history', handler: 'foundation-hub.donationHistory', config: { auth: { scope: [] } } },
     { method: 'PUT', path: '/foundation/applications/:id/review', handler: 'foundation-hub.reviewApplication', config: { auth: { scope: [] } } },
     { method: 'PUT', path: '/foundation/applications/:id/received', handler: 'foundation-hub.markReceived', config: { auth: { scope: [] } } },
+    { method: 'GET', path: '/foundation/received-donations', handler: 'foundation-hub.listReceivedDonations', config: { auth: false } },
     { method: 'GET', path: '/foundation/fundraisers', handler: 'foundation-hub.listFundraisers', config: { auth: false } },
     { method: 'GET', path: '/foundation/fundraisers/:id', handler: 'foundation-hub.findFundraiser', config: { auth: false } },
     { method: 'GET', path: '/foundation/me/fundraisers', handler: 'foundation-hub.myFundraisers', config: { auth: { scope: [] } } },
