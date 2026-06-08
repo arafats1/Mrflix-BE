@@ -2214,6 +2214,14 @@ export interface ApiHomeBookingHomeBooking extends Struct.CollectionTypeSchema {
     paymentPhone: Schema.Attribute.String;
     pesapalTrackingId: Schema.Attribute.String;
     publishedAt: Schema.Attribute.DateTime;
+    roomOptionIndex: Schema.Attribute.Integer &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0;
+        },
+        number
+      > &
+      Schema.Attribute.DefaultTo<0>;
     specialRequests: Schema.Attribute.Text;
     status: Schema.Attribute.Enumeration<
       ['pending', 'confirmed', 'cancelled', 'failed', 'completed']
@@ -2441,6 +2449,7 @@ export interface ApiHomeListingHomeListing extends Struct.CollectionTypeSchema {
         number
       > &
       Schema.Attribute.DefaultTo<0>;
+    roomOptions: Schema.Attribute.JSON;
     rules: Schema.Attribute.JSON;
     sections: Schema.Attribute.JSON;
     sizeLabel: Schema.Attribute.String;

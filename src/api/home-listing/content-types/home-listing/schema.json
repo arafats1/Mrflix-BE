@@ -24,6 +24,7 @@
     "bedrooms": { "type": "integer", "default": 0, "min": 0 },
     "bathrooms": { "type": "integer", "default": 0, "min": 0 },
     "guests": { "type": "integer", "default": 1, "min": 1 },
+    "roomOptions": { "type": "json" },
     "sizeLabel": { "type": "string" },
     "propertyType": { "type": "string", "required": true },
     "description": { "type": "text", "required": true },

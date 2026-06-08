@@ -48,6 +48,43 @@ function normalizeJsonArray(input) {
   return Array.isArray(input) ? input : [];
 }
 
+function normalizeRoomOptions(input) {
+  if (!Array.isArray(input)) return [];
+  return input.map((item) => ({
+    bedrooms: positiveInt(item?.bedrooms, 0),
+    bathrooms: positiveInt(item?.bathrooms, 0),
+    guests: Math.max(1, positiveInt(item?.guests, 1)),
+    priceUGX: positiveInt(item?.priceUGX ?? item?.price, 0),
+  })).filter((item) => item.priceUGX > 0 || item.bedrooms > 0 || item.bathrooms > 0 || item.guests > 1);
+}
+
+function getEffectiveRoomOptions(listing) {
+  const options = normalizeRoomOptions(listing?.roomOptions);
+  if (options.length) return options;
+  return [{
+    bedrooms: Number(listing?.bedrooms || 0),
+    bathrooms: Number(listing?.bathrooms || 0),
+    guests: Math.max(1, Number(listing?.guests || 1)),
+    priceUGX: Number(listing?.priceUGX || 0),
+  }];
+}
+
+function syncListingFromRoomOptions(input) {
+  const options = normalizeRoomOptions(input.roomOptions);
+  if (!options.length) return input;
+  const primary = options[0];
+  const prices = options.map((item) => item.priceUGX).filter((value) => value > 0);
+  const minPrice = prices.length ? Math.min(...prices) : primary.priceUGX;
+  return {
+    ...input,
+    roomOptions: options,
+    bedrooms: primary.bedrooms,
+    bathrooms: primary.bathrooms,
+    guests: Math.max(...options.map((item) => item.guests)),
+    priceUGX: minPrice > 0 ? minPrice : primary.priceUGX,
+  };
+}
+
 function normalizeKycDocuments(input) {
   const raw = input && typeof input === 'object' && !Array.isArray(input) ? input : {};
   const normalizeUrls = (value) => (Array.isArray(value) ? value.map((item) => cleanString(item, 1000)).filter(Boolean) : []);
@@ -287,6 +324,13 @@ function publicListing(listing, options = {}) {
     bedrooms: Number(listing.bedrooms || 0),
     bathrooms: Number(listing.bathrooms || 0),
     guests: Number(listing.guests || 1),
+    roomOptions: getEffectiveRoomOptions(listing),
+    hasMultipleRoomOptions: normalizeRoomOptions(listing.roomOptions).length > 1,
+    priceFromUGX: (() => {
+      const options = getEffectiveRoomOptions(listing);
+      const prices = options.map((item) => item.priceUGX).filter((value) => value > 0);
+      return prices.length ? Math.min(...prices) : Number(listing.priceUGX || 0);
+    })(),
     sizeLabel: listing.sizeLabel || '',
     propertyType: listing.propertyType || '',
     description: listing.description || '',
@@ -322,7 +366,7 @@ function listingInput(input, user, existing = {}) {
     : existing.status || 'published';
   const availabilityStatus = AVAILABILITY.includes(input.availabilityStatus) ? input.availabilityStatus : existing.availabilityStatus || 'available';
 
-  return {
+  const shaped = {
     title,
     slug: cleanString(input.slug || existing.slug || slugify(title), 180),
     kind,
@@ -348,7 +392,11 @@ function listingInput(input, user, existing = {}) {
     highlights: normalizeList(input.highlights ?? existing.highlights),
     sections: normalizeJsonArray(input.sections ?? existing.sections),
     rules: normalizeList(input.rules ?? existing.rules),
+    roomOptions: input.roomOptions !== undefined
+      ? normalizeRoomOptions(input.roomOptions)
+      : normalizeRoomOptions(existing.roomOptions),
   };
+  return syncListingFromRoomOptions(shaped);
 }
 
 function countListingPhotos(sections) {
@@ -363,6 +411,7 @@ function hasMeaningfulDraftInput(raw, shaped = {}) {
     || cleanString(raw.description ?? shaped.description, 4000)
     || cleanString(raw.propertyType ?? shaped.propertyType, 80)
     || positiveInt(raw.priceUGX ?? raw.price ?? shaped.priceUGX, 0) > 0
+    || normalizeRoomOptions(raw.roomOptions ?? shaped.roomOptions).some((item) => item.priceUGX > 0)
     || countListingPhotos(sections) > 0
   );
 }
@@ -822,7 +871,11 @@ module.exports = {
     if (!checkIn || !checkOut || !Number.isFinite(nights) || nights < 1) return ctx.badRequest('Valid check-in and checkout dates are required');
 
     const guests = Math.max(1, positiveInt(input.guests, 1));
-    if (guests > Number(listing.guests || 1)) return ctx.badRequest('Guest count is above this home capacity');
+    const roomOptions = getEffectiveRoomOptions(listing);
+    const roomOptionIndex = Math.max(0, positiveInt(input.roomOptionIndex, 0));
+    const selectedOption = roomOptions[roomOptionIndex] || roomOptions[0];
+    if (!selectedOption) return ctx.badRequest('Choose a room configuration before booking');
+    if (guests > Number(selectedOption.guests || listing.guests || 1)) return ctx.badRequest('Guest count is above this room configuration capacity');
 
     const requestedNights = expandNights(checkIn, checkOut);
     const bookedDates = await getBookedDates(listing.id);
@@ -835,9 +888,10 @@ module.exports = {
       if (unavailable) return ctx.badRequest(`The host has not opened ${unavailable} for booking.`);
     }
 
-    const amount = Number(listing.priceUGX || 0) * nights;
+    const nightlyPrice = Number(selectedOption.priceUGX || listing.priceUGX || 0);
+    const amount = nightlyPrice * nights;
     const entry = await strapi.entityService.create(BOOKING_UID, {
-      data: { listing: listing.id, guest: ctx.state.user.id, host: listing.owner?.id || null, checkIn, checkOut, guests, nights, amountUGX: amount, paymentPhone: cleanString(input.paymentPhone, 40), status: amount > 0 ? 'pending' : 'confirmed', specialRequests: cleanString(input.specialRequests, 1000) },
+      data: { listing: listing.id, guest: ctx.state.user.id, host: listing.owner?.id || null, checkIn, checkOut, guests, nights, amountUGX: amount, roomOptionIndex, paymentPhone: cleanString(input.paymentPhone, 40), status: amount > 0 ? 'pending' : 'confirmed', specialRequests: cleanString(input.specialRequests, 1000) },
     });
     if (amount <= 0) return { data: { booking: entry } };
 

@@ -16,6 +16,7 @@
     "checkIn": { "type": "date", "required": true },
     "checkOut": { "type": "date", "required": true },
     "guests": { "type": "integer", "default": 1, "min": 1 },
+    "roomOptionIndex": { "type": "integer", "default": 0, "min": 0 },
     "nights": { "type": "integer", "default": 1, "min": 1 },
     "amountUGX": { "type": "integer", "required": true, "min": 0 },
     "paymentMethod": { "type": "enumeration", "enum": ["pesapal", "dgateway", "yo", "admin_granted"], "default": "pesapal" },
