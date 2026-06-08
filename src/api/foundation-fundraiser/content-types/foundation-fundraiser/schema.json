@@ -1,0 +1,20 @@
+{
+  "kind": "collectionType",
+  "collectionName": "foundation_fundraisers",
+  "info": {
+    "singularName": "foundation-fundraiser",
+    "pluralName": "foundation-fundraisers",
+    "displayName": "Foundation Fundraiser",
+    "description": "Fundraising campaigns posted by beneficiaries"
+  },
+  "options": { "draftAndPublish": false },
+  "attributes": {
+    "title": { "type": "string", "required": true },
+    "slug": { "type": "uid", "targetField": "title" },
+    "description": { "type": "text", "required": true },
+    "targetQuantity": { "type": "integer", "required": true, "min": 1 },
+    "quantityFulfilled": { "type": "integer", "default": 0, "min": 0 },
+    "status": { "type": "enumeration", "enum": ["active", "completed", "archived"], "default": "active", "required": true },
+    "creator": { "type": "relation", "relation": "manyToOne", "target": "plugin::users-permissions.user" }
+  }
+}

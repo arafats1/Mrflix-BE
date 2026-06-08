@@ -2108,6 +2108,309 @@ export interface ApiExpoPushTokenExpoPushToken
   };
 }
 
+export interface ApiFoundationApplicationFoundationApplication
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'foundation_applications';
+  info: {
+    description: 'Beneficiary requests for donation items';
+    displayName: 'Foundation Application';
+    pluralName: 'foundation-applications';
+    singularName: 'foundation-application';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    beneficiary: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    item: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::foundation-item.foundation-item'
+    >;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::foundation-application.foundation-application'
+    > &
+      Schema.Attribute.Private;
+    message: Schema.Attribute.Text;
+    publishedAt: Schema.Attribute.DateTime;
+    quantityApproved: Schema.Attribute.Integer &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0;
+        },
+        number
+      > &
+      Schema.Attribute.DefaultTo<0>;
+    quantityRequested: Schema.Attribute.Integer &
+      Schema.Attribute.Required &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 1;
+        },
+        number
+      >;
+    status: Schema.Attribute.Enumeration<
+      ['pending', 'approved', 'rejected', 'booked', 'received']
+    > &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<'pending'>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
+export interface ApiFoundationFundraiserCommentFoundationFundraiserComment
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'foundation_fundraiser_comments';
+  info: {
+    description: 'Comments on fundraising campaigns';
+    displayName: 'Foundation Fundraiser Comment';
+    pluralName: 'foundation-fundraiser-comments';
+    singularName: 'foundation-fundraiser-comment';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    author: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+    body: Schema.Attribute.Text & Schema.Attribute.Required;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    fundraiser: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::foundation-fundraiser.foundation-fundraiser'
+    >;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::foundation-fundraiser-comment.foundation-fundraiser-comment'
+    > &
+      Schema.Attribute.Private;
+    publishedAt: Schema.Attribute.DateTime;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
+export interface ApiFoundationFundraiserPledgeFoundationFundraiserPledge
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'foundation_fundraiser_pledges';
+  info: {
+    description: 'Item quantity pledges from donors toward fundraisers';
+    displayName: 'Foundation Fundraiser Pledge';
+    pluralName: 'foundation-fundraiser-pledges';
+    singularName: 'foundation-fundraiser-pledge';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    donor: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+    fundraiser: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::foundation-fundraiser.foundation-fundraiser'
+    >;
+    itemDescription: Schema.Attribute.Text;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::foundation-fundraiser-pledge.foundation-fundraiser-pledge'
+    > &
+      Schema.Attribute.Private;
+    publishedAt: Schema.Attribute.DateTime;
+    quantity: Schema.Attribute.Integer &
+      Schema.Attribute.Required &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 1;
+        },
+        number
+      >;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
+export interface ApiFoundationFundraiserFoundationFundraiser
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'foundation_fundraisers';
+  info: {
+    description: 'Fundraising campaigns posted by beneficiaries';
+    displayName: 'Foundation Fundraiser';
+    pluralName: 'foundation-fundraisers';
+    singularName: 'foundation-fundraiser';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    creator: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+    description: Schema.Attribute.Text & Schema.Attribute.Required;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::foundation-fundraiser.foundation-fundraiser'
+    > &
+      Schema.Attribute.Private;
+    publishedAt: Schema.Attribute.DateTime;
+    quantityFulfilled: Schema.Attribute.Integer &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0;
+        },
+        number
+      > &
+      Schema.Attribute.DefaultTo<0>;
+    slug: Schema.Attribute.UID<'title'>;
+    status: Schema.Attribute.Enumeration<['active', 'completed', 'archived']> &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<'active'>;
+    targetQuantity: Schema.Attribute.Integer &
+      Schema.Attribute.Required &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 1;
+        },
+        number
+      >;
+    title: Schema.Attribute.String & Schema.Attribute.Required;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
+export interface ApiFoundationItemFoundationItem
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'foundation_items';
+  info: {
+    description: 'Donation items listed by donors on Movo Foundation';
+    displayName: 'Foundation Item';
+    pluralName: 'foundation-items';
+    singularName: 'foundation-item';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    batchId: Schema.Attribute.String & Schema.Attribute.Required;
+    category: Schema.Attribute.String & Schema.Attribute.Required;
+    condition: Schema.Attribute.Enumeration<
+      ['new', 'used', 'refurbished', 'good_condition']
+    > &
+      Schema.Attribute.Required;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    customItemName: Schema.Attribute.String;
+    details: Schema.Attribute.Text;
+    donor: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::foundation-item.foundation-item'
+    > &
+      Schema.Attribute.Private;
+    photos: Schema.Attribute.JSON & Schema.Attribute.DefaultTo<[]>;
+    publishedAt: Schema.Attribute.DateTime;
+    quantityAvailable: Schema.Attribute.Integer &
+      Schema.Attribute.Required &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0;
+        },
+        number
+      >;
+    quantityTotal: Schema.Attribute.Integer &
+      Schema.Attribute.Required &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 1;
+        },
+        number
+      >;
+    status: Schema.Attribute.Enumeration<
+      ['available', 'partially_booked', 'booked', 'completed']
+    > &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<'available'>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
+export interface ApiFoundationProfileFoundationProfile
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'foundation_profiles';
+  info: {
+    description: 'Extended profile for Movo Foundation donors and beneficiaries';
+    displayName: 'Foundation Profile';
+    pluralName: 'foundation-profiles';
+    singularName: 'foundation-profile';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    accountKind: Schema.Attribute.Enumeration<['individual', 'company']> &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<'individual'>;
+    affiliationGroup: Schema.Attribute.String;
+    bio: Schema.Attribute.Text;
+    contactPersonName: Schema.Attribute.String;
+    contactPersonPhone: Schema.Attribute.String;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::foundation-profile.foundation-profile'
+    > &
+      Schema.Attribute.Private;
+    organizationName: Schema.Attribute.String;
+    profilePhotoUrl: Schema.Attribute.String;
+    publishedAt: Schema.Attribute.DateTime;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    user: Schema.Attribute.Relation<
+      'oneToOne',
+      'plugin::users-permissions.user'
+    >;
+  };
+}
+
 export interface ApiFreeTrialWatchFreeTrialWatch
   extends Struct.CollectionTypeSchema {
   collectionName: 'free_trial_watches';
@@ -4629,6 +4932,7 @@ export interface PluginUsersPermissionsUser
       Schema.Attribute.SetMinMaxLength<{
         minLength: 6;
       }>;
+    foundationRole: Schema.Attribute.Enumeration<['donor', 'beneficiary']>;
     fullName: Schema.Attribute.String;
     hasBookLibraryAccess: Schema.Attribute.Boolean &
       Schema.Attribute.DefaultTo<false>;
@@ -4753,6 +5057,12 @@ declare module '@strapi/strapi' {
       'api::entrep-submission.entrep-submission': ApiEntrepSubmissionEntrepSubmission;
       'api::exclusive-subscription.exclusive-subscription': ApiExclusiveSubscriptionExclusiveSubscription;
       'api::expo-push-token.expo-push-token': ApiExpoPushTokenExpoPushToken;
+      'api::foundation-application.foundation-application': ApiFoundationApplicationFoundationApplication;
+      'api::foundation-fundraiser-comment.foundation-fundraiser-comment': ApiFoundationFundraiserCommentFoundationFundraiserComment;
+      'api::foundation-fundraiser-pledge.foundation-fundraiser-pledge': ApiFoundationFundraiserPledgeFoundationFundraiserPledge;
+      'api::foundation-fundraiser.foundation-fundraiser': ApiFoundationFundraiserFoundationFundraiser;
+      'api::foundation-item.foundation-item': ApiFoundationItemFoundationItem;
+      'api::foundation-profile.foundation-profile': ApiFoundationProfileFoundationProfile;
       'api::free-trial-watch.free-trial-watch': ApiFreeTrialWatchFreeTrialWatch;
       'api::home-booking.home-booking': ApiHomeBookingHomeBooking;
       'api::home-contact-unlock.home-contact-unlock': ApiHomeContactUnlockHomeContactUnlock;

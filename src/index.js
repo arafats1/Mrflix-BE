@@ -40,6 +40,23 @@ const AUTHENTICATED_ACTIONS = [
   'api::home-listing.home-listing.setAvailability',
   'api::home-listing.home-listing.createReview',
   'api::home-listing.home-listing.checkPaymentStatus',
+  // Foundation — authenticated routes
+  'api::foundation-hub.foundation-hub.foundationAccount',
+  'api::foundation-hub.foundation-hub.activateFoundationAccount',
+  'api::foundation-hub.foundation-hub.myProfile',
+  'api::foundation-hub.foundation-hub.updateProfile',
+  'api::foundation-hub.foundation-hub.myItems',
+  'api::foundation-hub.foundation-hub.createItems',
+  'api::foundation-hub.foundation-hub.applyForItem',
+  'api::foundation-hub.foundation-hub.myApplications',
+  'api::foundation-hub.foundation-hub.myRequests',
+  'api::foundation-hub.foundation-hub.donationHistory',
+  'api::foundation-hub.foundation-hub.reviewApplication',
+  'api::foundation-hub.foundation-hub.markReceived',
+  'api::foundation-hub.foundation-hub.myFundraisers',
+  'api::foundation-hub.foundation-hub.createFundraiser',
+  'api::foundation-hub.foundation-hub.pledgeFundraiser',
+  'api::foundation-hub.foundation-hub.commentFundraiser',
 ];
 
 async function ensureRolePermissions(strapi, roleType, actions) {

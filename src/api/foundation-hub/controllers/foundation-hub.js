@@ -1,0 +1,811 @@
+'use strict';
+
+const crypto = require('crypto');
+
+const PROFILE_UID = 'api::foundation-profile.foundation-profile';
+const ITEM_UID = 'api::foundation-item.foundation-item';
+const APPLICATION_UID = 'api::foundation-application.foundation-application';
+const FUNDRAISER_UID = 'api::foundation-fundraiser.foundation-fundraiser';
+const PLEDGE_UID = 'api::foundation-fundraiser-pledge.foundation-fundraiser-pledge';
+const COMMENT_UID = 'api::foundation-fundraiser-comment.foundation-fundraiser-comment';
+
+const FOUNDATION_ROLES = ['donor', 'beneficiary'];
+const ITEM_CONDITIONS = ['new', 'used', 'refurbished', 'good_condition'];
+const ITEM_STATUSES = ['available', 'partially_booked', 'booked', 'completed'];
+const APPLICATION_STATUSES = ['pending', 'approved', 'rejected', 'booked', 'received'];
+
+function bodyData(ctx) {
+  return ctx.request.body?.data || ctx.request.body || {};
+}
+
+function cleanString(value, max = 2000) {
+  return String(value || '').trim().slice(0, max);
+}
+
+function intValue(value, fallback = 0) {
+  const parsed = parseInt(value, 10);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function positiveInt(value, fallback = 1) {
+  return Math.max(1, intValue(value, fallback));
+}
+
+function normalizeMediaUrl(value) {
+  if (!value) return null;
+  if (typeof value === 'string') {
+    const cleaned = cleanString(value, 1000);
+    return cleaned && cleaned !== '[object Object]' ? cleaned : null;
+  }
+  if (typeof value === 'object' && typeof value.url === 'string') {
+    return cleanString(value.url, 1000) || null;
+  }
+  return null;
+}
+
+function normalizeUrls(input) {
+  if (!Array.isArray(input)) return [];
+  return input.map((item) => normalizeMediaUrl(item)).filter(Boolean);
+}
+
+function slugify(value) {
+  return cleanString(value, 140).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-+)|(-+$)/g, '') || `fundraiser-${Date.now()}`;
+}
+
+async function fullUser(userId) {
+  if (!userId) return null;
+  return strapi.query('plugin::users-permissions.user').findOne({
+    where: { id: userId },
+    populate: ['role'],
+  });
+}
+
+async function authUser(ctx) {
+  if (ctx.state.user?.id) {
+    const hydrated = await fullUser(ctx.state.user.id).catch(() => null);
+    return hydrated || ctx.state.user;
+  }
+
+  const authHeader = ctx.request.header?.authorization || ctx.request.headers?.authorization;
+  if (!authHeader?.startsWith('Bearer ')) return null;
+
+  try {
+    const token = authHeader.slice(7);
+    const { id } = await strapi.plugins['users-permissions'].services.jwt.verify(token);
+    if (!id) return null;
+    return await fullUser(id);
+  } catch {
+    return null;
+  }
+}
+
+async function requireUser(ctx) {
+  const user = await authUser(ctx);
+  if (!user) {
+    ctx.unauthorized('Login required');
+    return null;
+  }
+  return user;
+}
+
+function serializeUser(user) {
+  if (!user) return null;
+  return {
+    id: user.id,
+    documentId: user.documentId,
+    fullName: user.fullName || user.username,
+    email: user.email,
+    phone: user.phone || null,
+    foundationRole: user.foundationRole || null,
+  };
+}
+
+function serializeProfile(profile) {
+  if (!profile) return null;
+  return {
+    id: profile.id,
+    documentId: profile.documentId,
+    accountKind: profile.accountKind || 'individual',
+    profilePhotoUrl: normalizeMediaUrl(profile.profilePhotoUrl),
+    organizationName: profile.organizationName || null,
+    affiliationGroup: profile.affiliationGroup || null,
+    contactPersonName: profile.contactPersonName || null,
+    contactPersonPhone: profile.contactPersonPhone || null,
+    bio: profile.bio || null,
+    user: serializeUser(profile.user),
+  };
+}
+
+function itemDisplayName(item) {
+  if (item.customItemName) return item.customItemName;
+  return item.category || 'Item';
+}
+
+function serializeItem(item, { includeDonor = false } = {}) {
+  if (!item) return null;
+  const payload = {
+    id: item.id,
+    documentId: item.documentId,
+    batchId: item.batchId,
+    category: item.category,
+    customItemName: item.customItemName || null,
+    displayName: itemDisplayName(item),
+    condition: item.condition,
+    quantityTotal: item.quantityTotal,
+    quantityAvailable: item.quantityAvailable,
+    details: item.details || null,
+    photos: normalizeUrls(item.photos),
+    status: item.status,
+    createdAt: item.createdAt,
+  };
+  if (includeDonor && item.donor) {
+    payload.donor = serializeUser(item.donor);
+  }
+  return payload;
+}
+
+function serializeApplication(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    documentId: row.documentId,
+    quantityRequested: row.quantityRequested,
+    quantityApproved: row.quantityApproved,
+    message: row.message || null,
+    status: row.status,
+    createdAt: row.createdAt,
+    item: serializeItem(row.item),
+    beneficiary: serializeUser(row.beneficiary),
+  };
+}
+
+function serializeFundraiser(row, { includeCreator = false } = {}) {
+  if (!row) return null;
+  const remaining = Math.max(0, (row.targetQuantity || 0) - (row.quantityFulfilled || 0));
+  const payload = {
+    id: row.id,
+    documentId: row.documentId,
+    title: row.title,
+    slug: row.slug,
+    description: row.description,
+    targetQuantity: row.targetQuantity,
+    quantityFulfilled: row.quantityFulfilled || 0,
+    quantityRemaining: remaining,
+    status: row.status,
+    createdAt: row.createdAt,
+  };
+  if (includeCreator && row.creator) payload.creator = serializeUser(row.creator);
+  return payload;
+}
+
+async function findProfileByUser(userId) {
+  const rows = await strapi.entityService.findMany(PROFILE_UID, {
+    filters: { user: userId },
+    populate: { user: { fields: ['id', 'documentId', 'fullName', 'username', 'email', 'phone', 'foundationRole'] } },
+    limit: 1,
+  });
+  return rows?.[0] || null;
+}
+
+async function ensureProfile(user, data = {}) {
+  const existing = await findProfileByUser(user.id);
+  if (existing) return existing;
+
+  return strapi.entityService.create(PROFILE_UID, {
+    data: {
+      user: user.id,
+      accountKind: ['individual', 'company'].includes(data.accountKind) ? data.accountKind : 'individual',
+      organizationName: cleanString(data.organizationName, 200) || null,
+      affiliationGroup: cleanString(data.affiliationGroup, 200) || null,
+      contactPersonName: cleanString(data.contactPersonName, 120) || null,
+      contactPersonPhone: cleanString(data.contactPersonPhone, 40) || null,
+    },
+    populate: { user: { fields: ['id', 'documentId', 'fullName', 'username', 'email', 'phone', 'foundationRole'] } },
+  });
+}
+
+async function findItemById(id) {
+  const raw = cleanString(id, 80);
+  if (!raw) return null;
+
+  if (/^\d+$/.test(raw)) {
+    const byId = await strapi.entityService.findOne(ITEM_UID, Number(raw), {
+      populate: { donor: { fields: ['id', 'documentId', 'fullName', 'username', 'email', 'phone', 'foundationRole'] } },
+    }).catch(() => null);
+    if (byId) return byId;
+  }
+
+  const rows = await strapi.entityService.findMany(ITEM_UID, {
+    filters: { documentId: raw },
+    populate: { donor: { fields: ['id', 'documentId', 'fullName', 'username', 'email', 'phone', 'foundationRole'] } },
+    limit: 1,
+  });
+  return rows?.[0] || null;
+}
+
+async function findFundraiserById(id) {
+  const raw = cleanString(id, 80);
+  if (!raw) return null;
+
+  if (/^\d+$/.test(raw)) {
+    const byId = await strapi.entityService.findOne(FUNDRAISER_UID, Number(raw), {
+      populate: { creator: { fields: ['id', 'documentId', 'fullName', 'username', 'email', 'phone', 'foundationRole'] } },
+    }).catch(() => null);
+    if (byId) return byId;
+  }
+
+  const rows = await strapi.entityService.findMany(FUNDRAISER_UID, {
+    filters: { $or: [{ documentId: raw }, { slug: raw }] },
+    populate: { creator: { fields: ['id', 'documentId', 'fullName', 'username', 'email', 'phone', 'foundationRole'] } },
+    limit: 1,
+  });
+  return rows?.[0] || null;
+}
+
+function computeItemStatus(item) {
+  const available = intValue(item.quantityAvailable, 0);
+  const total = intValue(item.quantityTotal, 0);
+  if (available <= 0) return 'booked';
+  if (available < total) return 'partially_booked';
+  return 'available';
+}
+
+async function syncFundraiserStatus(fundraiserId) {
+  const fundraiser = await strapi.entityService.findOne(FUNDRAISER_UID, fundraiserId);
+  if (!fundraiser) return;
+
+  const fulfilled = intValue(fundraiser.quantityFulfilled, 0);
+  const target = intValue(fundraiser.targetQuantity, 0);
+  const nextStatus = fulfilled >= target && target > 0 ? 'completed' : fundraiser.status === 'archived' ? 'archived' : 'active';
+
+  if (nextStatus !== fundraiser.status) {
+    await strapi.entityService.update(FUNDRAISER_UID, fundraiserId, { data: { status: nextStatus } });
+  }
+}
+
+module.exports = {
+  async foundationAccount(ctx) {
+    const user = await requireUser(ctx);
+    if (!user) return;
+
+    const profile = await findProfileByUser(user.id);
+    return {
+      data: {
+        foundationRole: user.foundationRole || null,
+        profile: serializeProfile(profile),
+      },
+    };
+  },
+
+  async activateFoundationAccount(ctx) {
+    const user = await requireUser(ctx);
+    if (!user) return;
+
+    const data = bodyData(ctx);
+    const role = FOUNDATION_ROLES.includes(data.role) ? data.role : null;
+    if (!role) return ctx.badRequest('Select donor or beneficiary role');
+
+    await strapi.db.query('plugin::users-permissions.user').update({
+      where: { id: user.id },
+      data: { foundationRole: role },
+    });
+
+    const profile = await ensureProfile(user, data);
+
+    return {
+      data: {
+        foundationRole: role,
+        profile: serializeProfile(profile),
+      },
+    };
+  },
+
+  async myProfile(ctx) {
+    const user = await requireUser(ctx);
+    if (!user) return;
+
+    const profile = await findProfileByUser(user.id);
+    return { data: serializeProfile(profile) };
+  },
+
+  async updateProfile(ctx) {
+    const user = await requireUser(ctx);
+    if (!user) return;
+
+    if (!user.foundationRole) return ctx.forbidden('Activate a Foundation account first');
+
+    const data = bodyData(ctx);
+    const profile = await ensureProfile(user, data);
+    const update = {};
+
+    if (['individual', 'company'].includes(data.accountKind)) update.accountKind = data.accountKind;
+    if (data.profilePhotoUrl !== undefined) update.profilePhotoUrl = normalizeMediaUrl(data.profilePhotoUrl);
+    if (data.organizationName !== undefined) update.organizationName = cleanString(data.organizationName, 200) || null;
+    if (data.affiliationGroup !== undefined) update.affiliationGroup = cleanString(data.affiliationGroup, 200) || null;
+    if (data.contactPersonName !== undefined) update.contactPersonName = cleanString(data.contactPersonName, 120) || null;
+    if (data.contactPersonPhone !== undefined) update.contactPersonPhone = cleanString(data.contactPersonPhone, 40) || null;
+    if (data.bio !== undefined) update.bio = cleanString(data.bio, 3000) || null;
+
+    const updated = Object.keys(update).length
+      ? await strapi.entityService.update(PROFILE_UID, profile.id, {
+        data: update,
+        populate: { user: { fields: ['id', 'documentId', 'fullName', 'username', 'email', 'phone', 'foundationRole'] } },
+      })
+      : profile;
+
+    return { data: serializeProfile(updated) };
+  },
+
+  async listItems(ctx) {
+    const status = cleanString(ctx.query?.status, 40);
+    const filters = {
+      quantityAvailable: { $gt: 0 },
+      status: { $in: ['available', 'partially_booked'] },
+    };
+    if (status && ITEM_STATUSES.includes(status)) filters.status = status;
+
+    const rows = await strapi.entityService.findMany(ITEM_UID, {
+      filters,
+      sort: { createdAt: 'desc' },
+      populate: { donor: { fields: ['id', 'documentId', 'fullName', 'username', 'email', 'phone', 'foundationRole'] } },
+      limit: Math.min(100, positiveInt(ctx.query?.limit, 50)),
+    });
+
+    return { data: (rows || []).map((row) => serializeItem(row, { includeDonor: true })) };
+  },
+
+  async findItem(ctx) {
+    const item = await findItemById(ctx.params.id);
+    if (!item) return ctx.notFound('Item not found');
+    return { data: serializeItem(item, { includeDonor: true }) };
+  },
+
+  async myItems(ctx) {
+    const user = await requireUser(ctx);
+    if (!user) return;
+    if (user.foundationRole !== 'donor') return ctx.forbidden('Donor account required');
+
+    const rows = await strapi.entityService.findMany(ITEM_UID, {
+      filters: { donor: user.id },
+      sort: { createdAt: 'desc' },
+      limit: 200,
+    });
+
+    return { data: (rows || []).map((row) => serializeItem(row)) };
+  },
+
+  async createItems(ctx) {
+    const user = await requireUser(ctx);
+    if (!user) return;
+    if (user.foundationRole !== 'donor') return ctx.forbidden('Donor account required');
+
+    const data = bodyData(ctx);
+    const items = Array.isArray(data.items) ? data.items : [];
+    if (!items.length) return ctx.badRequest('Add at least one item to donate');
+
+    const batchId = crypto.randomUUID();
+    const created = [];
+
+    for (const entry of items) {
+      const category = cleanString(entry.category, 120);
+      const customItemName = cleanString(entry.customItemName, 160);
+      const condition = ITEM_CONDITIONS.includes(entry.condition) ? entry.condition : null;
+      const quantityTotal = positiveInt(entry.quantity, 1);
+
+      if (!category) continue;
+      if (!condition) continue;
+
+      const row = await strapi.entityService.create(ITEM_UID, {
+        data: {
+          batchId,
+          category: category === 'other' ? 'other' : category,
+          customItemName: category === 'other' ? customItemName : (customItemName || null),
+          condition,
+          quantityTotal,
+          quantityAvailable: quantityTotal,
+          details: cleanString(entry.details, 3000) || null,
+          photos: normalizeUrls(entry.photos),
+          status: 'available',
+          donor: user.id,
+        },
+      });
+      created.push(serializeItem(row));
+    }
+
+    if (!created.length) return ctx.badRequest('No valid items to post');
+
+    return { data: { batchId, items: created } };
+  },
+
+  async applyForItem(ctx) {
+    const user = await requireUser(ctx);
+    if (!user) return;
+    if (user.foundationRole !== 'beneficiary') return ctx.forbidden('Beneficiary account required');
+
+    const item = await findItemById(ctx.params.id);
+    if (!item) return ctx.notFound('Item not found');
+    if (item.status === 'booked' || item.status === 'completed') return ctx.badRequest('This item is no longer available');
+    if (Number(item.donor?.id || item.donor) === Number(user.id)) return ctx.badRequest('You cannot apply for your own donation');
+
+    const data = bodyData(ctx);
+    const quantityRequested = positiveInt(data.quantity, 1);
+    if (quantityRequested > intValue(item.quantityAvailable, 0)) {
+      return ctx.badRequest(`Only ${item.quantityAvailable} available`);
+    }
+
+    const profile = await findProfileByUser(user.id);
+    if (!profile?.profilePhotoUrl) {
+      return ctx.badRequest('Upload your profile photo on your dashboard before applying');
+    }
+
+    const existing = await strapi.entityService.findMany(APPLICATION_UID, {
+      filters: {
+        item: item.id,
+        beneficiary: user.id,
+        status: { $in: ['pending', 'approved', 'booked'] },
+      },
+      limit: 1,
+    });
+    if (existing?.[0]) return ctx.badRequest('You already have an active application for this item');
+
+    const application = await strapi.entityService.create(APPLICATION_UID, {
+      data: {
+        item: item.id,
+        beneficiary: user.id,
+        quantityRequested,
+        quantityApproved: 0,
+        message: cleanString(data.message, 2000) || null,
+        status: 'pending',
+      },
+      populate: {
+        item: true,
+        beneficiary: { fields: ['id', 'documentId', 'fullName', 'username', 'email', 'phone', 'foundationRole'] },
+      },
+    });
+
+    return { data: serializeApplication(application) };
+  },
+
+  async myApplications(ctx) {
+    const user = await requireUser(ctx);
+    if (!user) return;
+    if (user.foundationRole !== 'beneficiary') return ctx.forbidden('Beneficiary account required');
+
+    const rows = await strapi.entityService.findMany(APPLICATION_UID, {
+      filters: { beneficiary: user.id },
+      sort: { createdAt: 'desc' },
+      populate: {
+        item: { populate: { donor: { fields: ['id', 'documentId', 'fullName', 'username', 'email', 'phone', 'foundationRole'] } } },
+        beneficiary: { fields: ['id', 'documentId', 'fullName', 'username', 'email', 'phone', 'foundationRole'] },
+      },
+      limit: 200,
+    });
+
+    return { data: (rows || []).map((row) => serializeApplication(row)) };
+  },
+
+  async myRequests(ctx) {
+    const user = await requireUser(ctx);
+    if (!user) return;
+    if (user.foundationRole !== 'donor') return ctx.forbidden('Donor account required');
+
+    const myItems = await strapi.entityService.findMany(ITEM_UID, {
+      filters: { donor: user.id },
+      fields: ['id'],
+      limit: 500,
+    });
+    const itemIds = (myItems || []).map((row) => row.id);
+    if (!itemIds.length) return { data: [] };
+
+    const rows = await strapi.entityService.findMany(APPLICATION_UID, {
+      filters: { item: { id: { $in: itemIds } }, status: { $in: ['pending', 'approved', 'booked', 'received'] } },
+      sort: { createdAt: 'desc' },
+      populate: {
+        item: true,
+        beneficiary: { fields: ['id', 'documentId', 'fullName', 'username', 'email', 'phone', 'foundationRole'] },
+      },
+      limit: 200,
+    });
+
+    const beneficiaryIds = [...new Set((rows || []).map((row) => row.beneficiary?.id).filter(Boolean))];
+    const profiles = beneficiaryIds.length
+      ? await strapi.entityService.findMany(PROFILE_UID, {
+        filters: { user: { id: { $in: beneficiaryIds } } },
+        populate: { user: { fields: ['id'] } },
+        limit: beneficiaryIds.length,
+      })
+      : [];
+    const profileByUser = new Map((profiles || []).map((p) => [p.user?.id, serializeProfile(p)]));
+
+    return {
+      data: (rows || []).map((row) => ({
+        ...serializeApplication(row),
+        beneficiaryProfile: profileByUser.get(row.beneficiary?.id) || null,
+      })),
+    };
+  },
+
+  async donationHistory(ctx) {
+    const user = await requireUser(ctx);
+    if (!user) return;
+    if (user.foundationRole !== 'donor') return ctx.forbidden('Donor account required');
+
+    const rows = await strapi.entityService.findMany(APPLICATION_UID, {
+      filters: {
+        status: 'received',
+        item: { donor: user.id },
+      },
+      sort: { updatedAt: 'desc' },
+      populate: {
+        item: true,
+        beneficiary: { fields: ['id', 'documentId', 'fullName', 'username', 'email', 'phone', 'foundationRole'] },
+      },
+      limit: 200,
+    });
+
+    return { data: (rows || []).map((row) => serializeApplication(row)) };
+  },
+
+  async reviewApplication(ctx) {
+    const user = await requireUser(ctx);
+    if (!user) return;
+    if (user.foundationRole !== 'donor') return ctx.forbidden('Donor account required');
+
+    const applicationId = ctx.params.id;
+    const rows = await strapi.entityService.findMany(APPLICATION_UID, {
+      filters: /^\d+$/.test(applicationId) ? { id: Number(applicationId) } : { documentId: applicationId },
+      populate: { item: { populate: { donor: true } }, beneficiary: true },
+      limit: 1,
+    });
+    const application = rows?.[0];
+    if (!application) return ctx.notFound('Application not found');
+
+    const item = application.item;
+    const donorId = Number(item?.donor?.id || item?.donor);
+    if (donorId !== Number(user.id)) return ctx.forbidden('Not your donation item');
+
+    const data = bodyData(ctx);
+    const action = cleanString(data.action, 20);
+
+    if (action === 'reject') {
+      if (!['pending', 'approved'].includes(application.status)) {
+        return ctx.badRequest('Cannot reject this application');
+      }
+      const updated = await strapi.entityService.update(APPLICATION_UID, application.id, {
+        data: { status: 'rejected' },
+        populate: { item: true, beneficiary: true },
+      });
+      return { data: serializeApplication(updated) };
+    }
+
+    if (action !== 'approve') return ctx.badRequest('Use approve or reject');
+
+    if (!['pending', 'approved'].includes(application.status)) {
+      return ctx.badRequest('Application already processed');
+    }
+
+    const approvedQty = positiveInt(data.quantityApproved || application.quantityRequested, application.quantityRequested);
+    const available = intValue(item.quantityAvailable, 0);
+    const finalQty = Math.min(approvedQty, available, application.quantityRequested);
+    if (finalQty < 1) return ctx.badRequest('No quantity available to approve');
+
+    const newAvailable = available - finalQty;
+    const newItemStatus = computeItemStatus({ quantityAvailable: newAvailable, quantityTotal: item.quantityTotal });
+
+    await strapi.entityService.update(ITEM_UID, item.id, {
+      data: {
+        quantityAvailable: newAvailable,
+        status: newItemStatus,
+      },
+    });
+
+    const updated = await strapi.entityService.update(APPLICATION_UID, application.id, {
+      data: {
+        quantityApproved: finalQty,
+        status: 'booked',
+      },
+      populate: { item: true, beneficiary: true },
+    });
+
+    return { data: serializeApplication(updated) };
+  },
+
+  async markReceived(ctx) {
+    const user = await requireUser(ctx);
+    if (!user) return;
+    if (user.foundationRole !== 'beneficiary') return ctx.forbidden('Beneficiary account required');
+
+    const applicationId = ctx.params.id;
+    const rows = await strapi.entityService.findMany(APPLICATION_UID, {
+      filters: /^\d+$/.test(applicationId) ? { id: Number(applicationId) } : { documentId: applicationId },
+      populate: { item: true, beneficiary: true },
+      limit: 1,
+    });
+    const application = rows?.[0];
+    if (!application) return ctx.notFound('Application not found');
+    if (Number(application.beneficiary?.id || application.beneficiary) !== Number(user.id)) {
+      return ctx.forbidden('Not your application');
+    }
+    if (application.status !== 'booked') return ctx.badRequest('Item must be booked before confirming receipt');
+
+    const updated = await strapi.entityService.update(APPLICATION_UID, application.id, {
+      data: { status: 'received' },
+      populate: { item: true, beneficiary: true },
+    });
+
+    const item = application.item;
+    const receivedApps = await strapi.entityService.findMany(APPLICATION_UID, {
+      filters: { item: item.id, status: 'received' },
+      fields: ['quantityApproved'],
+      limit: 500,
+    });
+    const distributed = (receivedApps || []).reduce((sum, row) => sum + intValue(row.quantityApproved, 0), 0);
+    if (distributed >= intValue(item.quantityTotal, 0)) {
+      await strapi.entityService.update(ITEM_UID, item.id, { data: { status: 'completed' } });
+    }
+
+    return { data: serializeApplication(updated) };
+  },
+
+  async listFundraisers(ctx) {
+    const rows = await strapi.entityService.findMany(FUNDRAISER_UID, {
+      filters: { status: { $in: ['active', 'completed'] } },
+      sort: { createdAt: 'desc' },
+      populate: { creator: { fields: ['id', 'documentId', 'fullName', 'username', 'email', 'phone', 'foundationRole'] } },
+      limit: Math.min(100, positiveInt(ctx.query?.limit, 50)),
+    });
+
+    return { data: (rows || []).map((row) => serializeFundraiser(row, { includeCreator: true })) };
+  },
+
+  async findFundraiser(ctx) {
+    const fundraiser = await findFundraiserById(ctx.params.id);
+    if (!fundraiser) return ctx.notFound('Fundraiser not found');
+
+    const pledges = await strapi.entityService.findMany(PLEDGE_UID, {
+      filters: { fundraiser: fundraiser.id },
+      sort: { createdAt: 'desc' },
+      populate: { donor: { fields: ['id', 'documentId', 'fullName', 'username', 'email', 'phone', 'foundationRole'] } },
+      limit: 200,
+    });
+
+    const comments = await strapi.entityService.findMany(COMMENT_UID, {
+      filters: { fundraiser: fundraiser.id },
+      sort: { createdAt: 'desc' },
+      populate: { author: { fields: ['id', 'documentId', 'fullName', 'username', 'email', 'phone', 'foundationRole'] } },
+      limit: 200,
+    });
+
+    return {
+      data: {
+        ...serializeFundraiser(fundraiser, { includeCreator: true }),
+        pledges: (pledges || []).map((row) => ({
+          id: row.id,
+          quantity: row.quantity,
+          itemDescription: row.itemDescription || null,
+          createdAt: row.createdAt,
+          donor: serializeUser(row.donor),
+        })),
+        comments: (comments || []).map((row) => ({
+          id: row.id,
+          body: row.body,
+          createdAt: row.createdAt,
+          author: serializeUser(row.author),
+        })),
+      },
+    };
+  },
+
+  async myFundraisers(ctx) {
+    const user = await requireUser(ctx);
+    if (!user) return;
+    if (user.foundationRole !== 'beneficiary') return ctx.forbidden('Beneficiary account required');
+
+    const rows = await strapi.entityService.findMany(FUNDRAISER_UID, {
+      filters: { creator: user.id },
+      sort: { createdAt: 'desc' },
+      limit: 100,
+    });
+
+    return { data: (rows || []).map((row) => serializeFundraiser(row)) };
+  },
+
+  async createFundraiser(ctx) {
+    const user = await requireUser(ctx);
+    if (!user) return;
+    if (user.foundationRole !== 'beneficiary') return ctx.forbidden('Beneficiary account required');
+
+    const data = bodyData(ctx);
+    const title = cleanString(data.title, 200);
+    const description = cleanString(data.description, 5000);
+    const targetQuantity = positiveInt(data.targetQuantity, 1);
+
+    if (!title || !description) return ctx.badRequest('Title and description are required');
+
+    const fundraiser = await strapi.entityService.create(FUNDRAISER_UID, {
+      data: {
+        title,
+        slug: slugify(title),
+        description,
+        targetQuantity,
+        quantityFulfilled: 0,
+        status: 'active',
+        creator: user.id,
+      },
+      populate: { creator: { fields: ['id', 'documentId', 'fullName', 'username', 'email', 'phone', 'foundationRole'] } },
+    });
+
+    return { data: serializeFundraiser(fundraiser, { includeCreator: true }) };
+  },
+
+  async pledgeFundraiser(ctx) {
+    const user = await requireUser(ctx);
+    if (!user) return;
+    if (user.foundationRole !== 'donor') return ctx.forbidden('Donor account required');
+
+    const fundraiser = await findFundraiserById(ctx.params.id);
+    if (!fundraiser) return ctx.notFound('Fundraiser not found');
+    if (fundraiser.status === 'archived') return ctx.badRequest('Fundraiser is archived');
+
+    const remaining = Math.max(0, intValue(fundraiser.targetQuantity, 0) - intValue(fundraiser.quantityFulfilled, 0));
+    if (remaining < 1) return ctx.badRequest('This fundraiser goal is already fulfilled');
+
+    const data = bodyData(ctx);
+    const quantity = positiveInt(data.quantity, 1);
+    if (quantity > remaining) return ctx.badRequest(`Only ${remaining} remaining toward the goal`);
+
+    const pledge = await strapi.entityService.create(PLEDGE_UID, {
+      data: {
+        fundraiser: fundraiser.id,
+        donor: user.id,
+        quantity,
+        itemDescription: cleanString(data.itemDescription, 2000) || null,
+      },
+    });
+
+    const newFulfilled = intValue(fundraiser.quantityFulfilled, 0) + quantity;
+    await strapi.entityService.update(FUNDRAISER_UID, fundraiser.id, {
+      data: { quantityFulfilled: newFulfilled },
+    });
+    await syncFundraiserStatus(fundraiser.id);
+
+    return {
+      data: {
+        id: pledge.id,
+        quantity: pledge.quantity,
+        itemDescription: pledge.itemDescription || null,
+        quantityRemaining: Math.max(0, intValue(fundraiser.targetQuantity, 0) - newFulfilled),
+      },
+    };
+  },
+
+  async commentFundraiser(ctx) {
+    const user = await requireUser(ctx);
+    if (!user) return;
+
+    const fundraiser = await findFundraiserById(ctx.params.id);
+    if (!fundraiser) return ctx.notFound('Fundraiser not found');
+
+    const data = bodyData(ctx);
+    const body = cleanString(data.body, 3000);
+    if (!body) return ctx.badRequest('Comment cannot be empty');
+
+    const comment = await strapi.entityService.create(COMMENT_UID, {
+      data: {
+        fundraiser: fundraiser.id,
+        author: user.id,
+        body,
+      },
+      populate: { author: { fields: ['id', 'documentId', 'fullName', 'username', 'email', 'phone', 'foundationRole'] } },
+    });
+
+    return {
+      data: {
+        id: comment.id,
+        body: comment.body,
+        createdAt: comment.createdAt,
+        author: serializeUser(comment.author),
+      },
+    };
+  },
+};

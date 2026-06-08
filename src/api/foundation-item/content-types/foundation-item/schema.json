@@ -1,0 +1,23 @@
+{
+  "kind": "collectionType",
+  "collectionName": "foundation_items",
+  "info": {
+    "singularName": "foundation-item",
+    "pluralName": "foundation-items",
+    "displayName": "Foundation Item",
+    "description": "Donation items listed by donors on Movo Foundation"
+  },
+  "options": { "draftAndPublish": false },
+  "attributes": {
+    "batchId": { "type": "string", "required": true },
+    "category": { "type": "string", "required": true },
+    "customItemName": { "type": "string" },
+    "condition": { "type": "enumeration", "enum": ["new", "used", "refurbished", "good_condition"], "required": true },
+    "quantityTotal": { "type": "integer", "required": true, "min": 1 },
+    "quantityAvailable": { "type": "integer", "required": true, "min": 0 },
+    "details": { "type": "text" },
+    "photos": { "type": "json", "default": [] },
+    "status": { "type": "enumeration", "enum": ["available", "partially_booked", "booked", "completed"], "default": "available", "required": true },
+    "donor": { "type": "relation", "relation": "manyToOne", "target": "plugin::users-permissions.user" }
+  }
+}

@@ -35,7 +35,7 @@ async function requireUploadUser(ctx) {
   return user;
 }
 
-const OPEN_UPLOAD_FOLDERS = ['stories', 'entrep-documents', 'entrep-course-media', 'entrep-community-media', 'entrep-profile-media', 'entrep-assignments', 'entrep-lesson-question-responses', 'marketplace-chat', 'profile-pictures'];
+const OPEN_UPLOAD_FOLDERS = ['stories', 'entrep-documents', 'entrep-course-media', 'entrep-community-media', 'entrep-profile-media', 'entrep-assignments', 'entrep-lesson-question-responses', 'marketplace-chat', 'profile-pictures', 'foundation-images'];
 const PROVIDER_UPLOAD_FOLDERS = ['provider-materials', 'product-images', 'product-videos'];
 const HOMES_UPLOAD_FOLDERS = ['homes-kyc', 'homes-listings'];
 

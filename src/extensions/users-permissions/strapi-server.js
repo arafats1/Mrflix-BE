@@ -30,6 +30,7 @@ const RELIGION_OPTIONS = [
 const ACCOUNT_TYPE_OPTIONS = ['parent', 'provider', 'both'];
 const PROVIDER_TYPE_OPTIONS = ['teacher', 'religious', 'seller', 'musician', 'creative_artist', 'comedian'];
 const HOMES_ROLE_OPTIONS = ['guest', 'landlord', 'broker', 'host'];
+const FOUNDATION_ROLE_OPTIONS = ['donor', 'beneficiary'];
 const EDUCATION_LEVEL_OPTIONS = [
   'Kindergarten',
   'Primary',
@@ -146,6 +147,11 @@ module.exports = (plugin) => {
   plugin.contentTypes.user.schema.attributes.homesRole = {
     type: 'enumeration',
     enum: HOMES_ROLE_OPTIONS,
+  };
+
+  plugin.contentTypes.user.schema.attributes.foundationRole = {
+    type: 'enumeration',
+    enum: FOUNDATION_ROLE_OPTIONS,
   };
 
   plugin.contentTypes.user.schema.attributes.educationLevel = {
@@ -323,6 +329,7 @@ module.exports = (plugin) => {
       paymentPhone: userWithRole.paymentPhone || null,
       paymentCode: userWithRole.paymentCode || null,
       homesRole: userWithRole.homesRole || null,
+      foundationRole: userWithRole.foundationRole || null,
       educationLevel: userWithRole.educationLevel || null,
       educationLevels: Array.isArray(userWithRole.educationLevels)
         ? userWithRole.educationLevels.filter((level) => EDUCATION_LEVEL_OPTIONS.includes(level))
@@ -442,6 +449,7 @@ module.exports = (plugin) => {
         const country = typeof body.country === 'string' ? body.country.trim() : '';
         const schoolName = typeof body.schoolName === 'string' ? body.schoolName.trim() : '';
         const homesRole = HOMES_ROLE_OPTIONS.includes(body.homesRole) ? body.homesRole : undefined;
+        const foundationRole = FOUNDATION_ROLE_OPTIONS.includes(body.foundationRole) ? body.foundationRole : undefined;
         const religion = RELIGION_OPTIONS.includes(body.religion) ? body.religion : undefined;
         const isParent = wantsParent;
 
@@ -532,6 +540,7 @@ module.exports = (plugin) => {
           if (educationLevels.length > 0) updateData.educationLevels = educationLevels;
           if (educationLevels.includes('Other')) updateData.educationLevelOther = educationLevelOther;
           if (homesRole) updateData.homesRole = homesRole;
+          if (foundationRole) updateData.foundationRole = foundationRole;
 
           await strapi.db.query('plugin::users-permissions.user').update({
             where: { id: existingUser.id },
@@ -563,6 +572,7 @@ module.exports = (plugin) => {
           educationLevels: educationLevels.length > 0 ? educationLevels : undefined,
           educationLevelOther: educationLevels.includes('Other') ? educationLevelOther : undefined,
           homesRole,
+          foundationRole,
         };
 
         // Email is optional on phone-first signup. Strapi's core register
@@ -604,6 +614,7 @@ module.exports = (plugin) => {
         if (extras.educationLevels) updateData.educationLevels = extras.educationLevels;
         if (extras.educationLevelOther) updateData.educationLevelOther = extras.educationLevelOther;
         if (extras.homesRole) updateData.homesRole = extras.homesRole;
+        if (extras.foundationRole) updateData.foundationRole = extras.foundationRole;
         if (extras.accountType === 'provider') updateData.isParent = false;
 
         if (Object.keys(updateData).length > 0) {

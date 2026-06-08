@@ -1,0 +1,17 @@
+{
+  "kind": "collectionType",
+  "collectionName": "foundation_fundraiser_pledges",
+  "info": {
+    "singularName": "foundation-fundraiser-pledge",
+    "pluralName": "foundation-fundraiser-pledges",
+    "displayName": "Foundation Fundraiser Pledge",
+    "description": "Item quantity pledges from donors toward fundraisers"
+  },
+  "options": { "draftAndPublish": false },
+  "attributes": {
+    "quantity": { "type": "integer", "required": true, "min": 1 },
+    "itemDescription": { "type": "text" },
+    "fundraiser": { "type": "relation", "relation": "manyToOne", "target": "api::foundation-fundraiser.foundation-fundraiser" },
+    "donor": { "type": "relation", "relation": "manyToOne", "target": "plugin::users-permissions.user" }
+  }
+}

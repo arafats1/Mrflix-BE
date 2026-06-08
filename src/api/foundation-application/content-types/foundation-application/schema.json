@@ -1,0 +1,19 @@
+{
+  "kind": "collectionType",
+  "collectionName": "foundation_applications",
+  "info": {
+    "singularName": "foundation-application",
+    "pluralName": "foundation-applications",
+    "displayName": "Foundation Application",
+    "description": "Beneficiary requests for donation items"
+  },
+  "options": { "draftAndPublish": false },
+  "attributes": {
+    "quantityRequested": { "type": "integer", "required": true, "min": 1 },
+    "quantityApproved": { "type": "integer", "default": 0, "min": 0 },
+    "message": { "type": "text" },
+    "status": { "type": "enumeration", "enum": ["pending", "approved", "rejected", "booked", "received"], "default": "pending", "required": true },
+    "item": { "type": "relation", "relation": "manyToOne", "target": "api::foundation-item.foundation-item" },
+    "beneficiary": { "type": "relation", "relation": "manyToOne", "target": "plugin::users-permissions.user" }
+  }
+}

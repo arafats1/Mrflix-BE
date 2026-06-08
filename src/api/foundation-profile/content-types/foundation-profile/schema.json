@@ -1,0 +1,21 @@
+{
+  "kind": "collectionType",
+  "collectionName": "foundation_profiles",
+  "info": {
+    "singularName": "foundation-profile",
+    "pluralName": "foundation-profiles",
+    "displayName": "Foundation Profile",
+    "description": "Extended profile for Movo Foundation donors and beneficiaries"
+  },
+  "options": { "draftAndPublish": false },
+  "attributes": {
+    "accountKind": { "type": "enumeration", "enum": ["individual", "company"], "default": "individual", "required": true },
+    "profilePhotoUrl": { "type": "string" },
+    "organizationName": { "type": "string" },
+    "affiliationGroup": { "type": "string" },
+    "contactPersonName": { "type": "string" },
+    "contactPersonPhone": { "type": "string" },
+    "bio": { "type": "text" },
+    "user": { "type": "relation", "relation": "oneToOne", "target": "plugin::users-permissions.user" }
+  }
+}
