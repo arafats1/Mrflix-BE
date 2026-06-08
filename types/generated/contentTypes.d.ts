@@ -2139,6 +2139,7 @@ export interface ApiFoundationApplicationFoundationApplication
     > &
       Schema.Attribute.Private;
     message: Schema.Attribute.Text;
+    photos: Schema.Attribute.JSON & Schema.Attribute.DefaultTo<[]>;
     publishedAt: Schema.Attribute.DateTime;
     quantityApproved: Schema.Attribute.Integer &
       Schema.Attribute.SetMinMax<

@@ -1,6 +1,7 @@
 'use strict';
 
 const crypto = require('crypto');
+const { notifyDonorNewRequest } = require('../../../utils/foundation-notifications');
 
 const PROFILE_UID = 'api::foundation-profile.foundation-profile';
 const ITEM_UID = 'api::foundation-item.foundation-item';
@@ -152,6 +153,7 @@ function serializeApplication(row) {
     quantityRequested: row.quantityRequested,
     quantityApproved: row.quantityApproved,
     message: row.message || null,
+    photos: normalizeUrls(row.photos),
     status: row.status,
     createdAt: row.createdAt,
     item: serializeItem(row.item),
@@ -429,9 +431,13 @@ module.exports = {
 
     const data = bodyData(ctx);
     const quantityRequested = positiveInt(data.quantity, 1);
+    const message = cleanString(data.message, 2000);
+    const photos = normalizeUrls(data.photos).slice(0, 3);
+
     if (quantityRequested > intValue(item.quantityAvailable, 0)) {
       return ctx.badRequest(`Only ${item.quantityAvailable} available`);
     }
+    if (!message) return ctx.badRequest('Message is required');
 
     const profile = await findProfileByUser(user.id);
     if (!profile?.profilePhotoUrl) {
@@ -454,13 +460,21 @@ module.exports = {
         beneficiary: user.id,
         quantityRequested,
         quantityApproved: 0,
-        message: cleanString(data.message, 2000) || null,
+        message,
+        photos,
         status: 'pending',
       },
       populate: {
-        item: true,
+        item: { populate: { donor: { fields: ['id', 'documentId', 'fullName', 'username', 'email', 'phone', 'foundationRole'] } } },
         beneficiary: { fields: ['id', 'documentId', 'fullName', 'username', 'email', 'phone', 'foundationRole'] },
       },
+    });
+
+    await notifyDonorNewRequest(strapi, {
+      application,
+      item: application.item || item,
+      beneficiary: application.beneficiary || user,
+      donor: application.item?.donor || item.donor,
     });
 
     return { data: serializeApplication(application) };
