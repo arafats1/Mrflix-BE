@@ -13,8 +13,12 @@
     "profilePhotoUrl": { "type": "string" },
     "organizationName": { "type": "string" },
     "affiliationGroup": { "type": "string" },
+    "affiliationGroupOther": { "type": "string" },
+    "institutionCategory": { "type": "string" },
+    "institutionCategoryOther": { "type": "string" },
     "contactPersonName": { "type": "string" },
     "contactPersonPhone": { "type": "string" },
+    "contactPersonEmail": { "type": "string" },
     "bio": { "type": "text" },
     "user": { "type": "relation", "relation": "oneToOne", "target": "plugin::users-permissions.user" }
   }

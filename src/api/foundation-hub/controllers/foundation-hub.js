@@ -115,8 +115,12 @@ function serializeProfile(profile) {
     profilePhotoUrl: normalizeMediaUrl(profile.profilePhotoUrl),
     organizationName: profile.organizationName || null,
     affiliationGroup: profile.affiliationGroup || null,
+    affiliationGroupOther: profile.affiliationGroupOther || null,
+    institutionCategory: profile.institutionCategory || null,
+    institutionCategoryOther: profile.institutionCategoryOther || null,
     contactPersonName: profile.contactPersonName || null,
     contactPersonPhone: profile.contactPersonPhone || null,
+    contactPersonEmail: profile.contactPersonEmail || null,
     bio: profile.bio || null,
     user: serializeUser(profile.user),
   };
@@ -208,8 +212,12 @@ async function ensureProfile(user, data = {}) {
       accountKind: ['individual', 'company'].includes(data.accountKind) ? data.accountKind : 'individual',
       organizationName: cleanString(data.organizationName, 200) || null,
       affiliationGroup: cleanString(data.affiliationGroup, 200) || null,
+      affiliationGroupOther: cleanString(data.affiliationGroupOther, 200) || null,
+      institutionCategory: cleanString(data.institutionCategory, 120) || null,
+      institutionCategoryOther: cleanString(data.institutionCategoryOther, 200) || null,
       contactPersonName: cleanString(data.contactPersonName, 120) || null,
       contactPersonPhone: cleanString(data.contactPersonPhone, 40) || null,
+      contactPersonEmail: cleanString(data.contactPersonEmail, 160) || null,
     },
     populate: { user: { fields: ['id', 'documentId', 'fullName', 'username', 'email', 'phone', 'foundationRole'] } },
   });
@@ -333,8 +341,12 @@ module.exports = {
     if (data.profilePhotoUrl !== undefined) update.profilePhotoUrl = normalizeMediaUrl(data.profilePhotoUrl);
     if (data.organizationName !== undefined) update.organizationName = cleanString(data.organizationName, 200) || null;
     if (data.affiliationGroup !== undefined) update.affiliationGroup = cleanString(data.affiliationGroup, 200) || null;
+    if (data.affiliationGroupOther !== undefined) update.affiliationGroupOther = cleanString(data.affiliationGroupOther, 200) || null;
+    if (data.institutionCategory !== undefined) update.institutionCategory = cleanString(data.institutionCategory, 120) || null;
+    if (data.institutionCategoryOther !== undefined) update.institutionCategoryOther = cleanString(data.institutionCategoryOther, 200) || null;
     if (data.contactPersonName !== undefined) update.contactPersonName = cleanString(data.contactPersonName, 120) || null;
     if (data.contactPersonPhone !== undefined) update.contactPersonPhone = cleanString(data.contactPersonPhone, 40) || null;
+    if (data.contactPersonEmail !== undefined) update.contactPersonEmail = cleanString(data.contactPersonEmail, 160) || null;
     if (data.bio !== undefined) update.bio = cleanString(data.bio, 3000) || null;
 
     const updated = Object.keys(update).length

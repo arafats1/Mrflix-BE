@@ -2396,12 +2396,16 @@ export interface ApiFoundationProfileFoundationProfile
       Schema.Attribute.Required &
       Schema.Attribute.DefaultTo<'individual'>;
     affiliationGroup: Schema.Attribute.String;
+    affiliationGroupOther: Schema.Attribute.String;
     bio: Schema.Attribute.Text;
+    contactPersonEmail: Schema.Attribute.String;
     contactPersonName: Schema.Attribute.String;
     contactPersonPhone: Schema.Attribute.String;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    institutionCategory: Schema.Attribute.String;
+    institutionCategoryOther: Schema.Attribute.String;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
       'oneToMany',
