@@ -42,9 +42,14 @@ async function resolveUser(strapi, ctx) {
   }
 
   const authHeader = ctx.request.header?.authorization;
-  if (authHeader && authHeader.startsWith('Bearer ')) {
+  const bearerToken = authHeader && authHeader.startsWith('Bearer ')
+    ? authHeader.substring(7)
+    : null;
+  const queryToken = typeof ctx.query?.access_token === 'string' ? ctx.query.access_token : null;
+  const token = bearerToken || queryToken;
+
+  if (token) {
     try {
-      const token = authHeader.substring(7);
       const verified = await strapi.plugins['users-permissions'].services.jwt.verify(token);
       if (verified?.id) {
         return strapi.entityService.findOne('plugin::users-permissions.user', verified.id, { populate: ['role'] });
