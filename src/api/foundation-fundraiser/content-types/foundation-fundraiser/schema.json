@@ -12,8 +12,12 @@
     "title": { "type": "string", "required": true },
     "slug": { "type": "uid", "targetField": "title" },
     "description": { "type": "text", "required": true },
-    "targetQuantity": { "type": "integer", "required": true, "min": 1 },
+    "fundraiseItems": { "type": "boolean", "default": true },
+    "fundraiseMoney": { "type": "boolean", "default": false },
+    "targetQuantity": { "type": "integer", "default": 0, "min": 0 },
+    "targetAmountUGX": { "type": "biginteger", "default": 0 },
     "quantityFulfilled": { "type": "integer", "default": 0, "min": 0 },
+    "amountFulfilledUGX": { "type": "biginteger", "default": 0 },
     "status": { "type": "enumeration", "enum": ["active", "completed", "archived"], "default": "active", "required": true },
     "photos": { "type": "json", "default": [] },
     "creator": { "type": "relation", "relation": "manyToOne", "target": "plugin::users-permissions.user" }

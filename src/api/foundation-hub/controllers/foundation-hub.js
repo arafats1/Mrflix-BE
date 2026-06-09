@@ -37,6 +37,48 @@ function positiveInt(value, fallback = 1) {
   return Math.max(1, intValue(value, fallback));
 }
 
+function nonNegativeInt(value, fallback = 0) {
+  return Math.max(0, intValue(value, fallback));
+}
+
+function parseAmountUGX(value) {
+  if (value === undefined || value === null || value === '') return 0;
+  const digits = String(value).replace(/\D/g, '');
+  const parsed = Number(digits);
+  return Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
+}
+
+function fundraiserGoalFlags(row = {}) {
+  const targetQuantity = nonNegativeInt(row.targetQuantity, 0);
+  const targetAmountUGX = parseAmountUGX(row.targetAmountUGX);
+  const fundraiseItems = row.fundraiseItems === true || (row.fundraiseItems !== false && targetQuantity > 0);
+  const fundraiseMoney = row.fundraiseMoney === true || parseAmountUGX(row.targetAmountUGX) > 0;
+  return { fundraiseItems, fundraiseMoney, targetQuantity, targetAmountUGX };
+}
+
+function fundraiserProgress(row = {}) {
+  const { fundraiseItems, fundraiseMoney, targetQuantity, targetAmountUGX } = fundraiserGoalFlags(row);
+  const quantityFulfilled = nonNegativeInt(row.quantityFulfilled, 0);
+  const amountFulfilledUGX = parseAmountUGX(row.amountFulfilledUGX);
+  const quantityRemaining = fundraiseItems ? Math.max(0, targetQuantity - quantityFulfilled) : 0;
+  const amountRemainingUGX = fundraiseMoney ? Math.max(0, targetAmountUGX - amountFulfilledUGX) : 0;
+  const itemsGoalMet = !fundraiseItems || quantityRemaining <= 0;
+  const moneyGoalMet = !fundraiseMoney || amountRemainingUGX <= 0;
+  return {
+    fundraiseItems,
+    fundraiseMoney,
+    targetQuantity,
+    targetAmountUGX,
+    quantityFulfilled,
+    amountFulfilledUGX,
+    quantityRemaining,
+    amountRemainingUGX,
+    canPledgeItems: fundraiseItems && quantityRemaining > 0,
+    canPledgeMoney: fundraiseMoney && amountRemainingUGX > 0,
+    goalFulfilled: itemsGoalMet && moneyGoalMet,
+  };
+}
+
 function normalizeMediaUrl(value) {
   if (!value) return null;
   if (typeof value === 'string') {
@@ -175,16 +217,24 @@ function serializeApplication(row) {
 
 function serializeFundraiser(row, { includeCreator = false } = {}) {
   if (!row) return null;
-  const remaining = Math.max(0, (row.targetQuantity || 0) - (row.quantityFulfilled || 0));
+  const progress = fundraiserProgress(row);
   const payload = {
     id: row.id,
     documentId: row.documentId,
     title: row.title,
     slug: row.slug,
     description: row.description,
-    targetQuantity: row.targetQuantity,
-    quantityFulfilled: row.quantityFulfilled || 0,
-    quantityRemaining: remaining,
+    fundraiseItems: progress.fundraiseItems,
+    fundraiseMoney: progress.fundraiseMoney,
+    targetQuantity: progress.targetQuantity,
+    targetAmountUGX: progress.targetAmountUGX,
+    quantityFulfilled: progress.quantityFulfilled,
+    amountFulfilledUGX: progress.amountFulfilledUGX,
+    quantityRemaining: progress.quantityRemaining,
+    amountRemainingUGX: progress.amountRemainingUGX,
+    canPledgeItems: progress.canPledgeItems,
+    canPledgeMoney: progress.canPledgeMoney,
+    goalFulfilled: progress.goalFulfilled,
     status: row.status,
     photos: normalizeUrls(row.photos),
     createdAt: row.createdAt,
@@ -273,13 +323,44 @@ async function syncFundraiserStatus(fundraiserId) {
   const fundraiser = await strapi.entityService.findOne(FUNDRAISER_UID, fundraiserId);
   if (!fundraiser) return;
 
-  const fulfilled = intValue(fundraiser.quantityFulfilled, 0);
-  const target = intValue(fundraiser.targetQuantity, 0);
-  const nextStatus = fulfilled >= target && target > 0 ? 'completed' : fundraiser.status === 'archived' ? 'archived' : 'active';
+  const progress = fundraiserProgress(fundraiser);
+  const nextStatus = progress.goalFulfilled
+    ? 'completed'
+    : fundraiser.status === 'archived'
+      ? 'archived'
+      : 'active';
 
   if (nextStatus !== fundraiser.status) {
     await strapi.entityService.update(FUNDRAISER_UID, fundraiserId, { data: { status: nextStatus } });
   }
+}
+
+function parseFundraiserGoals(data = {}, existing = null) {
+  const fundraiseItems = data.fundraiseItems !== undefined ? !!data.fundraiseItems : (existing ? fundraiserGoalFlags(existing).fundraiseItems : true);
+  const fundraiseMoney = data.fundraiseMoney !== undefined ? !!data.fundraiseMoney : (existing ? fundraiserGoalFlags(existing).fundraiseMoney : false);
+  const targetQuantity = fundraiseItems
+    ? positiveInt(data.targetQuantity !== undefined ? data.targetQuantity : existing?.targetQuantity, 1)
+    : 0;
+  const targetAmountUGX = fundraiseMoney
+    ? positiveInt(data.targetAmountUGX !== undefined ? parseAmountUGX(data.targetAmountUGX) : parseAmountUGX(existing?.targetAmountUGX), 1)
+    : 0;
+
+  if (!fundraiseItems && !fundraiseMoney) {
+    return { error: 'Select at least one goal: items, money, or both.' };
+  }
+  if (fundraiseItems && targetQuantity < 1) {
+    return { error: 'Enter a target quantity for items.' };
+  }
+  if (fundraiseMoney && targetAmountUGX < 1) {
+    return { error: 'Enter a target amount for money.' };
+  }
+
+  return {
+    fundraiseItems,
+    fundraiseMoney,
+    targetQuantity,
+    targetAmountUGX,
+  };
 }
 
 module.exports = {
@@ -852,7 +933,9 @@ module.exports = {
         ...serializeFundraiser(fundraiser, { includeCreator: true }),
         pledges: (pledges || []).map((row) => ({
           id: row.id,
-          quantity: row.quantity,
+          pledgeType: row.pledgeType || 'items',
+          quantity: nonNegativeInt(row.quantity, 0),
+          amountUGX: parseAmountUGX(row.amountUGX),
           itemDescription: row.itemDescription || null,
           donorPhone: isCreator ? (row.donorPhone || null) : null,
           createdAt: row.createdAt,
@@ -891,9 +974,10 @@ module.exports = {
     const data = bodyData(ctx);
     const title = cleanString(data.title, 200);
     const description = cleanString(data.description, 5000);
-    const targetQuantity = positiveInt(data.targetQuantity, 1);
+    const goals = parseFundraiserGoals(data);
 
     if (!title || !description) return ctx.badRequest('Title and description are required');
+    if (goals.error) return ctx.badRequest(goals.error);
 
     const photos = normalizeUrls(data.photos).slice(0, 6);
 
@@ -902,8 +986,12 @@ module.exports = {
         title,
         slug: slugify(title),
         description,
-        targetQuantity,
+        fundraiseItems: goals.fundraiseItems,
+        fundraiseMoney: goals.fundraiseMoney,
+        targetQuantity: goals.targetQuantity,
+        targetAmountUGX: goals.targetAmountUGX,
         quantityFulfilled: 0,
+        amountFulfilledUGX: 0,
         status: 'active',
         photos,
         creator: user.id,
@@ -940,14 +1028,20 @@ module.exports = {
       if (!description) return ctx.badRequest('Description is required');
       update.description = description;
     }
-    if (data.targetQuantity !== undefined) {
-      const targetQuantity = positiveInt(data.targetQuantity, 1);
-      const fulfilled = intValue(fundraiser.quantityFulfilled, 0);
-      if (targetQuantity < fulfilled) {
-        return ctx.badRequest(`Target must be at least ${fulfilled} (already pledged)`);
-      }
-      update.targetQuantity = targetQuantity;
+    const goals = parseFundraiserGoals(data, fundraiser);
+    if (goals.error) return ctx.badRequest(goals.error);
+    const fulfilledQty = nonNegativeInt(fundraiser.quantityFulfilled, 0);
+    const fulfilledAmount = parseAmountUGX(fundraiser.amountFulfilledUGX);
+    if (goals.targetQuantity < fulfilledQty) {
+      return ctx.badRequest(`Item target must be at least ${fulfilledQty} (already pledged)`);
     }
+    if (goals.targetAmountUGX < fulfilledAmount) {
+      return ctx.badRequest(`Money target must be at least UGX ${fulfilledAmount.toLocaleString()} (already pledged)`);
+    }
+    update.fundraiseItems = goals.fundraiseItems;
+    update.fundraiseMoney = goals.fundraiseMoney;
+    update.targetQuantity = goals.targetQuantity;
+    update.targetAmountUGX = goals.targetAmountUGX;
     if (data.photos !== undefined) {
       update.photos = normalizeUrls(data.photos).slice(0, 6);
     }
@@ -972,48 +1066,74 @@ module.exports = {
     if (!fundraiser) return ctx.notFound('Fundraiser not found');
     if (fundraiser.status === 'archived') return ctx.badRequest('Fundraiser is archived');
 
-    const remaining = Math.max(0, intValue(fundraiser.targetQuantity, 0) - intValue(fundraiser.quantityFulfilled, 0));
-    if (remaining < 1) return ctx.badRequest('This fundraiser goal is already fulfilled');
-
+    const progress = fundraiserProgress(fundraiser);
     const data = bodyData(ctx);
-    const quantity = positiveInt(data.quantity, 1);
-    if (quantity > remaining) return ctx.badRequest(`Only ${remaining} remaining toward the goal`);
+    const pledgeType = data.pledgeType === 'money' ? 'money' : 'items';
+
+    if (pledgeType === 'items') {
+      if (!progress.canPledgeItems) return ctx.badRequest('This fundraiser is not accepting item pledges right now');
+    } else if (!progress.canPledgeMoney) {
+      return ctx.badRequest('This fundraiser is not accepting money pledges right now');
+    }
 
     const donorPhone = cleanString(data.donorPhone, 40);
     if (!donorPhone) return ctx.badRequest('Phone number is required to pledge');
+
+    let quantity = 0;
+    let amountUGX = 0;
+    if (pledgeType === 'items') {
+      quantity = positiveInt(data.quantity, 1);
+      if (quantity > progress.quantityRemaining) {
+        return ctx.badRequest(`Only ${progress.quantityRemaining} item(s) remaining toward the goal`);
+      }
+    } else {
+      amountUGX = positiveInt(parseAmountUGX(data.amountUGX), 1);
+      if (amountUGX > progress.amountRemainingUGX) {
+        return ctx.badRequest(`Only UGX ${progress.amountRemainingUGX.toLocaleString()} remaining toward the money goal`);
+      }
+    }
 
     const pledge = await strapi.entityService.create(PLEDGE_UID, {
       data: {
         fundraiser: fundraiser.id,
         donor: user.id,
+        pledgeType,
         quantity,
+        amountUGX,
         itemDescription: cleanString(data.itemDescription, 2000) || null,
         donorPhone,
       },
     });
 
-    const newFulfilled = intValue(fundraiser.quantityFulfilled, 0) + quantity;
-    await strapi.entityService.update(FUNDRAISER_UID, fundraiser.id, {
-      data: { quantityFulfilled: newFulfilled },
-    });
+    const fundraiserUpdate = {};
+    if (pledgeType === 'items') {
+      fundraiserUpdate.quantityFulfilled = progress.quantityFulfilled + quantity;
+    } else {
+      fundraiserUpdate.amountFulfilledUGX = progress.amountFulfilledUGX + amountUGX;
+    }
+    await strapi.entityService.update(FUNDRAISER_UID, fundraiser.id, { data: fundraiserUpdate });
     await syncFundraiserStatus(fundraiser.id);
 
-    const quantityRemaining = Math.max(0, intValue(fundraiser.targetQuantity, 0) - newFulfilled);
+    const refreshed = await strapi.entityService.findOne(FUNDRAISER_UID, fundraiser.id);
+    const refreshedProgress = fundraiserProgress(refreshed || fundraiser);
     await notifyBeneficiaryFundraiserPledge(strapi, {
-      fundraiser,
+      fundraiser: refreshed || fundraiser,
       pledge,
       donor: user,
-      quantity,
-      quantityRemaining,
+      quantity: pledgeType === 'items' ? quantity : 0,
+      quantityRemaining: refreshedProgress.quantityRemaining,
     });
 
     return {
       data: {
         id: pledge.id,
-        quantity: pledge.quantity,
+        pledgeType,
+        quantity,
+        amountUGX,
         itemDescription: pledge.itemDescription || null,
         donorPhone: pledge.donorPhone || null,
-        quantityRemaining,
+        quantityRemaining: refreshedProgress.quantityRemaining,
+        amountRemainingUGX: refreshedProgress.amountRemainingUGX,
       },
     };
   },

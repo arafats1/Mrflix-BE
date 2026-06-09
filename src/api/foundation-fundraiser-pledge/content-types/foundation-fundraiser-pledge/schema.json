@@ -9,7 +9,9 @@
   },
   "options": { "draftAndPublish": false },
   "attributes": {
-    "quantity": { "type": "integer", "required": true, "min": 1 },
+    "pledgeType": { "type": "enumeration", "enum": ["items", "money"], "default": "items", "required": true },
+    "quantity": { "type": "integer", "default": 0, "min": 0 },
+    "amountUGX": { "type": "biginteger", "default": 0 },
     "itemDescription": { "type": "text" },
     "donorPhone": { "type": "string" },
     "fundraiser": { "type": "relation", "relation": "manyToOne", "target": "api::foundation-fundraiser.foundation-fundraiser" },

@@ -2226,6 +2226,7 @@ export interface ApiFoundationFundraiserPledgeFoundationFundraiserPledge
     draftAndPublish: false;
   };
   attributes: {
+    amountUGX: Schema.Attribute.BigInteger & Schema.Attribute.DefaultTo<0>;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -2245,15 +2246,18 @@ export interface ApiFoundationFundraiserPledgeFoundationFundraiserPledge
       'api::foundation-fundraiser-pledge.foundation-fundraiser-pledge'
     > &
       Schema.Attribute.Private;
+    pledgeType: Schema.Attribute.Enumeration<['items', 'money']> &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<'items'>;
     publishedAt: Schema.Attribute.DateTime;
     quantity: Schema.Attribute.Integer &
-      Schema.Attribute.Required &
       Schema.Attribute.SetMinMax<
         {
-          min: 1;
+          min: 0;
         },
         number
-      >;
+      > &
+      Schema.Attribute.DefaultTo<0>;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -2273,6 +2277,8 @@ export interface ApiFoundationFundraiserFoundationFundraiser
     draftAndPublish: false;
   };
   attributes: {
+    amountFulfilledUGX: Schema.Attribute.BigInteger &
+      Schema.Attribute.DefaultTo<0>;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -2281,6 +2287,9 @@ export interface ApiFoundationFundraiserFoundationFundraiser
       'plugin::users-permissions.user'
     >;
     description: Schema.Attribute.Text & Schema.Attribute.Required;
+    fundraiseItems: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<true>;
+    fundraiseMoney: Schema.Attribute.Boolean &
+      Schema.Attribute.DefaultTo<false>;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
       'oneToMany',
@@ -2301,14 +2310,16 @@ export interface ApiFoundationFundraiserFoundationFundraiser
     status: Schema.Attribute.Enumeration<['active', 'completed', 'archived']> &
       Schema.Attribute.Required &
       Schema.Attribute.DefaultTo<'active'>;
+    targetAmountUGX: Schema.Attribute.BigInteger &
+      Schema.Attribute.DefaultTo<0>;
     targetQuantity: Schema.Attribute.Integer &
-      Schema.Attribute.Required &
       Schema.Attribute.SetMinMax<
         {
-          min: 1;
+          min: 0;
         },
         number
-      >;
+      > &
+      Schema.Attribute.DefaultTo<0>;
     title: Schema.Attribute.String & Schema.Attribute.Required;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
