@@ -96,13 +96,14 @@ module.exports = createCoreController('api::entrep-event.entrep-event', ({ strap
     }
 
     const filters = { $and: [] };
-    const shouldIncludePast = String(includePast || '').toLowerCase() === 'true';
-    if (shouldIncludePast) {
-      if (from) filters.$and.push({ startsAt: { $gte: from } });
-    } else {
+    const futureOnly = String(ctx.query?.futureOnly || '').toLowerCase() === 'true'
+      || String(includePast || '').toLowerCase() === 'false';
+    if (futureOnly) {
       const fromTime = from && !Number.isNaN(Date.parse(from)) ? Date.parse(from) : null;
       const effectiveFrom = new Date(Math.max(fromTime || 0, Date.now())).toISOString();
       filters.$and.push({ startsAt: { $gte: effectiveFrom } });
+    } else if (from) {
+      filters.$and.push({ startsAt: { $gte: from } });
     }
     if (to) filters.$and.push({ startsAt: { $lte: to } });
 

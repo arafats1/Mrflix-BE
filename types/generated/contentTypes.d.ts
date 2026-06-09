@@ -1490,6 +1490,8 @@ export interface ApiEntrepLiveSessionEntrepLiveSession
       ['public', 'course', 'cluster', 'alumni']
     > &
       Schema.Attribute.DefaultTo<'public'>;
+    cloudMediaEnabled: Schema.Attribute.Boolean &
+      Schema.Attribute.DefaultTo<false>;
     cluster: Schema.Attribute.Relation<
       'manyToOne',
       'api::entrep-cluster.entrep-cluster'

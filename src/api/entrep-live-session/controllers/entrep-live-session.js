@@ -3,6 +3,7 @@
 const { createCoreController } = require('@strapi/strapi').factories;
 const crypto = require('crypto');
 const whereby = require('../../../utils/whereby');
+const wherebyS3 = require('../../../utils/whereby-s3');
 const { listCourseLearnerIds, notifyUsers } = require('../../../utils/entrep-notifications');
 const { inferExtension, sanitizeKeySegment, toNodeReadableStream, uploadStreamToStorage } = require('../../../utils/storage');
 
@@ -172,12 +173,12 @@ function firstObject(...values) {
   return values.find((value) => value && typeof value === 'object') || null;
 }
 
-function extractRecordingPayload(payload) {
+function extractWebhookPayload(payload) {
   const data = firstObject(payload?.data, payload?.payload, payload?.eventData, payload?.object) || {};
   const recording = firstObject(payload?.recording, data?.recording, payload?.recordingData, data?.recordingData) || {};
-  const transcript = firstObject(payload?.transcript, data?.transcript) || {};
+  const transcript = firstObject(payload?.transcript, data?.transcript, payload?.transcription, data?.transcription) || {};
   const eventType = firstString(payload?.event, payload?.type, payload?.topic, payload?.name, data?.event, data?.type).toLowerCase();
-  const status = firstString(payload?.status, recording?.status, data?.status).toLowerCase();
+  const status = firstString(payload?.status, recording?.status, data?.status, transcript?.status).toLowerCase();
   const meetingId = firstString(
     payload?.meetingId,
     payload?.roomId,
@@ -188,6 +189,24 @@ function extractRecordingPayload(payload) {
     recording?.meetingId,
     recording?.roomId,
     recording?.sessionId
+  );
+  const recordingId = firstString(
+    payload?.recordingId,
+    data?.recordingId,
+    recording?.recordingId,
+    recording?.id
+  );
+  const transcriptionId = firstString(
+    payload?.transcriptionId,
+    data?.transcriptionId,
+    transcript?.transcriptionId,
+    transcript?.id
+  );
+  const filename = firstString(
+    payload?.filename,
+    data?.filename,
+    recording?.filename,
+    transcript?.filename
   );
   const recordingUrl = firstString(
     payload?.recordingUrl,
@@ -208,23 +227,70 @@ function extractRecordingPayload(payload) {
     data?.transcriptUrl,
     transcript?.url,
     transcript?.downloadUrl,
-    transcript?.fileUrl
+    transcript?.fileUrl,
+    transcript?.accessLink
   );
 
   return {
     eventType,
     status,
     meetingId,
+    recordingId,
+    transcriptionId,
+    filename,
     recordingUrl,
     transcriptUrl,
   };
 }
 
 function shouldSyncRecording(details) {
-  if (!details?.meetingId || !details?.recordingUrl) return false;
+  if (!details?.meetingId) return false;
+  if (!details.recordingUrl && !details.filename && !details.recordingId) return false;
+
   const fingerprint = `${details.eventType} ${details.status}`;
   if (!fingerprint.trim()) return true;
-  return /(record|cloud_recording)/.test(fingerprint) && /(stop|complete|ready|available|uploaded|finish)/.test(fingerprint);
+  return /(record|cloud_recording|recording\.finished)/.test(fingerprint)
+    && /(stop|complete|ready|available|uploaded|finish|finished)/.test(fingerprint);
+}
+
+function shouldSyncTranscription(details) {
+  if (!details?.meetingId) return false;
+  if (!details.transcriptUrl && !details.transcriptionId && !details.filename) return false;
+
+  const fingerprint = `${details.eventType} ${details.status}`;
+  if (!fingerprint.trim()) return true;
+  return /(transcript|transcription)/.test(fingerprint)
+    && /(stop|complete|ready|available|uploaded|finish|finished)/.test(fingerprint);
+}
+
+async function resolveRecordingUrl(details) {
+  if (details.recordingUrl) return details.recordingUrl;
+
+  if (details.filename && wherebyS3.isConfigured()) {
+    return wherebyS3.getPresignedObjectUrl(details.filename);
+  }
+
+  if (details.recordingId && whereby.isEnabled()) {
+    const access = await whereby.getRecordingAccessLink(details.recordingId);
+    return firstString(access?.accessLink, access?.url, access?.downloadUrl);
+  }
+
+  return null;
+}
+
+async function resolveTranscriptUrl(details) {
+  if (details.transcriptUrl) return details.transcriptUrl;
+
+  if (details.filename && wherebyS3.isConfigured()) {
+    return wherebyS3.getPresignedObjectUrl(details.filename);
+  }
+
+  if (details.transcriptionId && whereby.isEnabled()) {
+    const access = await whereby.getTranscriptionAccessLink(details.transcriptionId);
+    return firstString(access?.accessLink, access?.url, access?.downloadUrl);
+  }
+
+  return null;
 }
 
 async function uploadRemoteRecording(session, sourceUrl) {
@@ -275,9 +341,9 @@ async function notifyRecordingAvailable(strapi, session) {
   });
 }
 
-async function syncRecordingForMeeting(strapi, details) {
+async function findSessionByMeetingId(strapi, meetingId) {
   const sessions = await strapi.entityService.findMany('api::entrep-live-session.entrep-live-session', {
-    filters: { wherebyMeetingId: details.meetingId },
+    filters: { wherebyMeetingId: meetingId },
     limit: 1,
     populate: {
       trainer: { populate: ['user'] },
@@ -285,34 +351,194 @@ async function syncRecordingForMeeting(strapi, details) {
       cluster: true,
     },
   });
-  const session = sessions?.[0];
-  if (!session) return null;
+  return sessions?.[0] || null;
+}
 
-  if (session.recordingUrl) {
-    if (details.transcriptUrl && !session.transcriptUrl) {
-      return strapi.entityService.update('api::entrep-live-session.entrep-live-session', session.id, {
-        data: {
-          transcriptUrl: details.transcriptUrl,
-          status: 'ended',
-        },
-        populate: { trainer: { populate: ['user'] }, course: true, cluster: true },
-      });
-    }
-    return session;
-  }
+async function persistSessionMedia(strapi, session, { recordingUrl, transcriptUrl, notifyRecording = false } = {}) {
+  const data = {};
+  if (recordingUrl && recordingUrl !== session.recordingUrl) data.recordingUrl = recordingUrl;
+  if (transcriptUrl && transcriptUrl !== session.transcriptUrl) data.transcriptUrl = transcriptUrl;
+  if (!Object.keys(data).length) return session;
 
-  const uploaded = await uploadRemoteRecording(session, details.recordingUrl);
   const updated = await strapi.entityService.update('api::entrep-live-session.entrep-live-session', session.id, {
-    data: {
-      recordingUrl: uploaded.url,
-      transcriptUrl: details.transcriptUrl || session.transcriptUrl || null,
-      status: 'ended',
-    },
+    data,
     populate: { trainer: { populate: ['user'] }, course: true, cluster: true },
   });
 
-  await notifyRecordingAvailable(strapi, updated);
+  if (notifyRecording && updated.recordingUrl) {
+    await notifyRecordingAvailable(strapi, updated);
+  }
+
   return updated;
+}
+
+async function syncRecordingForMeeting(strapi, details) {
+  const session = await findSessionByMeetingId(strapi, details.meetingId);
+  if (!session) return null;
+
+  if (session.recordingUrl) {
+    const transcriptUrl = await resolveTranscriptUrl(details);
+    return persistSessionMedia(strapi, session, { transcriptUrl });
+  }
+
+  if (details.filename && wherebyS3.isConfigured()) {
+    try {
+      const uploaded = await importRecordingFromS3(session, details.filename);
+      const transcriptUrl = await resolveTranscriptUrl(details);
+      return persistSessionMedia(strapi, session, {
+        recordingUrl: uploaded.url,
+        transcriptUrl,
+        notifyRecording: true,
+      });
+    } catch (error) {
+      strapi.log.warn('Webhook recording import from S3 failed, falling back to sync', error);
+      return syncSessionMediaFromStorage(strapi, session);
+    }
+  }
+
+  const recordingUrl = await resolveRecordingUrl(details);
+  const transcriptUrl = await resolveTranscriptUrl(details);
+
+  if (recordingUrl) {
+    const uploaded = await uploadRemoteRecording(session, recordingUrl);
+    return persistSessionMedia(strapi, session, {
+      recordingUrl: uploaded.url,
+      transcriptUrl,
+      notifyRecording: true,
+    });
+  }
+
+  return syncSessionMediaFromStorage(strapi, session);
+}
+
+async function syncTranscriptionForMeeting(strapi, details) {
+  const session = await findSessionByMeetingId(strapi, details.meetingId);
+  if (!session) return null;
+
+  const transcriptUrl = await resolveTranscriptUrl(details);
+  if (!transcriptUrl) return session;
+
+  return persistSessionMedia(strapi, session, { transcriptUrl });
+}
+
+async function importRecordingFromS3(session, s3Key) {
+  const object = await wherebyS3.getObjectStream(s3Key);
+  if (!object?.body) {
+    throw new Error(`Unable to read recording object: ${s3Key}`);
+  }
+
+  const startedAt = session?.startsAt ? new Date(session.startsAt) : new Date();
+  const ext = inferExtension({
+    sourceUrl: s3Key,
+    contentType: object.contentType,
+    fallback: '.mp4',
+  });
+  const safeTitle = sanitizeKeySegment(session?.title, 'session-recording');
+  const key = [
+    'entrep-session-recordings',
+    String(session.id),
+    `${startedAt.toISOString().slice(0, 10)}-${safeTitle}-${crypto.randomBytes(4).toString('hex')}${ext}`,
+  ].join('/');
+
+  return uploadStreamToStorage({
+    key,
+    body: object.body,
+    contentType: object.contentType || 'video/mp4',
+    cacheControl: 'public, max-age=31536000, immutable',
+  });
+}
+
+async function importTranscriptFromS3(session, s3Key) {
+  const object = await wherebyS3.getObjectStream(s3Key);
+  if (!object?.body) return null;
+
+  const startedAt = session?.startsAt ? new Date(session.startsAt) : new Date();
+  const ext = inferExtension({
+    sourceUrl: s3Key,
+    contentType: object.contentType,
+    fallback: '.md',
+  });
+  const safeTitle = sanitizeKeySegment(session?.title, 'session-transcript');
+  const key = [
+    'entrep-session-transcripts',
+    String(session.id),
+    `${startedAt.toISOString().slice(0, 10)}-${safeTitle}-${crypto.randomBytes(4).toString('hex')}${ext}`,
+  ].join('/');
+
+  const uploaded = await uploadStreamToStorage({
+    key,
+    body: object.body,
+    contentType: object.contentType || 'text/markdown',
+    cacheControl: 'public, max-age=31536000, immutable',
+  });
+
+  return uploaded.url;
+}
+
+async function findWherebyHostedRecordingUrl(session) {
+  if (!whereby.isEnabled()) return null;
+
+  const sessionStart = Date.parse(session?.startsAt || '');
+  if (!Number.isFinite(sessionStart)) return null;
+
+  let cursor;
+  let bestMatch = null;
+
+  do {
+    const page = await whereby.listRecordings({ cursor, limit: 50 });
+    for (const recording of page?.results || []) {
+      const recordingStart = Date.parse(recording?.startDate || '');
+      if (!Number.isFinite(recordingStart)) continue;
+      const delta = Math.abs(recordingStart - sessionStart);
+      if (delta > 6 * 60 * 60 * 1000) continue;
+      if (!bestMatch || delta < bestMatch.delta) {
+        bestMatch = { recording, delta };
+      }
+    }
+    cursor = page?.cursor || null;
+  } while (cursor && !bestMatch);
+
+  if (!bestMatch?.recording?.recordingId) return null;
+
+  const access = await whereby.getRecordingAccessLink(bestMatch.recording.recordingId);
+  return firstString(access?.accessLink, access?.url, access?.downloadUrl);
+}
+
+async function syncSessionMediaFromStorage(strapi, session) {
+  let recordingUrl = session.recordingUrl || null;
+  let transcriptUrl = session.transcriptUrl || null;
+  let notifyRecording = false;
+
+  if (!recordingUrl && wherebyS3.isConfigured()) {
+    const media = await wherebyS3.resolveLatestMedia({ afterDate: session.startsAt });
+    if (media.recordingKey) {
+      const uploaded = await importRecordingFromS3(session, media.recordingKey);
+      recordingUrl = uploaded.url;
+      notifyRecording = true;
+    }
+  }
+
+  if (!recordingUrl) {
+    const hostedUrl = await findWherebyHostedRecordingUrl(session);
+    if (hostedUrl) {
+      const uploaded = await uploadRemoteRecording(session, hostedUrl);
+      recordingUrl = uploaded.url;
+      notifyRecording = true;
+    }
+  }
+
+  if (!transcriptUrl && wherebyS3.isConfigured()) {
+    const media = await wherebyS3.resolveLatestMedia({ afterDate: session.startsAt });
+    if (media.transcriptKey) {
+      transcriptUrl = await importTranscriptFromS3(session, media.transcriptKey);
+    }
+  }
+
+  return persistSessionMedia(strapi, session, {
+    recordingUrl,
+    transcriptUrl,
+    notifyRecording,
+  });
 }
 
 function getSessionEventColor(profile, audience) {
@@ -327,20 +553,36 @@ function isMockSession(session) {
     || String(session?.hostRoomUrl || '').includes('movo-entrepreneur.whereby.com');
 }
 
-async function ensureRealMeeting(strapi, session) {
-  if (!whereby.isEnabled() || !isMockSession(session)) return session;
+function needsCloudMediaUpgrade(session) {
+  return whereby.isEnabled()
+    && wherebyS3.isConfigured()
+    && (!session?.cloudMediaEnabled || isMockSession(session));
+}
 
+function canUpgradeMeeting(session) {
+  const attendeeCount = Array.isArray(session?.attendees) ? session.attendees.length : 0;
+  return attendeeCount === 0 || session?.status === 'scheduled';
+}
+
+async function recreateCloudMeeting(strapi, session) {
   const startsAtDate = new Date(session.startsAt);
   const fallbackStart = new Date(Date.now() + 5 * 60_000);
   const resolvedStartsAt = Number.isNaN(startsAtDate.getTime()) || startsAtDate.getTime() < Date.now()
     ? fallbackStart.toISOString()
     : session.startsAt;
-  const resolvedEndsAt = session.endsAt || new Date(new Date(resolvedStartsAt).getTime() + (Number(session.durationMinutes) || 60) * 60_000).toISOString();
+  const resolvedEndsAt = session.endsAt || new Date(
+    new Date(resolvedStartsAt).getTime() + (Number(session.durationMinutes) || 60) * 60_000
+  ).toISOString();
 
+  const oldMeetingId = session.wherebyMeetingId;
   const meeting = await whereby.createMeeting({
     startsAt: resolvedStartsAt,
     endsAt: resolvedEndsAt,
   });
+
+  if (oldMeetingId && !String(oldMeetingId).startsWith('mock_')) {
+    await whereby.deleteMeeting(oldMeetingId).catch(() => {});
+  }
 
   return strapi.entityService.update('api::entrep-live-session.entrep-live-session', session.id, {
     data: {
@@ -350,9 +592,18 @@ async function ensureRealMeeting(strapi, session) {
       hostRoomUrl: meeting.hostRoomUrl,
       viewerRoomUrl: meeting.viewerRoomUrl,
       wherebyMeetingId: meeting.meetingId,
+      cloudMediaEnabled: true,
     },
-    populate: { trainer: { populate: ['user'] }, course: true },
+    populate: { trainer: { populate: ['user'] }, course: true, cluster: true },
   });
+}
+
+async function ensureCloudMeeting(strapi, session) {
+  if (!whereby.isEnabled()) return session;
+  if (!needsCloudMediaUpgrade(session)) return session;
+  if (!canUpgradeMeeting(session)) return session;
+
+  return recreateCloudMeeting(strapi, session);
 }
 
 module.exports = createCoreController('api::entrep-live-session.entrep-live-session', ({ strapi }) => ({
@@ -398,6 +649,7 @@ module.exports = createCoreController('api::entrep-live-session.entrep-live-sess
         hostRoomUrl: meeting.hostRoomUrl,
         viewerRoomUrl: meeting.viewerRoomUrl,
         wherebyMeetingId: meeting.meetingId,
+        cloudMediaEnabled: Boolean(wherebyS3.isConfigured()),
         status: 'scheduled',
         audience: isAlumniSession ? 'alumni' : (courseId ? 'course' : (clusterId ? 'cluster' : 'public')),
         alumniAudience: isAlumniSession ? requestedAlumniAudience : null,
@@ -516,12 +768,11 @@ module.exports = createCoreController('api::entrep-live-session.entrep-live-sess
     if (!hasSessionAccess(session, access)) {
       return ctx.forbidden('You do not have access to this live session');
     }
-    session = await ensureRealMeeting(strapi, session);
+    session = await ensureCloudMeeting(strapi, session);
     const trainerProfile = await getTrainerProfile(strapi, user.id);
     const isHost = session.trainer?.user?.id === user.id;
     const isModerator = trainerProfile && ['admin'].includes(trainerProfile.role);
 
-    // Attendance
     const attendees = Array.isArray(session.attendees) ? [...session.attendees] : [];
     if (!attendees.find((a) => a.userId === user.id)) {
       attendees.push({ userId: user.id, joinedAt: new Date().toISOString() });
@@ -533,6 +784,7 @@ module.exports = createCoreController('api::entrep-live-session.entrep-live-sess
     ctx.send({
       roomUrl: isHost || isModerator ? session.hostRoomUrl : session.viewerRoomUrl,
       isHost: !!(isHost || isModerator),
+      cloudRecordingEnabled: Boolean(session.cloudMediaEnabled),
       session: {
         id: session.id,
         title: session.title,
@@ -540,8 +792,45 @@ module.exports = createCoreController('api::entrep-live-session.entrep-live-sess
         endsAt: session.endsAt,
         status: session.status === 'ended' ? 'ended' : 'live',
         recordingUrl: session.recordingUrl || null,
+        transcriptUrl: session.transcriptUrl || null,
       },
     });
+  },
+
+  async refreshRoom(ctx) {
+    const user = await resolveUser(strapi, ctx);
+    if (!user) return ctx.unauthorized();
+
+    const profile = await getTrainerProfile(strapi, user.id);
+    let session = await strapi.entityService.findOne('api::entrep-live-session.entrep-live-session', ctx.params.id, {
+      populate: { trainer: { populate: ['user'] }, course: true, cluster: true },
+    });
+    if (!session) return ctx.notFound();
+
+    const isHost = Number(session?.trainer?.user?.id || 0) === Number(user.id);
+    const isAdmin = isAdminUser(user, profile);
+    if (!isHost && !isAdmin) {
+      return ctx.forbidden('Only the session host can refresh the meeting room');
+    }
+
+    const attendeeCount = Array.isArray(session.attendees) ? session.attendees.length : 0;
+    if (attendeeCount > 0) {
+      return ctx.badRequest('Refresh the room only before other participants have joined');
+    }
+
+    try {
+      session = await recreateCloudMeeting(strapi, session);
+      ctx.send({
+        data: {
+          id: session.id,
+          roomUrl: session.hostRoomUrl,
+          cloudRecordingEnabled: true,
+        },
+      });
+    } catch (error) {
+      strapi.log.error('Failed to refresh Whereby room', error);
+      ctx.badRequest('Unable to refresh meeting room');
+    }
   },
 
   async end(ctx) {
@@ -560,27 +849,81 @@ module.exports = createCoreController('api::entrep-live-session.entrep-live-sess
       return ctx.forbidden('Only the session host can end this session');
     }
 
-    const updated = await strapi.entityService.update('api::entrep-live-session.entrep-live-session', session.id, {
+    let updated = await strapi.entityService.update('api::entrep-live-session.entrep-live-session', session.id, {
       data: { status: 'ended' },
       populate: { trainer: { populate: ['user'] }, course: true, cluster: true },
     });
 
+    try {
+      updated = await syncSessionMediaFromStorage(strapi, updated);
+    } catch (error) {
+      strapi.log.warn('Session ended but media sync failed', error);
+    }
+
     ctx.send({ data: sanitizeSessionForUser(updated, { user, isAdmin, profile }) });
   },
 
-  async wherebyWebhook(ctx) {
-    const details = extractRecordingPayload(ctx.request.body || {});
-    if (!shouldSyncRecording(details)) {
-      ctx.send({ ok: true, ignored: true });
-      return;
+  async syncMedia(ctx) {
+    const user = await resolveUser(strapi, ctx);
+    if (!user) return ctx.unauthorized();
+
+    const access = await buildSessionAccessContext(strapi, user);
+    const session = await strapi.entityService.findOne('api::entrep-live-session.entrep-live-session', ctx.params.id, {
+      populate: { trainer: { populate: ['user'] }, course: true, cluster: true },
+    });
+    if (!session) return ctx.notFound();
+    if (!hasSessionAccess(session, access)) return ctx.forbidden('You do not have access to this live session');
+
+    const isHost = Number(session?.trainer?.user?.id || 0) === Number(user.id);
+    if (!isHost && !access.isAdmin) {
+      return ctx.forbidden('Only the session host can sync session media');
     }
 
     try {
-      const session = await syncRecordingForMeeting(strapi, details);
-      ctx.send({ ok: true, sessionId: session?.id || null, synced: Boolean(session?.recordingUrl) });
+      const updated = await syncSessionMediaFromStorage(strapi, session);
+      ctx.send({
+        data: {
+          id: updated.id,
+          recordingUrl: updated.recordingUrl || null,
+          transcriptUrl: updated.transcriptUrl || null,
+          recordingSaved: Boolean(updated.recordingUrl),
+        },
+      });
     } catch (error) {
-      strapi.log.error('Failed to sync Whereby recording', error);
-      ctx.badRequest('Unable to sync recording');
+      strapi.log.error('Failed to sync session media', error);
+      ctx.badRequest('Unable to sync session media');
+    }
+  },
+
+  async wherebyWebhook(ctx) {
+    const details = extractWebhookPayload(ctx.request.body || {});
+
+    try {
+      if (shouldSyncRecording(details)) {
+        const session = await syncRecordingForMeeting(strapi, details);
+        ctx.send({
+          ok: true,
+          sessionId: session?.id || null,
+          syncedRecording: Boolean(session?.recordingUrl),
+          syncedTranscript: Boolean(session?.transcriptUrl),
+        });
+        return;
+      }
+
+      if (shouldSyncTranscription(details)) {
+        const session = await syncTranscriptionForMeeting(strapi, details);
+        ctx.send({
+          ok: true,
+          sessionId: session?.id || null,
+          syncedTranscript: Boolean(session?.transcriptUrl),
+        });
+        return;
+      }
+
+      ctx.send({ ok: true, ignored: true });
+    } catch (error) {
+      strapi.log.error('Failed to sync Whereby webhook payload', error);
+      ctx.badRequest('Unable to sync Whereby webhook payload');
     }
   },
 }));

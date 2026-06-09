@@ -54,6 +54,7 @@
       "type": "enumeration",
       "enum": ["learner", "trainer", "cluster"]
     },
-    "attendees": { "type": "json", "default": [] }
+    "attendees": { "type": "json", "default": [] },
+    "cloudMediaEnabled": { "type": "boolean", "default": false }
   }
 }

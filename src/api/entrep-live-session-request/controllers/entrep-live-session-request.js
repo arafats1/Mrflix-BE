@@ -2,6 +2,7 @@
 
 const { createCoreController } = require('@strapi/strapi').factories;
 const whereby = require('../../../utils/whereby');
+const wherebyS3 = require('../../../utils/whereby-s3');
 const { createNotification, listCourseLearnerIds, notifyUsers } = require('../../../utils/entrep-notifications');
 
 async function resolveUser(strapi, ctx) {
@@ -161,6 +162,7 @@ module.exports = createCoreController('api::entrep-live-session-request.entrep-l
           hostRoomUrl: meeting.hostRoomUrl,
           viewerRoomUrl: meeting.viewerRoomUrl,
           wherebyMeetingId: meeting.meetingId,
+          cloudMediaEnabled: Boolean(wherebyS3.isConfigured()),
           status: 'scheduled',
         },
       });

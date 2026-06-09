@@ -8,10 +8,16 @@
  * Env vars required:
  *   WHEREBY_API_KEY     – API key from https://whereby.dev/org
  *   WHEREBY_BASE_URL    – defaults to https://api.whereby.dev/v1
+ *   AWS_ACCESS_KEY_ID   – for self-hosted recording/transcription storage
+ *   AWS_SECRET_ACCESS_KEY
+ *   AWS_BUCKET_NAME
+ *   AWS_REGION
  *
  * If WHEREBY_API_KEY is not set, this falls back to deterministic mock URLs
  * so the rest of the system keeps working in local/dev.
  */
+
+const { buildS3Destination } = require('./whereby-s3');
 
 const DEFAULT_BASE_URL = 'https://api.whereby.dev/v1';
 const LEGACY_BASE_URL = 'https://api.appear.in/v1';
@@ -26,6 +32,13 @@ function getBaseUrls() {
     DEFAULT_BASE_URL,
     LEGACY_BASE_URL,
   ].filter(Boolean))];
+}
+
+function getAuthHeaders(extra = {}) {
+  return {
+    Authorization: `Bearer ${process.env.WHEREBY_API_KEY}`,
+    ...extra,
+  };
 }
 
 async function requestWhereby(path, options) {
@@ -57,9 +70,29 @@ async function requestWhereby(path, options) {
   throw new Error(`Whereby request failed across configured endpoints. ${errors.join(' | ')}`);
 }
 
+function buildMeetingMediaOptions() {
+  const destination = buildS3Destination();
+  if (!destination) return {};
+
+  return {
+    recording: {
+      type: 'cloud',
+      startTrigger: 'none',
+      destination: {
+        ...destination,
+        fileFormat: 'mp4',
+      },
+    },
+    liveTranscription: {
+      language: process.env.WHEREBY_TRANSCRIPTION_LANGUAGE || 'en',
+      startTrigger: 'manual',
+      destination,
+    },
+  };
+}
+
 async function createMeeting({ startsAt, endsAt, isLocked = false, roomMode = 'group' }) {
   if (!isEnabled()) {
-    // Dev fallback so frontend can keep functioning without API key.
     const id = `mock_${Math.random().toString(36).slice(2, 10)}`;
     const base = `https://movo-entrepreneur.whereby.com/${id}`;
     return {
@@ -73,19 +106,20 @@ async function createMeeting({ startsAt, endsAt, isLocked = false, roomMode = 'g
     };
   }
 
+  const media = buildMeetingMediaOptions();
+  const body = {
+    isLocked,
+    roomMode,
+    startDate: startsAt,
+    endDate: endsAt,
+    fields: ['hostRoomUrl'],
+    ...media,
+  };
+
   const res = await requestWhereby('/meetings', {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${process.env.WHEREBY_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      isLocked,
-      roomMode,
-      startDate: startsAt,
-      endDate: endsAt,
-      fields: ['hostRoomUrl'],
-    }),
+    headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(body),
   });
 
   const data = await res.json();
@@ -103,9 +137,81 @@ async function deleteMeeting(meetingId) {
   if (!isEnabled() || !meetingId || meetingId.startsWith('mock_')) return true;
   await requestWhereby(`/meetings/${meetingId}`, {
     method: 'DELETE',
-    headers: { Authorization: `Bearer ${process.env.WHEREBY_API_KEY}` },
+    headers: getAuthHeaders(),
   });
   return true;
 }
 
-module.exports = { createMeeting, deleteMeeting, isEnabled };
+async function listRecordings({ cursor, limit = 50 } = {}) {
+  if (!isEnabled()) return { results: [], cursor: null };
+
+  const params = new URLSearchParams();
+  if (cursor) params.set('cursor', cursor);
+  if (limit) params.set('limit', String(limit));
+
+  const query = params.toString();
+  const res = await requestWhereby(`/recordings${query ? `?${query}` : ''}`, {
+    headers: getAuthHeaders(),
+  });
+
+  return res.json();
+}
+
+async function getRecordingAccessLink(recordingId) {
+  if (!isEnabled() || !recordingId) return null;
+
+  const res = await requestWhereby(`/recordings/${recordingId}/access-link`, {
+    headers: getAuthHeaders(),
+  });
+
+  return res.json();
+}
+
+async function listTranscriptions({ cursor, limit = 50 } = {}) {
+  if (!isEnabled()) return { results: [], cursor: null };
+
+  const params = new URLSearchParams();
+  if (cursor) params.set('cursor', cursor);
+  if (limit) params.set('limit', String(limit));
+
+  const query = params.toString();
+  const res = await requestWhereby(`/transcriptions${query ? `?${query}` : ''}`, {
+    headers: getAuthHeaders(),
+  });
+
+  return res.json();
+}
+
+async function createTranscription(recordingId) {
+  if (!isEnabled() || !recordingId) return null;
+
+  const res = await requestWhereby('/transcriptions', {
+    method: 'POST',
+    headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ recordingId }),
+  });
+
+  return res.json();
+}
+
+async function getTranscriptionAccessLink(transcriptionId) {
+  if (!isEnabled() || !transcriptionId) return null;
+
+  const res = await requestWhereby(`/transcriptions/${transcriptionId}/access-link`, {
+    headers: getAuthHeaders(),
+  });
+
+  return res.json();
+}
+
+module.exports = {
+  buildMeetingMediaOptions,
+  createMeeting,
+  createTranscription,
+  deleteMeeting,
+  getRecordingAccessLink,
+  getTranscriptionAccessLink,
+  isEnabled,
+  listRecordings,
+  listTranscriptions,
+};
