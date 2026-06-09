@@ -117,8 +117,21 @@ function isAdLive(ad, now = Date.now()) {
   return true;
 }
 
+const VALID_AD_PLACEMENTS = [
+  'marketplace_top',
+  'marketplace_sidebar',
+  'marketplace_carousel',
+  'homes_carousel',
+  'homes_sidebar',
+];
+
+function normalizePlacement(placement, fallback = 'marketplace_top') {
+  const value = String(placement || fallback).trim();
+  return VALID_AD_PLACEMENTS.includes(value) ? value : fallback;
+}
+
 function cleanInput(input = {}) {
-  const placement = String(input.placement || 'marketplace_top').trim();
+  const placement = normalizePlacement(input.placement);
   return {
     title: String(input.title || '').trim(),
     subtitle: String(input.subtitle || '').trim(),
@@ -129,7 +142,7 @@ function cleanInput(input = {}) {
     backgroundColor: String(input.backgroundColor || '#073f56').trim(),
     textColor: String(input.textColor || '#ffffff').trim(),
     accentColor: String(input.accentColor || '#ff8a00').trim(),
-    placement: ['marketplace_carousel', 'marketplace_sidebar'].includes(placement) ? placement : 'marketplace_top',
+    placement,
     status: input.status === 'paused' ? 'paused' : 'active',
     priority: Number.isFinite(Number(input.priority)) ? Number(input.priority) : 0,
     startsAt: input.startsAt || null,
@@ -138,8 +151,8 @@ function cleanInput(input = {}) {
 }
 
 function fillAdDefaults(data = {}) {
-  const placement = ['marketplace_carousel', 'marketplace_sidebar'].includes(data.placement) ? data.placement : 'marketplace_top';
-  const title = String(data.title || '').trim() || (placement === 'marketplace_carousel' ? 'Carousel Image' : 'Ad Card');
+  const placement = normalizePlacement(data.placement);
+  const title = String(data.title || '').trim() || (placement.endsWith('_carousel') ? 'Carousel Image' : 'Ad Card');
   return {
     ...data,
     placement,
@@ -149,8 +162,8 @@ function fillAdDefaults(data = {}) {
 
 module.exports = createCoreController('api::marketplace-ad.marketplace-ad', ({ strapi }) => ({
   async active(ctx) {
-    const placement = String(ctx.query?.placement || 'marketplace_top');
-    const isSidebar = placement === 'marketplace_sidebar';
+    const placement = normalizePlacement(ctx.query?.placement);
+    const isSidebar = placement === 'marketplace_sidebar' || placement === 'homes_sidebar';
     const ads = await strapi.documents('api::marketplace-ad.marketplace-ad').findMany({
       filters: {
         placement,

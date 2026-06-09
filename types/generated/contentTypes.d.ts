@@ -2971,7 +2971,13 @@ export interface ApiMarketplaceAdMarketplaceAd
     > &
       Schema.Attribute.Private;
     placement: Schema.Attribute.Enumeration<
-      ['marketplace_top', 'marketplace_sidebar', 'marketplace_carousel']
+      [
+        'marketplace_top',
+        'marketplace_sidebar',
+        'marketplace_carousel',
+        'homes_carousel',
+        'homes_sidebar',
+      ]
     > &
       Schema.Attribute.Required &
       Schema.Attribute.DefaultTo<'marketplace_top'>;

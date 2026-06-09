@@ -50,7 +50,7 @@
     },
     "placement": {
       "type": "enumeration",
-      "enum": ["marketplace_top", "marketplace_sidebar", "marketplace_carousel"],
+      "enum": ["marketplace_top", "marketplace_sidebar", "marketplace_carousel", "homes_carousel", "homes_sidebar"],
       "required": true,
       "default": "marketplace_top"
     },
