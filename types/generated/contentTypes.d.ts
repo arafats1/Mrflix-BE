@@ -1516,6 +1516,7 @@ export interface ApiEntrepLiveSessionEntrepLiveSession
     provider: Schema.Attribute.Enumeration<['whereby', 'zoom', 'jitsi']> &
       Schema.Attribute.DefaultTo<'whereby'>;
     publishedAt: Schema.Attribute.DateTime;
+    recordingS3Key: Schema.Attribute.Text & Schema.Attribute.Private;
     recordingUrl: Schema.Attribute.Text;
     startsAt: Schema.Attribute.DateTime & Schema.Attribute.Required;
     status: Schema.Attribute.Enumeration<
@@ -1528,6 +1529,7 @@ export interface ApiEntrepLiveSessionEntrepLiveSession
       'manyToOne',
       'api::entrep-profile.entrep-profile'
     >;
+    transcriptS3Key: Schema.Attribute.Text & Schema.Attribute.Private;
     transcriptUrl: Schema.Attribute.Text;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &

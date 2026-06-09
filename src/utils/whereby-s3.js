@@ -106,9 +106,79 @@ function pickLatestByExtension(objects, extensions) {
   return objects.find((item) => normalized.some((ext) => item.key.toLowerCase().endsWith(ext))) || null;
 }
 
+function parseMediaTimestamp(key) {
+  const match = String(key || '').match(/(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z)\.(mp4|mkv|webm|md|txt|json)$/i);
+  if (!match) return null;
+  const parsed = Date.parse(match[1]);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function getSessionActivityTime(session) {
+  const joinTimes = (Array.isArray(session?.attendees) ? session.attendees : [])
+    .map((entry) => Date.parse(entry?.joinedAt || ''))
+    .filter(Number.isFinite);
+
+  if (joinTimes.length) return Math.min(...joinTimes);
+
+  const startsAt = Date.parse(session?.startsAt || '');
+  return Number.isFinite(startsAt) ? startsAt : null;
+}
+
+function isWherebyRecordingKey(key) {
+  return /^[0-9a-f-]{36}-\d{4}-\d{2}-\d{2}T/i.test(String(key || ''));
+}
+
+function findClosestMediaObject(objects, activityTime, extensions, { maxDeltaMs = 15 * 60 * 1000, usedKeys = new Set() } = {}) {
+  if (!Number.isFinite(activityTime)) return null;
+
+  const normalizedExtensions = extensions.map((ext) => ext.toLowerCase());
+  let bestMatch = null;
+
+  for (const item of objects) {
+    if (!item?.key || usedKeys.has(item.key)) continue;
+    if (!normalizedExtensions.some((ext) => item.key.toLowerCase().endsWith(ext))) continue;
+
+    const mediaTime = parseMediaTimestamp(item.key) || item.lastModified?.getTime?.() || null;
+    if (!Number.isFinite(mediaTime)) continue;
+
+    const delta = Math.abs(mediaTime - activityTime);
+    if (delta > maxDeltaMs) continue;
+
+    if (!bestMatch || delta < bestMatch.delta) {
+      bestMatch = { ...item, delta, mediaTime };
+    }
+  }
+
+  return bestMatch;
+}
+
+async function findRecordingForSession(session, { usedKeys = new Set() } = {}) {
+  const activityTime = getSessionActivityTime(session);
+  if (!Number.isFinite(activityTime)) return null;
+
+  const searchStart = new Date(activityTime - 24 * 60 * 60 * 1000).toISOString();
+  const objects = await listObjects({ afterDate: searchStart });
+  const candidates = objects.filter((item) => isWherebyRecordingKey(item.key));
+
+  return findClosestMediaObject(candidates, activityTime, ['.mp4', '.mkv', '.webm'], { usedKeys });
+}
+
+async function findTranscriptForSession(session, { usedKeys = new Set(), nearTime } = {}) {
+  const activityTime = nearTime || getSessionActivityTime(session);
+  if (!Number.isFinite(activityTime)) return null;
+
+  const searchStart = new Date(activityTime - 24 * 60 * 60 * 1000).toISOString();
+  const objects = await listObjects({ afterDate: searchStart });
+
+  return findClosestMediaObject(objects, activityTime, ['.md', '.txt', '.json'], {
+    usedKeys,
+    maxDeltaMs: 6 * 60 * 60 * 1000,
+  });
+}
+
 async function resolveLatestMedia({ afterDate } = {}) {
   const objects = await listObjects({ afterDate });
-  const recording = pickLatestByExtension(objects, ['.mp4', '.mkv', '.webm']);
+  const recording = pickLatestByExtension(objects.filter((item) => isWherebyRecordingKey(item.key)), ['.mp4', '.mkv', '.webm']);
   const transcript = pickLatestByExtension(objects, ['.md', '.txt', '.json']);
 
   return {
@@ -140,9 +210,12 @@ async function getObjectStream(key) {
 
 module.exports = {
   buildS3Destination,
+  findRecordingForSession,
+  findTranscriptForSession,
   getAwsConfig,
   getObjectStream,
   getPresignedObjectUrl,
+  getSessionActivityTime,
   isConfigured,
   listObjects,
   resolveLatestMedia,

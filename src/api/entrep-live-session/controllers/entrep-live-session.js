@@ -129,6 +129,28 @@ function sanitizeSessionForUser(session, access) {
   return {
     ...session,
     hostRoomUrl: canSeeHostRoom ? session.hostRoomUrl : undefined,
+    recordingS3Key: undefined,
+    transcriptS3Key: undefined,
+  };
+}
+
+async function hydrateSessionMedia(session) {
+  if (!session) return session;
+
+  let recordingUrl = session.recordingUrl || null;
+  let transcriptUrl = session.transcriptUrl || null;
+
+  if (session.recordingS3Key && wherebyS3.isConfigured()) {
+    recordingUrl = await wherebyS3.getPresignedObjectUrl(session.recordingS3Key);
+  }
+  if (session.transcriptS3Key && wherebyS3.isConfigured()) {
+    transcriptUrl = await wherebyS3.getPresignedObjectUrl(session.transcriptS3Key);
+  }
+
+  return {
+    ...session,
+    recordingUrl,
+    transcriptUrl,
   };
 }
 
@@ -156,10 +178,36 @@ async function listVisibleSessions(strapi, access, { onlyUpcoming = false } = {}
     },
   });
 
-  return sessions
+  const visible = sessions
     .filter((session) => hasSessionAccess(session, access))
     .filter((session) => !onlyUpcoming || isUpcomingSession(session))
     .map((session) => sanitizeSessionForUser(session, access));
+
+  return Promise.all(visible.map((session) => hydrateSessionMedia(session)));
+}
+
+async function backfillMissingSessionRecordings(strapi, sessions, { limit = 10 } = {}) {
+  if (!wherebyS3.isConfigured() || !Array.isArray(sessions) || sessions.length === 0) {
+    return;
+  }
+
+  const candidates = sessions
+    .filter((session) => !session.recordingUrl)
+    .filter((session) => Array.isArray(session.attendees) && session.attendees.length > 0)
+    .slice(0, limit);
+
+  await Promise.all(candidates.map(async (session) => {
+    try {
+      const fullSession = await strapi.entityService.findOne('api::entrep-live-session.entrep-live-session', session.id, {
+        populate: { trainer: { populate: ['user'] }, course: true, cluster: true },
+      });
+      if (!fullSession?.recordingS3Key && !fullSession?.recordingUrl) {
+        await syncSessionMediaFromStorage(strapi, fullSession);
+      }
+    } catch (error) {
+      strapi.log.warn(`Failed to backfill recording for session ${session.id}`, error);
+    }
+  }));
 }
 
 function firstString(...values) {
@@ -354,8 +402,16 @@ async function findSessionByMeetingId(strapi, meetingId) {
   return sessions?.[0] || null;
 }
 
-async function persistSessionMedia(strapi, session, { recordingUrl, transcriptUrl, notifyRecording = false } = {}) {
+async function persistSessionMedia(strapi, session, {
+  recordingUrl,
+  transcriptUrl,
+  recordingS3Key,
+  transcriptS3Key,
+  notifyRecording = false,
+} = {}) {
   const data = {};
+  if (recordingS3Key && recordingS3Key !== session.recordingS3Key) data.recordingS3Key = recordingS3Key;
+  if (transcriptS3Key && transcriptS3Key !== session.transcriptS3Key) data.transcriptS3Key = transcriptS3Key;
   if (recordingUrl && recordingUrl !== session.recordingUrl) data.recordingUrl = recordingUrl;
   if (transcriptUrl && transcriptUrl !== session.transcriptUrl) data.transcriptUrl = transcriptUrl;
   if (!Object.keys(data).length) return session;
@@ -382,18 +438,14 @@ async function syncRecordingForMeeting(strapi, details) {
   }
 
   if (details.filename && wherebyS3.isConfigured()) {
-    try {
-      const uploaded = await importRecordingFromS3(session, details.filename);
-      const transcriptUrl = await resolveTranscriptUrl(details);
-      return persistSessionMedia(strapi, session, {
-        recordingUrl: uploaded.url,
-        transcriptUrl,
-        notifyRecording: true,
-      });
-    } catch (error) {
-      strapi.log.warn('Webhook recording import from S3 failed, falling back to sync', error);
-      return syncSessionMediaFromStorage(strapi, session);
-    }
+    const linked = await linkRecordingFromS3(session, details.filename);
+    const transcriptUrl = await resolveTranscriptUrl(details);
+    return persistSessionMedia(strapi, session, {
+      recordingUrl: linked.recordingUrl,
+      recordingS3Key: linked.recordingS3Key,
+      transcriptUrl,
+      notifyRecording: true,
+    });
   }
 
   const recordingUrl = await resolveRecordingUrl(details);
@@ -422,40 +474,24 @@ async function syncTranscriptionForMeeting(strapi, details) {
 }
 
 async function importRecordingFromS3(session, s3Key) {
-  const object = await wherebyS3.getObjectStream(s3Key);
-  if (!object?.body) {
-    throw new Error(`Unable to read recording object: ${s3Key}`);
+  const presignedUrl = await wherebyS3.getPresignedObjectUrl(s3Key);
+  if (!presignedUrl) {
+    throw new Error(`Unable to create download URL for recording object: ${s3Key}`);
   }
-
-  const startedAt = session?.startsAt ? new Date(session.startsAt) : new Date();
-  const ext = inferExtension({
-    sourceUrl: s3Key,
-    contentType: object.contentType,
-    fallback: '.mp4',
-  });
-  const safeTitle = sanitizeKeySegment(session?.title, 'session-recording');
-  const key = [
-    'entrep-session-recordings',
-    String(session.id),
-    `${startedAt.toISOString().slice(0, 10)}-${safeTitle}-${crypto.randomBytes(4).toString('hex')}${ext}`,
-  ].join('/');
-
-  return uploadStreamToStorage({
-    key,
-    body: object.body,
-    contentType: object.contentType || 'video/mp4',
-    cacheControl: 'public, max-age=31536000, immutable',
-  });
+  return uploadRemoteRecording(session, presignedUrl);
 }
 
 async function importTranscriptFromS3(session, s3Key) {
-  const object = await wherebyS3.getObjectStream(s3Key);
-  if (!object?.body) return null;
+  const presignedUrl = await wherebyS3.getPresignedObjectUrl(s3Key);
+  if (!presignedUrl) return null;
+
+  const response = await fetch(presignedUrl);
+  if (!response.ok || !response.body) return null;
 
   const startedAt = session?.startsAt ? new Date(session.startsAt) : new Date();
   const ext = inferExtension({
     sourceUrl: s3Key,
-    contentType: object.contentType,
+    contentType: response.headers.get('content-type'),
     fallback: '.md',
   });
   const safeTitle = sanitizeKeySegment(session?.title, 'session-transcript');
@@ -467,8 +503,8 @@ async function importTranscriptFromS3(session, s3Key) {
 
   const uploaded = await uploadStreamToStorage({
     key,
-    body: object.body,
-    contentType: object.contentType || 'text/markdown',
+    body: toNodeReadableStream(response.body),
+    contentType: response.headers.get('content-type') || 'text/markdown',
     cacheControl: 'public, max-age=31536000, immutable',
   });
 
@@ -504,17 +540,58 @@ async function findWherebyHostedRecordingUrl(session) {
   return firstString(access?.accessLink, access?.url, access?.downloadUrl);
 }
 
+async function linkRecordingFromS3(session, s3Key) {
+  const recordingUrl = await wherebyS3.getPresignedObjectUrl(s3Key);
+  return {
+    recordingS3Key: s3Key,
+    recordingUrl,
+  };
+}
+
+async function linkTranscriptFromS3(session, s3Key) {
+  const transcriptUrl = await wherebyS3.getPresignedObjectUrl(s3Key);
+  return {
+    transcriptS3Key: s3Key,
+    transcriptUrl,
+  };
+}
+
 async function syncSessionMediaFromStorage(strapi, session) {
-  let recordingUrl = session.recordingUrl || null;
+  if (session.recordingS3Key || session.recordingUrl) {
+    return hydrateSessionMedia(session);
+  }
+
+  let recordingUrl = null;
   let transcriptUrl = session.transcriptUrl || null;
+  let recordingS3Key = null;
+  let transcriptS3Key = session.transcriptS3Key || null;
   let notifyRecording = false;
 
-  if (!recordingUrl && wherebyS3.isConfigured()) {
-    const media = await wherebyS3.resolveLatestMedia({ afterDate: session.startsAt });
-    if (media.recordingKey) {
-      const uploaded = await importRecordingFromS3(session, media.recordingKey);
-      recordingUrl = uploaded.url;
+  if (wherebyS3.isConfigured()) {
+    const recordingMatch = await wherebyS3.findRecordingForSession(session);
+    if (recordingMatch?.key) {
+      const linked = await linkRecordingFromS3(session, recordingMatch.key);
+      recordingS3Key = linked.recordingS3Key;
+      recordingUrl = linked.recordingUrl;
       notifyRecording = true;
+
+      if (!transcriptS3Key) {
+        const transcriptMatch = await wherebyS3.findTranscriptForSession(session, {
+          nearTime: recordingMatch.mediaTime,
+        });
+        if (transcriptMatch?.key) {
+          const linkedTranscript = await linkTranscriptFromS3(session, transcriptMatch.key);
+          transcriptS3Key = linkedTranscript.transcriptS3Key;
+          transcriptUrl = linkedTranscript.transcriptUrl;
+        }
+      }
+    } else if (!transcriptS3Key) {
+      const transcriptMatch = await wherebyS3.findTranscriptForSession(session);
+      if (transcriptMatch?.key) {
+        const linkedTranscript = await linkTranscriptFromS3(session, transcriptMatch.key);
+        transcriptS3Key = linkedTranscript.transcriptS3Key;
+        transcriptUrl = linkedTranscript.transcriptUrl;
+      }
     }
   }
 
@@ -527,18 +604,17 @@ async function syncSessionMediaFromStorage(strapi, session) {
     }
   }
 
-  if (!transcriptUrl && wherebyS3.isConfigured()) {
-    const media = await wherebyS3.resolveLatestMedia({ afterDate: session.startsAt });
-    if (media.transcriptKey) {
-      transcriptUrl = await importTranscriptFromS3(session, media.transcriptKey);
-    }
-  }
+  if (!recordingUrl && !transcriptUrl) return session;
 
-  return persistSessionMedia(strapi, session, {
+  const updated = await persistSessionMedia(strapi, session, {
     recordingUrl,
     transcriptUrl,
+    recordingS3Key,
+    transcriptS3Key,
     notifyRecording,
   });
+
+  return hydrateSessionMedia(updated);
 }
 
 function getSessionEventColor(profile, audience) {
@@ -728,7 +804,9 @@ module.exports = createCoreController('api::entrep-live-session.entrep-live-sess
     if (!user) return ctx.unauthorized();
 
     const access = await buildSessionAccessContext(strapi, user);
-    const sessions = await listVisibleSessions(strapi, access);
+    let sessions = await listVisibleSessions(strapi, access);
+    await backfillMissingSessionRecordings(strapi, sessions);
+    sessions = await listVisibleSessions(strapi, access);
     ctx.send({ data: sessions });
   },
 
@@ -779,6 +857,20 @@ module.exports = createCoreController('api::entrep-live-session.entrep-live-sess
       await strapi.entityService.update('api::entrep-live-session.entrep-live-session', session.id, {
         data: { attendees, status: session.status === 'ended' ? 'ended' : 'live' },
       });
+      session = await strapi.entityService.findOne('api::entrep-live-session.entrep-live-session', session.id, {
+        populate: { trainer: { populate: ['user'] }, course: true, cluster: true },
+      });
+    }
+
+    if (!session.recordingS3Key && !session.recordingUrl) {
+      try {
+        session = await syncSessionMediaFromStorage(strapi, session);
+      } catch (error) {
+        strapi.log.warn('Session join media sync failed', error);
+        session = await hydrateSessionMedia(session);
+      }
+    } else {
+      session = await hydrateSessionMedia(session);
     }
 
     ctx.send({
@@ -795,6 +887,46 @@ module.exports = createCoreController('api::entrep-live-session.entrep-live-sess
         transcriptUrl: session.transcriptUrl || null,
       },
     });
+  },
+
+  async streamRecording(ctx) {
+    const user = await resolveUser(strapi, ctx);
+    if (!user) return ctx.unauthorized();
+
+    const access = await buildSessionAccessContext(strapi, user);
+    const session = await strapi.entityService.findOne('api::entrep-live-session.entrep-live-session', ctx.params.id, {
+      populate: { trainer: { populate: ['user'] }, course: true, cluster: true },
+    });
+    if (!session) return ctx.notFound();
+    if (!hasSessionAccess(session, access)) {
+      return ctx.forbidden('You do not have access to this recording');
+    }
+
+    const sourceKey = session.recordingS3Key;
+    if (!sourceKey || !wherebyS3.isConfigured()) {
+      if (session.recordingUrl) {
+        ctx.redirect(session.recordingUrl);
+        return;
+      }
+      return ctx.notFound('Recording not available');
+    }
+
+    try {
+      const object = await wherebyS3.getObjectStream(sourceKey);
+      if (!object?.body) return ctx.notFound('Recording not available');
+
+      const safeTitle = sanitizeKeySegment(session.title, 'session-recording');
+      ctx.set('Content-Type', object.contentType || 'video/mp4');
+      ctx.set('Content-Disposition', `inline; filename="${safeTitle}.mp4"`);
+      ctx.set('Accept-Ranges', 'bytes');
+      if (object.contentLength) {
+        ctx.set('Content-Length', String(object.contentLength));
+      }
+      ctx.body = object.body;
+    } catch (error) {
+      strapi.log.error('Failed to stream session recording', error);
+      ctx.badRequest('Unable to stream recording');
+    }
   },
 
   async refreshRoom(ctx) {

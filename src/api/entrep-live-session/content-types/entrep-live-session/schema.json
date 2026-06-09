@@ -39,7 +39,9 @@
     "viewerRoomUrl": { "type": "text" },
     "wherebyMeetingId": { "type": "string", "private": true },
     "recordingUrl": { "type": "text" },
+    "recordingS3Key": { "type": "text", "private": true },
     "transcriptUrl": { "type": "text" },
+    "transcriptS3Key": { "type": "text", "private": true },
     "status": {
       "type": "enumeration",
       "enum": ["scheduled", "live", "ended", "cancelled"],
