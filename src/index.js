@@ -60,6 +60,8 @@ const AUTHENTICATED_ACTIONS = [
   'api::foundation-hub.foundation-hub.updateFundraiser',
   'api::foundation-hub.foundation-hub.pledgeFundraiser',
   'api::foundation-hub.foundation-hub.commentFundraiser',
+  // Entrepreneur — session recordings
+  'api::entrep-live-session.entrep-live-session.recordings',
 ];
 
 async function ensureRolePermissions(strapi, roleType, actions) {

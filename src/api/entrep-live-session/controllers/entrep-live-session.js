@@ -141,6 +141,7 @@ function sanitizeSessionForUser(session, access) {
 
 async function hydrateSessionMedia(session) {
   if (!session) return session;
+  if (!session.recordingS3Key && !session.transcriptS3Key) return session;
 
   let recordingUrl = session.recordingUrl || null;
   let transcriptUrl = session.transcriptUrl || null;
@@ -186,6 +187,30 @@ async function listVisibleSessions(strapi, access, { onlyUpcoming = false } = {}
   const visible = sessions
     .filter((session) => hasSessionAccess(session, access))
     .filter((session) => !onlyUpcoming || isUpcomingSession(session))
+    .map((session) => sanitizeSessionForUser(session, access));
+
+  return Promise.all(visible.map((session) => hydrateSessionMedia(session)));
+}
+
+async function listRecordedSessions(strapi, access) {
+  const sessions = await strapi.entityService.findMany('api::entrep-live-session.entrep-live-session', {
+    filters: {
+      $or: [
+        { recordingS3Key: { $notNull: true } },
+        { recordingUrl: { $notNull: true } },
+      ],
+    },
+    sort: { startsAt: 'desc' },
+    limit: 100,
+    populate: {
+      trainer: { populate: ['user'] },
+      course: true,
+      cluster: true,
+    },
+  });
+
+  const visible = sessions
+    .filter((session) => hasSessionAccess(session, access))
     .map((session) => sanitizeSessionForUser(session, access));
 
   return Promise.all(visible.map((session) => hydrateSessionMedia(session)));
@@ -809,9 +834,16 @@ module.exports = createCoreController('api::entrep-live-session.entrep-live-sess
     if (!user) return ctx.unauthorized();
 
     const access = await buildSessionAccessContext(strapi, user);
-    let sessions = await listVisibleSessions(strapi, access);
-    await backfillMissingSessionRecordings(strapi, sessions);
-    sessions = await listVisibleSessions(strapi, access);
+    const sessions = await listVisibleSessions(strapi, access);
+    ctx.send({ data: sessions });
+  },
+
+  async recordings(ctx) {
+    const user = await resolveUser(strapi, ctx);
+    if (!user) return ctx.unauthorized();
+
+    const access = await buildSessionAccessContext(strapi, user);
+    const sessions = await listRecordedSessions(strapi, access);
     ctx.send({ data: sessions });
   },
 
