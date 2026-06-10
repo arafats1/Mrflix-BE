@@ -3,6 +3,19 @@
 const { createCoreController } = require('@strapi/strapi').factories;
 const { randomUUID } = require('crypto');
 const { notifyMarketplaceMessage } = require('../../../utils/marketplace-notifications');
+const { notifyHomesMessage } = require('../../../utils/homes-notifications');
+
+function buildHomesContext(source, listingId) {
+  if (source !== 'homes') return null;
+  return {
+    source: 'homes',
+    listingId: listingId ? String(listingId) : null,
+  };
+}
+
+function isHomesThread(thread) {
+  return thread?.context?.source === 'homes';
+}
 
 /**
  * Manually verify the Bearer JWT from the request headers.
@@ -114,8 +127,9 @@ module.exports = createCoreController('api::marketplace-thread.marketplace-threa
     const user = await resolveUser(ctx);
     if (!user) return ctx.unauthorized();
 
-    const { sellerId, productId } = ctx.request.body || {};
+    const { sellerId, productId, source, listingId } = ctx.request.body || {};
     if (!sellerId) return ctx.badRequest('sellerId is required');
+    const homesContext = buildHomesContext(source, listingId);
 
     // Resolve seller
     const seller = await strapi.db.query('plugin::users-permissions.user').findOne({
@@ -149,6 +163,19 @@ module.exports = createCoreController('api::marketplace-thread.marketplace-threa
     });
 
     if (existing) {
+      if (homesContext && !isHomesThread(existing)) {
+        const updated = await strapi.db.query('api::marketplace-thread.marketplace-thread').update({
+          where: { id: existing.id },
+          data: { context: homesContext },
+          populate: {
+            buyer: { select: ['id', 'documentId', 'fullName', 'username', 'lastSeenAt', 'avatarUrl'] },
+            seller: { select: ['id', 'documentId', 'fullName', 'username', 'lastSeenAt', 'avatarUrl'] },
+            product: { select: ['id', 'documentId', 'name', 'featuredImage', 'priceUGX', 'itemType'] },
+          },
+        });
+        ctx.body = { data: sanitizeThread(updated, user.id) };
+        return;
+      }
       ctx.body = { data: sanitizeThread(existing, user.id) };
       return;
     }
@@ -162,6 +189,7 @@ module.exports = createCoreController('api::marketplace-thread.marketplace-threa
         messages: [],
         buyerUnread: 0,
         sellerUnread: 0,
+        context: homesContext,
       },
       populate: {
         buyer: { select: ['id', 'documentId', 'fullName', 'username', 'lastSeenAt', 'avatarUrl'] },
@@ -193,9 +221,25 @@ module.exports = createCoreController('api::marketplace-thread.marketplace-threa
     const isSeller = thread.seller?.id === user.id;
     if (!isBuyer && !isSeller) return ctx.forbidden();
 
-    const { text, images } = ctx.request.body || {};
+    const { text, images, source, listingId } = ctx.request.body || {};
     if (!text?.trim() && (!Array.isArray(images) || images.length === 0)) {
       return ctx.badRequest('Message must have text or images');
+    }
+
+    const incomingHomesContext = buildHomesContext(source, listingId);
+    let threadContext = thread.context || null;
+    if (incomingHomesContext) {
+      threadContext = {
+        source: 'homes',
+        listingId: incomingHomesContext.listingId || threadContext?.listingId || null,
+      };
+      if (!isHomesThread(thread)) {
+        await strapi.db.query('api::marketplace-thread.marketplace-thread').update({
+          where: { id: thread.id },
+          data: { context: threadContext },
+        });
+        thread.context = threadContext;
+      }
     }
 
     const message = {
@@ -225,12 +269,19 @@ module.exports = createCoreController('api::marketplace-thread.marketplace-threa
       },
     });
 
-    await notifyMarketplaceMessage(strapi, {
-      thread,
+    const notifyPayload = {
+      thread: { ...thread, context: threadContext || thread.context },
       message,
       sender: user,
       recipient: isBuyer ? thread.seller : thread.buyer,
-    });
+      listingId: threadContext?.listingId || thread.context?.listingId || null,
+    };
+
+    if (isHomesThread(notifyPayload.thread)) {
+      await notifyHomesMessage(strapi, notifyPayload);
+    } else {
+      await notifyMarketplaceMessage(strapi, notifyPayload);
+    }
 
     ctx.body = { data: sanitizeThread(updated, user.id) };
   },

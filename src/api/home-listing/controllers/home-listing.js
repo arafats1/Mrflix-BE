@@ -1040,8 +1040,15 @@ module.exports = {
           gateway: record.yoReference ? 'yo' : record.dgatewayReference ? 'dgateway' : 'pesapal',
           merchantReference: transactionId,
         });
-        if (gatewayResult.status === 'completed') await activateHomesPaymentByFilter(strapi, { transactionId }, gatewayResult.paymentMethod || record.paymentMethod);
-        if (gatewayResult.status === 'failed') await failHomesPaymentByFilter(strapi, { transactionId });
+        if (gatewayResult.status === 'completed') {
+          await activateHomesPaymentByFilter(strapi, { transactionId }, gatewayResult.paymentMethod || record.paymentMethod);
+        } else if (gatewayResult.status === 'failed') {
+          const activeGateway = record.yoReference ? 'yo' : record.dgatewayReference ? 'dgateway' : 'pesapal';
+          // Pesapal iframe checkout can look "failed" while still in progress — let IPN handle it.
+          if (activeGateway !== 'pesapal') {
+            await failHomesPaymentByFilter(strapi, { transactionId });
+          }
+        }
       } catch (error) {
         strapi.log.warn(`[Homes payment status] gateway check failed: ${error.message}`);
       }

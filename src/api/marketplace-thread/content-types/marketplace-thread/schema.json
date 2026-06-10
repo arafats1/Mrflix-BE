@@ -44,6 +44,9 @@
     "sellerUnread": {
       "type": "integer",
       "default": 0
+    },
+    "context": {
+      "type": "json"
     }
   }
 }

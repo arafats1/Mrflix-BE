@@ -3122,6 +3122,7 @@ export interface ApiMarketplaceThreadMarketplaceThread
       'plugin::users-permissions.user'
     >;
     buyerUnread: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    context: Schema.Attribute.JSON;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;

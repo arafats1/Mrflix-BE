@@ -236,7 +236,9 @@ async function checkPaymentStatus(strapi, params) {
 
     let normalizedStatus = 'pending';
     if (paymentStatus === 'completed') normalizedStatus = 'completed';
-    else if (paymentStatus === 'failed' || paymentStatus === 'invalid') normalizedStatus = 'failed';
+    // Unpaid or in-progress Pesapal orders can report "invalid" — only explicit
+    // failures should cancel a pending checkout during status polling.
+    else if (paymentStatus === 'failed') normalizedStatus = 'failed';
 
     return {
       status: normalizedStatus,
