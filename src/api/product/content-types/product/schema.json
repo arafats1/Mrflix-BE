@@ -47,6 +47,9 @@
       "type": "string",
       "required": true
     },
+    "subcategory": {
+      "type": "string"
+    },
     "images": {
       "type": "json",
       "default": []

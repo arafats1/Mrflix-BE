@@ -564,6 +564,7 @@ function buildProductPayload(input = {}, existingProduct = null) {
     ...(Object.prototype.hasOwnProperty.call(input, 'priceUGX') ? { priceUGX: input.priceUGX } : {}),
     ...(Object.prototype.hasOwnProperty.call(input, 'currency') ? { currency: input.currency } : {}),
     ...(Object.prototype.hasOwnProperty.call(input, 'category') ? { category: input.category } : {}),
+    ...(Object.prototype.hasOwnProperty.call(input, 'subcategory') ? { subcategory: String(input.subcategory || '').trim() } : {}),
     ...(Object.prototype.hasOwnProperty.call(input, 'images') ? { images: Array.isArray(input.images) ? input.images : [] } : {}),
     ...(
       Object.prototype.hasOwnProperty.call(input, 'featuredImage')

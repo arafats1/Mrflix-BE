@@ -3596,6 +3596,7 @@ export interface ApiProductProduct extends Struct.CollectionTypeSchema {
         number
       > &
       Schema.Attribute.DefaultTo<1>;
+    subcategory: Schema.Attribute.String;
     transmission: Schema.Attribute.Enumeration<
       ['AMT', 'Automatic', 'CVT', 'Manual']
     >;
