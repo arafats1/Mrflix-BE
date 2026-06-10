@@ -1,8 +1,22 @@
 'use strict';
 
 const { createNotification } = require('./entrep-notifications');
+const { notifyHomesMessage } = require('./homes-notifications');
+
+function threadHasProduct(thread) {
+  return Boolean(thread?.product?.id || thread?.product?.documentId || thread?.product);
+}
 
 async function notifyMarketplaceMessage(strapi, { thread, message, sender, recipient }) {
+  if (thread?.context?.source === 'homes' || !threadHasProduct(thread)) {
+    return notifyHomesMessage(strapi, {
+      thread,
+      message,
+      sender,
+      recipient,
+      listingId: thread?.context?.listingId || null,
+    });
+  }
   const recipientId = Number(recipient?.id || 0);
   const actorId = Number(sender?.id || 0);
   if (!recipientId || recipientId === actorId) return;

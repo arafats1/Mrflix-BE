@@ -13,8 +13,41 @@ function buildHomesContext(source, listingId) {
   };
 }
 
+function threadHasProduct(thread) {
+  return Boolean(thread?.product?.id || thread?.product?.documentId || thread?.product);
+}
+
 function isHomesThread(thread) {
-  return thread?.context?.source === 'homes';
+  if (thread?.context?.source === 'homes') return true;
+  // Homes host/guest chat never attaches a marketplace product.
+  return !threadHasProduct(thread);
+}
+
+function resolveHomesContext(thread, { source, listingId, hasProductId }) {
+  const explicit = buildHomesContext(source, listingId);
+  if (explicit) return explicit;
+  if (!hasProductId && !threadHasProduct(thread)) {
+    return {
+      source: 'homes',
+      listingId: listingId ? String(listingId) : thread?.context?.listingId || null,
+    };
+  }
+  return thread?.context || null;
+}
+
+async function persistHomesContextIfNeeded(strapi, thread, nextContext) {
+  if (!nextContext || nextContext.source !== 'homes') return thread;
+  const currentListingId = thread?.context?.listingId || null;
+  const nextListingId = nextContext.listingId || null;
+  const alreadyHomes = thread?.context?.source === 'homes'
+    && String(currentListingId || '') === String(nextListingId || '');
+  if (alreadyHomes) return { ...thread, context: nextContext };
+
+  await strapi.db.query('api::marketplace-thread.marketplace-thread').update({
+    where: { id: thread.id },
+    data: { context: nextContext },
+  });
+  return { ...thread, context: nextContext };
 }
 
 /**
@@ -129,7 +162,7 @@ module.exports = createCoreController('api::marketplace-thread.marketplace-threa
 
     const { sellerId, productId, source, listingId } = ctx.request.body || {};
     if (!sellerId) return ctx.badRequest('sellerId is required');
-    const homesContext = buildHomesContext(source, listingId);
+    const hasProductId = Boolean(productId);
 
     // Resolve seller
     const seller = await strapi.db.query('plugin::users-permissions.user').findOne({
@@ -163,22 +196,23 @@ module.exports = createCoreController('api::marketplace-thread.marketplace-threa
     });
 
     if (existing) {
-      if (homesContext && !isHomesThread(existing)) {
-        const updated = await strapi.db.query('api::marketplace-thread.marketplace-thread').update({
-          where: { id: existing.id },
-          data: { context: homesContext },
-          populate: {
-            buyer: { select: ['id', 'documentId', 'fullName', 'username', 'lastSeenAt', 'avatarUrl'] },
-            seller: { select: ['id', 'documentId', 'fullName', 'username', 'lastSeenAt', 'avatarUrl'] },
-            product: { select: ['id', 'documentId', 'name', 'featuredImage', 'priceUGX', 'itemType'] },
-          },
-        });
-        ctx.body = { data: sanitizeThread(updated, user.id) };
-        return;
-      }
-      ctx.body = { data: sanitizeThread(existing, user.id) };
+      const homesContext = resolveHomesContext(existing, { source, listingId, hasProductId });
+      const withContext = homesContext?.source === 'homes'
+        ? await persistHomesContextIfNeeded(strapi, existing, homesContext)
+        : existing;
+      const refreshed = await strapi.db.query('api::marketplace-thread.marketplace-thread').findOne({
+        where: { id: withContext.id },
+        populate: {
+          buyer: { select: ['id', 'documentId', 'fullName', 'username', 'lastSeenAt', 'avatarUrl'] },
+          seller: { select: ['id', 'documentId', 'fullName', 'username', 'lastSeenAt', 'avatarUrl'] },
+          product: { select: ['id', 'documentId', 'name', 'featuredImage', 'priceUGX', 'itemType'] },
+        },
+      });
+      ctx.body = { data: sanitizeThread(refreshed || withContext, user.id) };
       return;
     }
+
+    const homesContext = resolveHomesContext(null, { source, listingId, hasProductId });
 
     // Create new thread
     const created = await strapi.db.query('api::marketplace-thread.marketplace-thread').create({
@@ -226,21 +260,14 @@ module.exports = createCoreController('api::marketplace-thread.marketplace-threa
       return ctx.badRequest('Message must have text or images');
     }
 
-    const incomingHomesContext = buildHomesContext(source, listingId);
-    let threadContext = thread.context || null;
-    if (incomingHomesContext) {
-      threadContext = {
-        source: 'homes',
-        listingId: incomingHomesContext.listingId || threadContext?.listingId || null,
-      };
-      if (!isHomesThread(thread)) {
-        await strapi.db.query('api::marketplace-thread.marketplace-thread').update({
-          where: { id: thread.id },
-          data: { context: threadContext },
-        });
-        thread.context = threadContext;
-      }
-    }
+    const threadContext = resolveHomesContext(thread, {
+      source,
+      listingId,
+      hasProductId: threadHasProduct(thread),
+    });
+    const threadWithContext = threadContext?.source === 'homes'
+      ? await persistHomesContextIfNeeded(strapi, thread, threadContext)
+      : thread;
 
     const message = {
       id: randomUUID(),
@@ -270,14 +297,14 @@ module.exports = createCoreController('api::marketplace-thread.marketplace-threa
     });
 
     const notifyPayload = {
-      thread: { ...thread, context: threadContext || thread.context },
+      thread: threadWithContext,
       message,
       sender: user,
       recipient: isBuyer ? thread.seller : thread.buyer,
-      listingId: threadContext?.listingId || thread.context?.listingId || null,
+      listingId: threadContext?.listingId || threadWithContext?.context?.listingId || null,
     };
 
-    if (isHomesThread(notifyPayload.thread)) {
+    if (isHomesThread(threadWithContext)) {
       await notifyHomesMessage(strapi, notifyPayload);
     } else {
       await notifyMarketplaceMessage(strapi, notifyPayload);
