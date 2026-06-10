@@ -204,7 +204,12 @@ async function hasActiveUnlock(userId, listingId) {
 async function hasConfirmedBooking(userId, listingId) {
   if (!userId || !listingId) return false;
   const rows = await strapi.entityService.findMany(BOOKING_UID, {
-    filters: { guest: { id: userId }, listing: { id: listingId }, status: 'confirmed' },
+    filters: {
+      guest: { id: userId },
+      listing: { id: listingId },
+      status: { $in: ['confirmed', 'completed'] },
+      checkOut: { $gte: new Date().toISOString().slice(0, 10) },
+    },
     limit: 1,
   });
   return rows?.length > 0;
@@ -957,7 +962,39 @@ module.exports = {
       sort: { createdAt: 'desc' },
       limit: 200,
     });
-    return { data: rows };
+    return {
+      data: (rows || []).map((row) => ({
+        id: row.id,
+        checkIn: row.checkIn,
+        checkOut: row.checkOut,
+        guests: Number(row.guests || 1),
+        nights: Number(row.nights || 0),
+        amountUGX: Number(row.amountUGX || 0),
+        roomOptionIndex: Number(row.roomOptionIndex || 0),
+        status: row.status,
+        createdAt: row.createdAt,
+        guest: row.guest ? {
+          id: row.guest.id,
+          username: row.guest.username,
+          fullName: row.guest.fullName,
+          phone: row.guest.phone,
+        } : null,
+        host: row.host ? {
+          id: row.host.id,
+          username: row.host.username,
+          fullName: row.host.fullName,
+          phone: row.host.phone,
+        } : null,
+        listing: row.listing ? {
+          id: row.listing.documentId || row.listing.slug || String(row.listing.id),
+          numericId: row.listing.id,
+          documentId: row.listing.documentId,
+          title: row.listing.title,
+          location: row.listing.location,
+          kind: row.listing.kind,
+        } : null,
+      })),
+    };
   },
 
   async toggleSave(ctx) {
