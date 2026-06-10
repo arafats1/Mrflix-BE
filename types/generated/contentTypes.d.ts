@@ -3520,6 +3520,7 @@ export interface ApiProductProduct extends Struct.CollectionTypeSchema {
       ]
     >;
     images: Schema.Attribute.JSON & Schema.Attribute.DefaultTo<[]>;
+    itemCondition: Schema.Attribute.Enumeration<['Brand New', 'Second Hand']>;
     itemType: Schema.Attribute.Enumeration<['product', 'service']> &
       Schema.Attribute.DefaultTo<'product'>;
     locale: Schema.Attribute.String & Schema.Attribute.Private;

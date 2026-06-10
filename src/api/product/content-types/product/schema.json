@@ -50,6 +50,13 @@
     "subcategory": {
       "type": "string"
     },
+    "itemCondition": {
+      "type": "enumeration",
+      "enum": [
+        "Brand New",
+        "Second Hand"
+      ]
+    },
     "images": {
       "type": "json",
       "default": []
