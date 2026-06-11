@@ -6,7 +6,18 @@ async function resolveUser(strapi, ctx) {
   if (ctx.state.user?.id) {
     return strapi.entityService.findOne('plugin::users-permissions.user', ctx.state.user.id, { populate: ['role'] });
   }
-  return null;
+
+  const authHeader = ctx.request.header?.authorization || ctx.request.headers?.authorization;
+  if (!authHeader?.startsWith('Bearer ')) return null;
+
+  try {
+    const token = authHeader.slice(7);
+    const { id } = await strapi.plugins['users-permissions'].services.jwt.verify(token);
+    if (!id) return null;
+    return await strapi.entityService.findOne('plugin::users-permissions.user', id, { populate: ['role'] });
+  } catch {
+    return null;
+  }
 }
 
 async function getProfile(strapi, userId) {
@@ -31,9 +42,66 @@ async function getManagedCourse(strapi, user, profile, courseId) {
   if (!course) return null;
 
   const isAdmin = isAdminUser(user, profile);
-  const ownsCourse = profile?.id && Number(course.trainer?.id) === Number(profile.id);
+  const trainerId = Number(course.trainer?.id ?? course.trainer ?? 0);
+  const ownsCourse = profile?.id && trainerId === Number(profile.id);
   if (!isAdmin && !ownsCourse) return false;
   return course;
+}
+
+async function deleteEntitiesByFilter(strapi, uid, filters) {
+  const rows = await strapi.entityService.findMany(uid, {
+    filters,
+    fields: ['id'],
+    limit: 10000,
+  });
+  for (const row of rows) {
+    await strapi.entityService.delete(uid, row.id);
+  }
+}
+
+async function deleteCourseAndRelations(strapi, courseId) {
+  const discussionGroups = await strapi.entityService.findMany('api::entrep-discussion-group.entrep-discussion-group', {
+    filters: { course: courseId },
+    fields: ['id'],
+    limit: 1000,
+  });
+
+  for (const group of discussionGroups) {
+    await deleteEntitiesByFilter(strapi, 'api::entrep-post.entrep-post', { discussionGroup: group.id });
+    await strapi.entityService.delete('api::entrep-discussion-group.entrep-discussion-group', group.id);
+  }
+
+  await deleteEntitiesByFilter(strapi, 'api::entrep-submission.entrep-submission', { course: courseId });
+  await deleteEntitiesByFilter(strapi, 'api::entrep-quiz-attempt.entrep-quiz-attempt', { course: courseId });
+  await deleteEntitiesByFilter(strapi, 'api::entrep-certificate.entrep-certificate', { course: courseId });
+  await deleteEntitiesByFilter(strapi, 'api::entrep-live-session-request.entrep-live-session-request', { course: courseId });
+  await deleteEntitiesByFilter(strapi, 'api::entrep-live-session.entrep-live-session', { course: courseId });
+  await deleteEntitiesByFilter(strapi, 'api::entrep-event.entrep-event', { course: courseId });
+  await deleteEntitiesByFilter(strapi, 'api::entrep-enrollment.entrep-enrollment', { course: courseId });
+  await deleteEntitiesByFilter(strapi, 'api::entrep-assignment.entrep-assignment', { course: courseId });
+  await deleteEntitiesByFilter(strapi, 'api::entrep-quiz.entrep-quiz', { course: courseId });
+
+  const existingModules = await strapi.entityService.findMany('api::entrep-module.entrep-module', {
+    filters: { course: courseId },
+    populate: ['lessons', 'quiz'],
+    sort: { order: 'asc' },
+    limit: 1000,
+  });
+
+  for (const moduleEntity of existingModules) {
+    const lessons = Array.isArray(moduleEntity?.lessons) ? moduleEntity.lessons : [];
+    for (const lesson of lessons) {
+      await strapi.entityService.delete('api::entrep-lesson.entrep-lesson', lesson.id);
+    }
+
+    if (moduleEntity?.quiz?.id) {
+      await strapi.entityService.delete('api::entrep-quiz.entrep-quiz', moduleEntity.quiz.id);
+    }
+
+    await strapi.entityService.delete('api::entrep-module.entrep-module', moduleEntity.id);
+  }
+
+  await strapi.entityService.delete('api::entrep-course.entrep-course', courseId);
 }
 
 async function replaceCourseModules(strapi, courseId, modules, coursePassMark) {
@@ -789,6 +857,21 @@ module.exports = createCoreController('api::entrep-course.entrep-course', ({ str
     });
 
     ctx.send({ data: { course: updatedCourse, lesson: lessonEntity } });
+  },
+
+  /**
+   * DELETE /entrep/trainer/courses/:id – trainer removes a course they authored.
+   */
+  async deleteAuthoredCourse(ctx) {
+    const user = await resolveUser(strapi, ctx);
+    if (!user) return ctx.unauthorized();
+    const profile = await getProfile(strapi, user.id);
+    const course = await getManagedCourse(strapi, user, profile, ctx.params.id);
+    if (!course) return ctx.notFound('Course not found');
+    if (course === false) return ctx.forbidden('You can only delete your own courses');
+
+    await deleteCourseAndRelations(strapi, course.id);
+    ctx.send({ success: true });
   },
 
   /**

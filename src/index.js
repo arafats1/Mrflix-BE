@@ -62,6 +62,8 @@ const AUTHENTICATED_ACTIONS = [
   'api::foundation-hub.foundation-hub.commentFundraiser',
   // Entrepreneur — session recordings
   'api::entrep-live-session.entrep-live-session.recordings',
+  // Entrepreneur — trainer course management
+  'api::entrep-course.entrep-course.deleteAuthoredCourse',
 ];
 
 async function ensureRolePermissions(strapi, roleType, actions) {
