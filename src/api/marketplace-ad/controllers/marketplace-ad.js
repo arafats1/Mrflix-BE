@@ -121,6 +121,8 @@ const VALID_AD_PLACEMENTS = [
   'marketplace_top',
   'marketplace_sidebar',
   'marketplace_carousel',
+  'marketplace_general_sidebar',
+  'marketplace_general_carousel',
   'homes_carousel',
   'homes_sidebar',
 ];
@@ -163,7 +165,9 @@ function fillAdDefaults(data = {}) {
 module.exports = createCoreController('api::marketplace-ad.marketplace-ad', ({ strapi }) => ({
   async active(ctx) {
     const placement = normalizePlacement(ctx.query?.placement);
-    const isSidebar = placement === 'marketplace_sidebar' || placement === 'homes_sidebar';
+    const isSidebar = placement === 'marketplace_sidebar'
+      || placement === 'marketplace_general_sidebar'
+      || placement === 'homes_sidebar';
     const ads = await strapi.documents('api::marketplace-ad.marketplace-ad').findMany({
       filters: {
         placement,

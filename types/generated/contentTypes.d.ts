@@ -2975,6 +2975,8 @@ export interface ApiMarketplaceAdMarketplaceAd
         'marketplace_top',
         'marketplace_sidebar',
         'marketplace_carousel',
+        'marketplace_general_sidebar',
+        'marketplace_general_carousel',
         'homes_carousel',
         'homes_sidebar',
       ]
