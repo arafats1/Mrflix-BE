@@ -1,6 +1,7 @@
 'use strict';
 
 const { createCoreController } = require('@strapi/strapi').factories;
+const { ensureUnifiedParentAccess } = require('../../../utils/parent-access');
 
 const MIN_WATCHED_SECONDS = 4 * 60;
 const MOVIE_POPULATE = {
@@ -414,7 +415,8 @@ module.exports = createCoreController('api::active-stream.active-stream', ({ str
       return ctx.unauthorized('You must be logged in');
     }
 
-    if (!ctx.state.user.isParent) {
+    const { allowed } = await ensureUnifiedParentAccess(strapi, ctx.state.user.id);
+    if (!allowed) {
       return ctx.forbidden('Only parent accounts can view child watch history');
     }
 

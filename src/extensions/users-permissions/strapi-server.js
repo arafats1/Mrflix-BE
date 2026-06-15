@@ -4,6 +4,7 @@ const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const utils = require('@strapi/utils');
 const { sendSms } = require('../../utils/sms');
+const { canAccessParentDashboard } = require('../../utils/parent-access');
 
 const { ValidationError } = utils.errors;
 
@@ -316,7 +317,7 @@ module.exports = (plugin) => {
       phone: userWithRole.phone || null,
       phoneVerified: !!userWithRole.phoneVerified,
       religion: userWithRole.religion || null,
-      isParent: !!userWithRole.isParent,
+      isParent: canAccessParentDashboard(userWithRole),
       accountType: userWithRole.accountType || 'parent',
       providerType: userWithRole.providerType || null,
       providerTypes: normalizeProviderTypes(userWithRole.providerTypes || userWithRole.providerType),

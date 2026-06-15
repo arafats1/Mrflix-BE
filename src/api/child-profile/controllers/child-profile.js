@@ -10,6 +10,7 @@ const {
   SAVINGS_TRANSACTION_PREFIX,
 } = require('../../../utils/savings');
 const { submitPayment, getActiveGateway } = require('../../../utils/payment-gateway');
+const { ensureUnifiedParentAccess } = require('../../../utils/parent-access');
 
 const ALLOWED_FIELDS = ['name', 'dateOfBirth', 'religion', 'avatarUrl', 'dailyWatchMinutes', 'blockedMovieIds', 'allowedMovieIds'];
 const MAX_CHILD_PROFILES = 4;
@@ -198,7 +199,9 @@ module.exports = createCoreController('api::child-profile.child-profile', ({ str
   async create(ctx) {
     const user = ctx.state.user;
     if (!user) return ctx.unauthorized();
-    if (!user.isParent) {
+
+    const { allowed } = await ensureUnifiedParentAccess(strapi, user.id);
+    if (!allowed) {
       return ctx.forbidden('Only parent accounts can create child profiles.');
     }
 

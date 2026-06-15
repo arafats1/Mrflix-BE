@@ -1,23 +1,17 @@
 'use strict';
 
 const bcrypt = require('bcryptjs');
+const { ensureUnifiedParentAccess } = require('../../../utils/parent-access');
 
 const PIN_PATTERN = /^\d{4}$/;
-
-async function getCurrentParentUser(userId) {
-  return strapi.db.query('plugin::users-permissions.user').findOne({
-    where: { id: userId },
-    select: ['id', 'isParent', 'parentPinHash'],
-  });
-}
 
 module.exports = {
   async set(ctx) {
     const authUser = ctx.state.user;
     if (!authUser) return ctx.unauthorized();
 
-    const currentUser = await getCurrentParentUser(authUser.id);
-    if (!currentUser || !currentUser.isParent) {
+    const { user: currentUser, allowed } = await ensureUnifiedParentAccess(strapi, authUser.id);
+    if (!allowed || !currentUser) {
       return ctx.forbidden('Only parent accounts can set a parent PIN');
     }
 
@@ -61,8 +55,8 @@ module.exports = {
     const authUser = ctx.state.user;
     if (!authUser) return ctx.unauthorized();
 
-    const currentUser = await getCurrentParentUser(authUser.id);
-    if (!currentUser || !currentUser.isParent) {
+    const { user: currentUser, allowed } = await ensureUnifiedParentAccess(strapi, authUser.id);
+    if (!allowed || !currentUser) {
       return ctx.forbidden('Only parent accounts can verify a parent PIN');
     }
 
