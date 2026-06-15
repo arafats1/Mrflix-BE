@@ -82,6 +82,9 @@
     "yoReference": {
       "type": "string"
     },
+    "airtelReference": {
+      "type": "string"
+    },
     "product": {
       "type": "relation",
       "relation": "manyToOne",

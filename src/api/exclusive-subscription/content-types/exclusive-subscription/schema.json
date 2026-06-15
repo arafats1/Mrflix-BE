@@ -56,6 +56,9 @@
     "yoReference": {
       "type": "string"
     },
+    "airtelReference": {
+      "type": "string"
+    },
     "promoCode": {
       "type": "string"
     },

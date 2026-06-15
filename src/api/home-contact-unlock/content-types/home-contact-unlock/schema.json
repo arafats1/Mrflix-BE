@@ -20,6 +20,7 @@
     "pesapalTrackingId": { "type": "string" },
     "dgatewayReference": { "type": "string" },
     "yoReference": { "type": "string" },
+    "airtelReference": { "type": "string" },
     "status": { "type": "enumeration", "enum": ["pending", "active", "failed", "cancelled"], "default": "pending", "required": true },
     "unlockedAt": { "type": "datetime" }
   }

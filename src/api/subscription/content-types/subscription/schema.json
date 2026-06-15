@@ -59,6 +59,9 @@
     },
     "yoReference": {
       "type": "string"
+    },
+    "airtelReference": {
+      "type": "string"
     }
   }
 }

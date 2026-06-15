@@ -51,6 +51,9 @@
     "yoReference": {
       "type": "string"
     },
+    "airtelReference": {
+      "type": "string"
+    },
     "status": {
       "type": "enumeration",
       "enum": ["active", "expired", "cancelled", "pending"],
