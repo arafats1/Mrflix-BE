@@ -17,7 +17,7 @@ module.exports = createCoreController('api::site-setting.site-setting', ({ strap
     const settings = Array.isArray(res) ? res[0] : res;
     const revenueStart = settings?.revenueResetDate
       ? new Date(settings.revenueResetDate)
-      : new Date('2026-03-09T00:00:00.000Z');
+      : new Date('2026-05-01T00:00:00.000Z');
 
     const revenueStartIso = revenueStart.toISOString();
 
