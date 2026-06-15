@@ -316,4 +316,18 @@ function scheduleProductImageProcessing(strapi, identifier = {}, options = {}) {
 module.exports = {
   processProductImages,
   scheduleProductImageProcessing,
+  normalizeImageEntry,
+  hasFullVariantSet,
+  isOptimizedOriginalUrl,
+  entryNeedsProcessing,
+  compressToTarget,
+  renderVariant,
+  uploadBuffer,
+  getStorage,
+  fetchBuffer,
+  makeAbsoluteUrl,
+  inferFeaturedIndex,
+  TARGET_ORIGINAL_BYTES,
+  VARIANT_SPECS,
+  OPTIMIZED_ORIGINAL_SPEC,
 };

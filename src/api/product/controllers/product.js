@@ -5,7 +5,8 @@
  */
 
 const { createCoreController } = require('@strapi/strapi').factories;
-const { scheduleProductImageProcessing } = require('../../../utils/marketplace-image-processing');
+const { scheduleProductImageProcessing, processProductImages } = require('../../../utils/marketplace-image-processing');
+const { assertAdmin } = require('../../../utils/admin-auth');
 
 function normalizeDeliveryAreas(input = []) {
   const values = Array.isArray(input)
@@ -1057,5 +1058,105 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
         totalPurchasedValueUGX: totalProductValueUGX,
       },
     };
+  },
+
+  /**
+   * Admin-only: batch-optimize marketplace product images on the server.
+   * Accepts full-access API tokens (for maintenance scripts).
+   */
+  async adminOptimizeImages(ctx) {
+    if (!(await assertAdmin(ctx, strapi))) return;
+
+    const body = ctx.request.body || {};
+    const query = ctx.query || {};
+    const force = body.force === true || query.force === 'true';
+    const documentId = String(body.documentId || query.documentId || '').trim() || null;
+    const page = Math.max(1, Number.parseInt(body.page || query.page || '1', 10) || 1);
+    const pageSize = Math.min(50, Math.max(1, Number.parseInt(body.pageSize || query.pageSize || '25', 10) || 25));
+
+    const where = documentId ? { documentId } : {};
+    const offset = documentId ? 0 : (page - 1) * pageSize;
+
+    const products = await strapi.db.query('api::product.product').findMany({
+      where,
+      select: ['id', 'documentId', 'name'],
+      orderBy: { updatedAt: 'desc' },
+      limit: documentId ? 1 : pageSize,
+      offset,
+    });
+
+    let updated = 0;
+    let skipped = 0;
+    let failed = 0;
+    const errors = [];
+
+    for (const product of products) {
+      try {
+        const changed = await processProductImages(
+          strapi,
+          { documentId: product.documentId, id: product.id },
+          { force },
+        );
+        if (changed) updated += 1;
+        else skipped += 1;
+      } catch (error) {
+        failed += 1;
+        errors.push({
+          id: product.id,
+          documentId: product.documentId,
+          name: product.name,
+          error: error.message,
+        });
+      }
+    }
+
+    const total = documentId
+      ? products.length
+      : await strapi.db.query('api::product.product').count({ where });
+
+    return {
+      data: {
+        page,
+        pageSize,
+        total,
+        processed: products.length,
+        updated,
+        skipped,
+        failed,
+        errors,
+      },
+    };
+  },
+
+  /**
+   * Admin-only: update product image variants (used by remote optimization scripts).
+   */
+  async adminUpdateImages(ctx) {
+    if (!(await assertAdmin(ctx, strapi))) return;
+
+    const documentId = String(ctx.params.id || '').trim();
+    if (!documentId) return ctx.badRequest('Missing product id');
+
+    const { images, featuredImage } = ctx.request.body?.data || ctx.request.body || {};
+    if (!Array.isArray(images) || images.length === 0) {
+      return ctx.badRequest('images array is required');
+    }
+
+    const product = await strapi.db.query('api::product.product').findOne({
+      where: { documentId },
+      select: ['id', 'documentId'],
+    });
+
+    if (!product) return ctx.notFound('Product not found');
+
+    await strapi.db.query('api::product.product').update({
+      where: { id: product.id },
+      data: {
+        images,
+        ...(featuredImage ? { featuredImage } : {}),
+      },
+    });
+
+    return { data: { success: true, documentId } };
   },
 }));

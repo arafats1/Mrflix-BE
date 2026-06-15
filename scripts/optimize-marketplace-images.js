@@ -20,11 +20,12 @@ const { compileStrapi, createStrapi } = require('@strapi/core');
 const { processProductImages } = require('../src/utils/marketplace-image-processing');
 
 function parseArgs(argv) {
-  const args = { dryRun: false, force: false, limit: null };
+  const args = { dryRun: false, force: false, limit: null, documentId: null };
   for (const raw of argv) {
     if (raw === '--dry-run') args.dryRun = true;
     else if (raw === '--force') args.force = true;
     else if (raw.startsWith('--limit=')) args.limit = Number.parseInt(raw.split('=')[1], 10) || null;
+    else if (raw.startsWith('--documentId=')) args.documentId = raw.split('=')[1] || null;
   }
   return args;
 }
@@ -39,7 +40,8 @@ async function main() {
     const products = await strapi.db.query('api::product.product').findMany({
       select: ['id', 'documentId', 'name'],
       orderBy: { updatedAt: 'desc' },
-      ...(options.limit ? { limit: options.limit } : {}),
+      ...(options.documentId ? { where: { documentId: options.documentId }, limit: 1 } : {}),
+      ...(options.limit && !options.documentId ? { limit: options.limit } : {}),
     });
 
     console.log(`[optimize-marketplace-images] Found ${products.length} product(s).${options.dryRun ? ' (dry run)' : ''}`);

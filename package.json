@@ -12,6 +12,7 @@
     "generate:720p": "node scripts/generate-720p-variants.js",
     "regenerate:marketplace-images": "node scripts/regenerate-marketplace-image-variants.js",
     "optimize:marketplace-images": "node scripts/optimize-marketplace-images.js",
+    "optimize:marketplace-images:remote": "node scripts/optimize-marketplace-images-remote.js",
     "optimize:marketplace-ads": "node scripts/optimize-marketplace-ads.js",
     "migrate:bunny-stream": "node scripts/migrate-bunny-stream.js",
     "push:vapid": "web-push generate-vapid-keys",

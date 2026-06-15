@@ -82,5 +82,21 @@ module.exports = {
       handler: 'product.delete',
       config: {},
     },
+    {
+      method: 'POST',
+      path: '/products/admin/optimize-images',
+      handler: 'product.adminOptimizeImages',
+      config: {
+        auth: false,
+      },
+    },
+    {
+      method: 'PUT',
+      path: '/products/admin/:id/images',
+      handler: 'product.adminUpdateImages',
+      config: {
+        auth: false,
+      },
+    },
   ],
 };
