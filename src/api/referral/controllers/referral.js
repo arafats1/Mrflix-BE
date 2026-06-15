@@ -241,6 +241,12 @@ module.exports = createCoreController('api::referral.referral', ({ strapi }) => 
       return ctx.unauthorized('You must be logged in');
     }
 
+    const settingsRows = await strapi.entityService.findMany('api::site-setting.site-setting');
+    const settings = Array.isArray(settingsRows) ? settingsRows[0] : settingsRows;
+    if (settings?.referralEnabled === false) {
+      return ctx.badRequest('Referral credits are no longer available');
+    }
+
     const { movieId } = ctx.request.body.data || ctx.request.body;
     if (!movieId) {
       return ctx.badRequest('Missing required field: movieId');

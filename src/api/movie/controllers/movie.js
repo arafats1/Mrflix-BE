@@ -421,15 +421,13 @@ async function getSiteDefaultPrices(strapi) {
 
 /**
  * Apply the site-setting default price to each movie entry.
- * If the movie has no custom priceUGX (null/0), it uses the default.
- * Also overrides priceUGX so the displayed price always matches the
- * site-setting default for the movie's type.
+ * Movies and series share the same moviePrice from site settings.
  */
 function applyDefaultPrices(movies, defaults) {
   if (!Array.isArray(movies)) return movies;
+  const defaultPrice = defaults.moviePrice;
   return movies.map((movie) => {
     const m = movie.toJSON ? movie.toJSON() : { ...movie };
-    const defaultPrice = m.type === 'series' ? defaults.seriesPrice : defaults.moviePrice;
     m.priceUGX = defaultPrice;
     return m;
   });
@@ -669,8 +667,7 @@ module.exports = createCoreController('api::movie.movie', ({ strapi }) => ({
     if (response?.data) {
       const defaults = await getSiteDefaultPrices(strapi);
       const m = response.data.toJSON ? response.data.toJSON() : { ...response.data };
-      const defaultPrice = m.type === 'series' ? defaults.seriesPrice : defaults.moviePrice;
-      m.priceUGX = defaultPrice;
+      m.priceUGX = defaults.moviePrice;
       const enriched = includePreviews === 'true'
         ? await enrichMovieWithPreview(strapi, m)
         : m;

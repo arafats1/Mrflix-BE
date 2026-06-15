@@ -422,12 +422,11 @@ module.exports = createCoreController('api::exclusive-subscription.exclusive-sub
     const settings = await strapi.entityService.findMany('api::site-setting.site-setting');
     const defaults = {
       moviePrice: settings?.moviePrice ?? 2000,
-      seriesPrice: settings?.seriesPrice ?? 5000,
     };
 
     const data = movies.map((movie) => {
       const m = movie.toJSON ? movie.toJSON() : { ...movie };
-      m.priceUGX = m.type === 'series' ? defaults.seriesPrice : defaults.moviePrice;
+      m.priceUGX = defaults.moviePrice;
       return m;
     });
 

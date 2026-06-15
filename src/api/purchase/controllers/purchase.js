@@ -238,10 +238,7 @@ async function markPurchasesCompleted(strapi, purchases, paymentData = {}) {
 
 
 function getMovieAmount(settings, movie, seasonNumber) {
-  if (movie.type === 'series') {
-    return settings?.seriesPrice ?? 5000;
-  }
-
+  // Movies and series use the same site-setting movie price.
   return settings?.moviePrice ?? 2000;
 }
 
