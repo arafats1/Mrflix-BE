@@ -22,6 +22,9 @@ const ORIGINAL_COMPRESSION_STEPS = [
   { maxDimension: 1200, quality: 62 },
   { maxDimension: 1024, quality: 58 },
   { maxDimension: 900, quality: 52 },
+  { maxDimension: 800, quality: 48 },
+  { maxDimension: 720, quality: 44 },
+  { maxDimension: 640, quality: 40 },
 ];
 
 function getStorage() {
@@ -72,6 +75,18 @@ function hasFullVariantSet(entry) {
     && entry.thumbnail
     && entry.card !== entry.original
   );
+}
+
+function isOptimizedOriginalUrl(url) {
+  return /\/product-images\/optimized\//i.test(String(url || ''));
+}
+
+function entryNeedsProcessing(entry, force) {
+  if (!entry?.original) return false;
+  if (force) return true;
+  if (!hasFullVariantSet(entry)) return true;
+  // Client uploads land in product-images/original — still need server-side re-encode.
+  return !isOptimizedOriginalUrl(entry.original);
 }
 
 function inferFeaturedIndex(variants, featuredImage) {
@@ -162,8 +177,9 @@ function getBaseUrl(strapi) {
 
 /**
  * Ensure every image on a product has lightweight card/thumbnail webp variants
- * and that heavy originals (> 1MB) are re-encoded. Safe to call repeatedly: it
- * only does work when variants are missing (or when `force` is set).
+ * and that heavy originals (> 500KB) are re-encoded. Safe to call repeatedly:
+ * it only does work when variants are missing, the original was not yet optimized
+ * on the server, or when `force` is set.
  *
  * @returns {Promise<boolean>} true when the product images were updated.
  */
@@ -196,7 +212,7 @@ async function processProductImages(strapi, identifier = {}, options = {}) {
 
   if (entries.length === 0) return false;
 
-  const needsWork = force || entries.some((entry) => !hasFullVariantSet(entry));
+  const needsWork = force || entries.some((entry) => entryNeedsProcessing(entry, force));
   if (!needsWork) return false;
 
   const storage = getStorage();
@@ -218,9 +234,10 @@ async function processProductImages(strapi, identifier = {}, options = {}) {
     };
 
     const missing = Object.keys(VARIANT_SPECS).filter((name) => force || !next[name]);
+    const shouldOptimizeOriginal = entryNeedsProcessing(entry, force);
     const sourceUrl = makeAbsoluteUrl(entry.original, baseUrl);
 
-    if (missing.length === 0 || !sourceUrl) {
+    if ((!missing.length && !shouldOptimizeOriginal) || !sourceUrl) {
       next.card = next.card || next.original;
       next.thumbnail = next.thumbnail || next.card || next.original;
       nextVariants.push(next);
