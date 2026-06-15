@@ -244,8 +244,10 @@ module.exports = createCoreController('api::provider-material.provider-material'
     if (!ctx.state.user) return ctx.unauthorized();
 
     const provider = await getFullUser(strapi, ctx.state.user.id);
-    if (!provider || !['provider', 'both'].includes(provider.accountType)) {
-      return ctx.forbidden('Only provider accounts can access provider materials');
+    if (!provider) return ctx.unauthorized();
+    if (!['provider', 'both'].includes(provider.accountType)) {
+      ctx.body = { data: [] };
+      return;
     }
 
     const materials = await strapi.documents('api::provider-material.provider-material').findMany({
@@ -269,8 +271,10 @@ module.exports = createCoreController('api::provider-material.provider-material'
     if (!ctx.state.user) return ctx.unauthorized();
 
     const provider = await getFullUser(strapi, ctx.state.user.id);
-    if (!provider || !['provider', 'both'].includes(provider.accountType)) {
-      return ctx.forbidden('Only provider accounts can access provider summaries');
+    if (!provider) return ctx.unauthorized();
+    if (!['provider', 'both'].includes(provider.accountType)) {
+      ctx.body = { data: { materials: 0, totalSales: 0, totalRevenueUGX: 0, published: 0, drafts: 0 } };
+      return;
     }
 
     const materials = await strapi.documents('api::provider-material.provider-material').findMany({

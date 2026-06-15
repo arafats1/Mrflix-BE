@@ -2033,6 +2033,7 @@ export interface ApiExclusiveSubscriptionExclusiveSubscription
     draftAndPublish: false;
   };
   attributes: {
+    airtelReference: Schema.Attribute.String;
     amount: Schema.Attribute.Integer & Schema.Attribute.Required;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
@@ -2487,6 +2488,7 @@ export interface ApiHomeBookingHomeBooking extends Struct.CollectionTypeSchema {
     draftAndPublish: false;
   };
   attributes: {
+    airtelReference: Schema.Attribute.String;
     amountUGX: Schema.Attribute.Integer &
       Schema.Attribute.Required &
       Schema.Attribute.SetMinMax<
@@ -2577,6 +2579,7 @@ export interface ApiHomeContactUnlockHomeContactUnlock
     draftAndPublish: false;
   };
   attributes: {
+    airtelReference: Schema.Attribute.String;
     amountUGX: Schema.Attribute.Integer &
       Schema.Attribute.Required &
       Schema.Attribute.SetMinMax<
@@ -3049,6 +3052,7 @@ export interface ApiMarketplacePromotionMarketplacePromotion
       ['draft', 'ready', 'scheduled', 'running', 'completed', 'cancelled']
     > &
       Schema.Attribute.DefaultTo<'draft'>;
+    airtelReference: Schema.Attribute.String;
     amount: Schema.Attribute.Integer &
       Schema.Attribute.Required &
       Schema.Attribute.DefaultTo<0>;
@@ -3778,6 +3782,7 @@ export interface ApiPurchasePurchase extends Struct.CollectionTypeSchema {
     draftAndPublish: false;
   };
   attributes: {
+    airtelReference: Schema.Attribute.String;
     amount: Schema.Attribute.Integer & Schema.Attribute.Required;
     book: Schema.Attribute.Relation<'manyToOne', 'api::book.book'>;
     buyer: Schema.Attribute.Relation<
@@ -4246,6 +4251,7 @@ export interface ApiStorageSubscriptionStorageSubscription
     draftAndPublish: false;
   };
   attributes: {
+    airtelReference: Schema.Attribute.String;
     amount: Schema.Attribute.Integer & Schema.Attribute.Required;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
@@ -4337,6 +4343,7 @@ export interface ApiSubscriptionSubscription
     draftAndPublish: false;
   };
   attributes: {
+    airtelReference: Schema.Attribute.String;
     amount: Schema.Attribute.Integer & Schema.Attribute.Required;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
