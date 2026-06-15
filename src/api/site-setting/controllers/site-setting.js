@@ -15,9 +15,7 @@ module.exports = createCoreController('api::site-setting.site-setting', ({ strap
 
     const res = await strapi.entityService.findMany('api::site-setting.site-setting');
     const settings = Array.isArray(res) ? res[0] : res;
-    const revenueStart = settings?.revenueResetDate
-      ? new Date(settings.revenueResetDate)
-      : new Date('2026-05-01T00:00:00.000Z');
+    const revenueStart = new Date('2026-05-01T00:00:00.000Z');
 
     const revenueStartIso = revenueStart.toISOString();
 
@@ -56,7 +54,6 @@ module.exports = createCoreController('api::site-setting.site-setting', ({ strap
           product: { $null: true },
           providerMaterial: { $null: true },
           book: { $null: true },
-          movie: { $notNull: true },
         },
         select: ['amount'],
       }),
@@ -88,6 +85,7 @@ module.exports = createCoreController('api::site-setting.site-setting', ({ strap
     const exclusiveRevenue = (exclusiveRevenueRows || []).reduce((sum, entry) => sum + (entry.amount || 0), 0);
     const promotionRevenue = (promotionRevenueRows || []).reduce((sum, entry) => sum + (entry.amount || 0), 0);
     const movieRevenue = moviePurchaseRevenue + subscriptionRevenue;
+    const totalRevenue = movieRevenue + exclusiveRevenue;
 
     return {
       data: {
@@ -97,7 +95,7 @@ module.exports = createCoreController('api::site-setting.site-setting', ({ strap
         pendingRequests,
         totalRequests,
         movieRevenue,
-        totalRevenue: movieRevenue,
+        totalRevenue,
         totalUsers,
         activeSubscriptions,
         totalSubscriptions,
