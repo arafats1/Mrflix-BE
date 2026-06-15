@@ -284,14 +284,35 @@ async function processProductImages(strapi, identifier = {}, options = {}) {
 
   const featuredIndex = inferFeaturedIndex(nextVariants, product.featuredImage);
   const featuredVariant = nextVariants[featuredIndex] || nextVariants[0] || null;
+  const imagePayload = {
+    images: nextVariants,
+    featuredImage: featuredVariant?.original || product.featuredImage || null,
+  };
 
-  await strapi.db.query('api::product.product').update({
-    where: { id: product.id },
-    data: {
-      images: nextVariants,
-      featuredImage: featuredVariant?.original || product.featuredImage || null,
-    },
-  });
+  // Strapi 5 draft/publish: db.query only updates the draft row. The public API
+  // reads the published document, so we must write the published version too.
+  if (product.documentId) {
+    await strapi.documents('api::product.product').update({
+      documentId: product.documentId,
+      data: imagePayload,
+      status: 'published',
+    });
+
+    try {
+      await strapi.documents('api::product.product').update({
+        documentId: product.documentId,
+        data: imagePayload,
+        status: 'draft',
+      });
+    } catch (_) {
+      // Draft row may not exist for every product; published write is what matters.
+    }
+  } else {
+    await strapi.db.query('api::product.product').update({
+      where: { id: product.id },
+      data: imagePayload,
+    });
+  }
 
   return true;
 }

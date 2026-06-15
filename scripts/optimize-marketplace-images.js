@@ -37,12 +37,30 @@ async function main() {
   const strapi = await createStrapi(appContext).load();
 
   try {
-    const products = await strapi.db.query('api::product.product').findMany({
-      select: ['id', 'documentId', 'name'],
-      orderBy: { updatedAt: 'desc' },
-      ...(options.documentId ? { where: { documentId: options.documentId }, limit: 1 } : {}),
-      ...(options.limit && !options.documentId ? { limit: options.limit } : {}),
-    });
+    let products;
+
+    if (options.documentId) {
+      products = await strapi.db.query('api::product.product').findMany({
+        where: { documentId: options.documentId },
+        select: ['id', 'documentId', 'name'],
+        limit: 1,
+      });
+    } else {
+      const published = await strapi.documents('api::product.product').findMany({
+        status: 'published',
+        fields: ['documentId', 'name'],
+        limit: 10000,
+      });
+      products = published.map((product) => ({
+        id: product.id,
+        documentId: product.documentId,
+        name: product.name,
+      }));
+    }
+
+    if (options.limit && !options.documentId) {
+      products = products.slice(0, options.limit);
+    }
 
     console.log(`[optimize-marketplace-images] Found ${products.length} product(s).${options.dryRun ? ' (dry run)' : ''}`);
 

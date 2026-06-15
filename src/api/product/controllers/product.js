@@ -1149,13 +1149,26 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
 
     if (!product) return ctx.notFound('Product not found');
 
-    await strapi.db.query('api::product.product').update({
-      where: { id: product.id },
-      data: {
-        images,
-        ...(featuredImage ? { featuredImage } : {}),
-      },
+    const imagePayload = {
+      images,
+      ...(featuredImage ? { featuredImage } : {}),
+    };
+
+    await strapi.documents('api::product.product').update({
+      documentId,
+      data: imagePayload,
+      status: 'published',
     });
+
+    try {
+      await strapi.documents('api::product.product').update({
+        documentId,
+        data: imagePayload,
+        status: 'draft',
+      });
+    } catch (_) {
+      // Draft row may not exist; published write is what the API serves.
+    }
 
     return { data: { success: true, documentId } };
   },

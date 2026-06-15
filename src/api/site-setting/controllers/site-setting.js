@@ -33,7 +33,7 @@ module.exports = createCoreController('api::site-setting.site-setting', ({ strap
       activeExclusiveSubscriptions,
       totalExclusiveSubscriptions,
       newMessages,
-      purchaseRevenueRows,
+      moviePurchaseRevenueRows,
       subscriptionRevenueRows,
       exclusiveRevenueRows,
       promotionRevenueRows,
@@ -53,6 +53,10 @@ module.exports = createCoreController('api::site-setting.site-setting', ({ strap
         where: {
           status: 'completed',
           createdAt: { $gte: revenueStartIso },
+          product: { $null: true },
+          providerMaterial: { $null: true },
+          book: { $null: true },
+          movie: { $notNull: true },
         },
         select: ['amount'],
       }),
@@ -79,10 +83,11 @@ module.exports = createCoreController('api::site-setting.site-setting', ({ strap
       }).catch(() => []),
     ]);
 
-    const purchaseRevenue = (purchaseRevenueRows || []).reduce((sum, entry) => sum + (entry.amount || 0), 0);
+    const moviePurchaseRevenue = (moviePurchaseRevenueRows || []).reduce((sum, entry) => sum + (entry.amount || 0), 0);
     const subscriptionRevenue = (subscriptionRevenueRows || []).reduce((sum, entry) => sum + (entry.amount || 0), 0);
     const exclusiveRevenue = (exclusiveRevenueRows || []).reduce((sum, entry) => sum + (entry.amount || 0), 0);
     const promotionRevenue = (promotionRevenueRows || []).reduce((sum, entry) => sum + (entry.amount || 0), 0);
+    const movieRevenue = moviePurchaseRevenue + subscriptionRevenue;
 
     return {
       data: {
@@ -91,7 +96,8 @@ module.exports = createCoreController('api::site-setting.site-setting', ({ strap
         totalPurchases,
         pendingRequests,
         totalRequests,
-        totalRevenue: purchaseRevenue + subscriptionRevenue + exclusiveRevenue + promotionRevenue,
+        movieRevenue,
+        totalRevenue: movieRevenue,
         totalUsers,
         activeSubscriptions,
         totalSubscriptions,
