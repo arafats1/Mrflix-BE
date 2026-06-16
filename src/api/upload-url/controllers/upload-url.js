@@ -80,8 +80,13 @@ async function ensureFolderAccess(ctx, authUser, folder) {
   if (folderType === 'open') return true;
 
   if (folderType === 'provider') {
+    // Marketplace products: any signed-in user can upload listing media.
+    if (folderMatchesPrefix(folder, 'product-images') || folderMatchesPrefix(folder, 'product-videos')) {
+      return true;
+    }
+
     if (authUser.accountType === 'provider' || authUser.accountType === 'both') return true;
-    if ((folderMatchesPrefix(folder, 'product-images') || folderMatchesPrefix(folder, 'product-videos')) && await isEntrepreneurUploadUser(authUser)) return true;
+    if (await isEntrepreneurUploadUser(authUser)) return true;
     if (await isAdminUploadUser(authUser)) return true;
     ctx.forbidden('Provider/Seller access required for this folder');
     return false;
