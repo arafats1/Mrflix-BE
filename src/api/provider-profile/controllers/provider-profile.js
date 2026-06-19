@@ -28,6 +28,21 @@ function normalizeSubjectsTaught(input = []) {
   return [...new Set(rawValues.map((value) => String(value || '').trim()).filter(Boolean))];
 }
 
+function normalizePhone(phone) {
+  const raw = typeof phone === 'string' ? phone.trim() : '';
+  if (!raw) return '';
+
+  let normalized = raw.replace(/[\s()+-]/g, '');
+  if (normalized.startsWith('0')) normalized = `256${normalized.slice(1)}`;
+  return normalized;
+}
+
+function userCanUpdateProviderProfile(user) {
+  if (!user) return false;
+  if (['provider', 'both'].includes(user.accountType)) return true;
+  return normalizeProviderTypes(user.providerTypes || user.providerType).length > 0;
+}
+
 module.exports = {
   async updateMe(ctx) {
     if (!ctx.state.user) return ctx.unauthorized();
@@ -36,7 +51,7 @@ module.exports = {
       where: { id: ctx.state.user.id },
     });
 
-    if (!currentUser || !['provider', 'both'].includes(currentUser.accountType)) {
+    if (!userCanUpdateProviderProfile(currentUser)) {
       return ctx.forbidden('Only provider accounts can update this profile');
     }
 
@@ -56,6 +71,7 @@ module.exports = {
     const subjectsTaught = normalizeSubjectsTaught(body.subjectsTaught);
     const paymentPhone = typeof body.paymentPhone === 'string' ? body.paymentPhone.trim() : '';
     const paymentCode = typeof body.paymentCode === 'string' ? body.paymentCode.trim() : '';
+    const contactPhone = typeof body.phone === 'string' ? normalizePhone(body.phone) : '';
     const avatarUrl = typeof body.avatarUrl === 'string' ? body.avatarUrl.trim() : null;
 
     if (!fullName) return ctx.badRequest('Full name is required');
@@ -89,6 +105,11 @@ module.exports = {
       updateData.location = location || currentUser.location || 'Kampala';
       updateData.paymentPhone = paymentPhone || null;
       updateData.paymentCode = paymentCode || null;
+      if (contactPhone) {
+        updateData.phone = contactPhone;
+      } else if (paymentPhone) {
+        updateData.phone = normalizePhone(paymentPhone) || null;
+      }
     }
 
     await strapi.db.query('plugin::users-permissions.user').update({

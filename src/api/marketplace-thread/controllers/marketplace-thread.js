@@ -64,7 +64,7 @@ async function resolveUser(ctx) {
     const payload = await strapi.plugins['users-permissions'].services.jwt.verify(token);
     const user = await strapi.db.query('plugin::users-permissions.user').findOne({
       where: { id: payload.id },
-      select: ['id', 'documentId', 'fullName', 'username', 'lastSeenAt', 'avatarUrl'],
+      select: THREAD_USER_SELECT,
     });
     return user || null;
   } catch {
@@ -88,8 +88,8 @@ module.exports = createCoreController('api::marketplace-thread.marketplace-threa
       },
       orderBy: { lastMessageAt: 'desc' },
       populate: {
-        buyer: { select: ['id', 'documentId', 'fullName', 'username', 'lastSeenAt', 'avatarUrl'] },
-        seller: { select: ['id', 'documentId', 'fullName', 'username', 'lastSeenAt', 'avatarUrl'] },
+        buyer: { select: THREAD_USER_SELECT },
+        seller: { select: THREAD_USER_SELECT },
         product: { select: ['id', 'documentId', 'name', 'featuredImage', 'priceUGX', 'itemType'] },
       },
     });
@@ -105,8 +105,8 @@ module.exports = createCoreController('api::marketplace-thread.marketplace-threa
     const thread = await strapi.db.query('api::marketplace-thread.marketplace-thread').findOne({
       where: { documentId: ctx.params.id },
       populate: {
-        buyer: { select: ['id', 'documentId', 'fullName', 'username', 'lastSeenAt', 'avatarUrl'] },
-        seller: { select: ['id', 'documentId', 'fullName', 'username', 'lastSeenAt', 'avatarUrl'] },
+        buyer: { select: THREAD_USER_SELECT },
+        seller: { select: THREAD_USER_SELECT },
         product: { select: ['id', 'documentId', 'name', 'featuredImage', 'priceUGX', 'itemType'] },
       },
     });
@@ -167,7 +167,7 @@ module.exports = createCoreController('api::marketplace-thread.marketplace-threa
     // Resolve seller
     const seller = await strapi.db.query('plugin::users-permissions.user').findOne({
       where: { documentId: sellerId },
-      select: ['id', 'documentId', 'fullName', 'username', 'lastSeenAt', 'avatarUrl'],
+      select: THREAD_USER_SELECT,
     });
     if (!seller) return ctx.notFound('Seller not found');
     if (seller.id === user.id) return ctx.badRequest('Cannot chat with yourself');
@@ -188,8 +188,8 @@ module.exports = createCoreController('api::marketplace-thread.marketplace-threa
         seller: { id: seller.id },
       },
       populate: {
-        buyer: { select: ['id', 'documentId', 'fullName', 'username', 'lastSeenAt', 'avatarUrl'] },
-        seller: { select: ['id', 'documentId', 'fullName', 'username', 'lastSeenAt', 'avatarUrl'] },
+        buyer: { select: THREAD_USER_SELECT },
+        seller: { select: THREAD_USER_SELECT },
         product: { select: ['id', 'documentId', 'name', 'featuredImage', 'priceUGX', 'itemType'] },
       },
       orderBy: { createdAt: 'desc' },
@@ -203,8 +203,8 @@ module.exports = createCoreController('api::marketplace-thread.marketplace-threa
       const refreshed = await strapi.db.query('api::marketplace-thread.marketplace-thread').findOne({
         where: { id: withContext.id },
         populate: {
-          buyer: { select: ['id', 'documentId', 'fullName', 'username', 'lastSeenAt', 'avatarUrl'] },
-          seller: { select: ['id', 'documentId', 'fullName', 'username', 'lastSeenAt', 'avatarUrl'] },
+          buyer: { select: THREAD_USER_SELECT },
+          seller: { select: THREAD_USER_SELECT },
           product: { select: ['id', 'documentId', 'name', 'featuredImage', 'priceUGX', 'itemType'] },
         },
       });
@@ -226,8 +226,8 @@ module.exports = createCoreController('api::marketplace-thread.marketplace-threa
         context: homesContext,
       },
       populate: {
-        buyer: { select: ['id', 'documentId', 'fullName', 'username', 'lastSeenAt', 'avatarUrl'] },
-        seller: { select: ['id', 'documentId', 'fullName', 'username', 'lastSeenAt', 'avatarUrl'] },
+        buyer: { select: THREAD_USER_SELECT },
+        seller: { select: THREAD_USER_SELECT },
         product: { select: ['id', 'documentId', 'name', 'featuredImage', 'priceUGX', 'itemType'] },
       },
     });
@@ -243,8 +243,8 @@ module.exports = createCoreController('api::marketplace-thread.marketplace-threa
     const thread = await strapi.db.query('api::marketplace-thread.marketplace-thread').findOne({
       where: { documentId: ctx.params.id },
       populate: {
-        buyer: { select: ['id', 'documentId', 'fullName', 'username', 'lastSeenAt', 'avatarUrl'] },
-        seller: { select: ['id', 'documentId', 'fullName', 'username', 'lastSeenAt', 'avatarUrl'] },
+        buyer: { select: THREAD_USER_SELECT },
+        seller: { select: THREAD_USER_SELECT },
         product: { select: ['id', 'documentId', 'name', 'featuredImage', 'priceUGX', 'itemType'] },
       },
     });
@@ -290,8 +290,8 @@ module.exports = createCoreController('api::marketplace-thread.marketplace-threa
         sellerUnread: isBuyer ? (thread.sellerUnread || 0) + 1 : 0,
       },
       populate: {
-        buyer: { select: ['id', 'documentId', 'fullName', 'username', 'lastSeenAt', 'avatarUrl'] },
-        seller: { select: ['id', 'documentId', 'fullName', 'username', 'lastSeenAt', 'avatarUrl'] },
+        buyer: { select: THREAD_USER_SELECT },
+        seller: { select: THREAD_USER_SELECT },
         product: { select: ['id', 'documentId', 'name', 'featuredImage', 'priceUGX', 'itemType'] },
       },
     });
@@ -317,7 +317,7 @@ module.exports = createCoreController('api::marketplace-thread.marketplace-threa
   async sellerStatus(ctx) {
     const seller = await strapi.db.query('plugin::users-permissions.user').findOne({
       where: { documentId: ctx.params.sellerId },
-      select: ['id', 'documentId', 'fullName', 'username', 'lastSeenAt', 'avatarUrl'],
+      select: THREAD_USER_SELECT,
     });
 
     if (!seller) return ctx.notFound();
@@ -359,28 +359,52 @@ function isOnline(lastSeenAt) {
   return Date.now() - new Date(lastSeenAt).getTime() < 3 * 60 * 1000; // 3 minutes
 }
 
+const THREAD_USER_SELECT = [
+  'id',
+  'documentId',
+  'fullName',
+  'username',
+  'lastSeenAt',
+  'avatarUrl',
+  'phone',
+  'paymentPhone',
+];
+
+function participantPhone(user) {
+  const raw = user?.paymentPhone || user?.phone || '';
+  const digits = String(raw).replace(/\D/g, '');
+  if (!digits) return null;
+  if (digits.startsWith('256') && digits.length === 12) return `0${digits.slice(3)}`;
+  if (digits.length === 9) return `0${digits}`;
+  if (digits.startsWith('0')) return digits;
+  return String(raw).trim() || null;
+}
+
+function participantName(user, fallback) {
+  return user?.fullName || user?.username || fallback;
+}
+
+function sanitizeParticipant(user, fallback) {
+  if (!user) return null;
+  return {
+    id: user.id,
+    documentId: user.documentId,
+    name: participantName(user, fallback),
+    phone: participantPhone(user),
+    avatarUrl: user.avatarUrl || null,
+    lastSeenAt: user.lastSeenAt || null,
+    isOnline: isOnline(user.lastSeenAt),
+  };
+}
+
 function sanitizeThread(thread, viewerUserId) {
   const buyer = thread.buyer;
   const seller = thread.seller;
   return {
     id: thread.id,
     documentId: thread.documentId,
-    buyer: buyer ? {
-      id: buyer.id,
-      documentId: buyer.documentId,
-      name: buyer.fullName || buyer.username || 'Buyer',
-      avatarUrl: buyer.avatarUrl || null,
-      lastSeenAt: buyer.lastSeenAt || null,
-      isOnline: isOnline(buyer.lastSeenAt),
-    } : null,
-    seller: seller ? {
-      id: seller.id,
-      documentId: seller.documentId,
-      name: seller.fullName || seller.username || 'Seller',
-      avatarUrl: seller.avatarUrl || null,
-      lastSeenAt: seller.lastSeenAt || null,
-      isOnline: isOnline(seller.lastSeenAt),
-    } : null,
+    buyer: sanitizeParticipant(buyer, 'Buyer'),
+    seller: sanitizeParticipant(seller, 'Seller'),
     product: thread.product ? {
       id: thread.product.id,
       documentId: thread.product.documentId,
