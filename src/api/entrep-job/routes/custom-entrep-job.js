@@ -1,6 +1,6 @@
 'use strict';
 
-const AUTHENTICATED = { auth: { scope: [] } };
+const AUTHENTICATED = { auth: false };
 
 module.exports = {
   routes: [

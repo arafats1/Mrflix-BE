@@ -1,16 +1,32 @@
 'use strict';
 
+const { resolveAuthUser } = require('../../../utils/resolve-auth-user');
+
 const EDUCATION_LEVEL_OPTIONS = ['Kindergarten', 'Primary', 'Secondary', 'Technical college', 'University', 'Other'];
 const RELIGION_OPTIONS = ['Catholic', 'Protestant', 'Pentecostal', 'Adventist', 'Orthodox', 'Muslim', 'Hindu', 'Bahai', 'Traditional', 'Other'];
 const PROVIDER_TYPE_OPTIONS = ['teacher', 'religious', 'seller', 'musician', 'creative_artist', 'comedian'];
 
 function normalizeProviderTypes(input) {
-  const values = Array.isArray(input)
-    ? input
-    : typeof input === 'string'
-      ? [input]
-      : [];
-  return [...new Set(values.filter((value) => PROVIDER_TYPE_OPTIONS.includes(value)))];
+  if (Array.isArray(input)) {
+    return [...new Set(input.filter((value) => PROVIDER_TYPE_OPTIONS.includes(value)))];
+  }
+
+  if (typeof input === 'string') {
+    const trimmed = input.trim();
+    if (trimmed.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) {
+          return [...new Set(parsed.filter((value) => PROVIDER_TYPE_OPTIONS.includes(value)))];
+        }
+      } catch {
+        // fall through
+      }
+    }
+    if (PROVIDER_TYPE_OPTIONS.includes(trimmed)) return [trimmed];
+  }
+
+  return [];
 }
 
 function normalizeEducationLevels(input = []) {
@@ -37,29 +53,28 @@ function normalizePhone(phone) {
   return normalized;
 }
 
-function userCanUpdateProviderProfile(user) {
-  if (!user) return false;
-  if (['provider', 'both'].includes(user.accountType)) return true;
-  return normalizeProviderTypes(user.providerTypes || user.providerType).length > 0;
+function resolveRequestedProviderType(currentUser, body) {
+  const availableProviderTypes = normalizeProviderTypes(currentUser.providerTypes || currentUser.providerType);
+  const fallback = currentUser.providerType || availableProviderTypes[0] || null;
+
+  if (!PROVIDER_TYPE_OPTIONS.includes(body.providerType)) {
+    return fallback;
+  }
+
+  if (!availableProviderTypes.length || availableProviderTypes.includes(body.providerType)) {
+    return body.providerType;
+  }
+
+  return fallback;
 }
 
 module.exports = {
   async updateMe(ctx) {
-    if (!ctx.state.user) return ctx.unauthorized();
-
-    const currentUser = await strapi.db.query('plugin::users-permissions.user').findOne({
-      where: { id: ctx.state.user.id },
-    });
-
-    if (!userCanUpdateProviderProfile(currentUser)) {
-      return ctx.forbidden('Only provider accounts can update this profile');
-    }
+    const currentUser = await resolveAuthUser(strapi, ctx);
+    if (!currentUser) return ctx.unauthorized();
 
     const body = ctx.request.body?.data || ctx.request.body || {};
-    const availableProviderTypes = normalizeProviderTypes(currentUser.providerTypes || currentUser.providerType);
-    const requestedProviderType = PROVIDER_TYPE_OPTIONS.includes(body.providerType) && availableProviderTypes.includes(body.providerType)
-      ? body.providerType
-      : currentUser.providerType;
+    const requestedProviderType = resolveRequestedProviderType(currentUser, body);
     const fullName = typeof body.fullName === 'string' ? body.fullName.trim() : '';
     const schoolName = typeof body.schoolName === 'string' ? body.schoolName.trim() : '';
     const location = typeof body.location === 'string' ? body.location.trim() : '';
@@ -121,14 +136,15 @@ module.exports = {
   },
 
   async toggleTeacherSubscription(ctx) {
-    if (!ctx.state.user) return ctx.unauthorized();
+    const currentUser = await resolveAuthUser(strapi, ctx);
+    if (!currentUser) return ctx.unauthorized();
 
-    const currentUser = await strapi.db.query('plugin::users-permissions.user').findOne({
-      where: { id: ctx.state.user.id },
+    const viewer = await strapi.db.query('plugin::users-permissions.user').findOne({
+      where: { id: currentUser.id },
       select: ['id', 'isParent', 'subscribedTeacherIds'],
     });
 
-    if (!currentUser?.isParent) {
+    if (!viewer?.isParent) {
       return ctx.forbidden('Only parent accounts can subscribe to teachers');
     }
 
@@ -150,8 +166,8 @@ module.exports = {
       return ctx.notFound('Teacher not found');
     }
 
-    const currentSubscriptions = Array.isArray(currentUser.subscribedTeacherIds)
-      ? currentUser.subscribedTeacherIds.map((value) => Number(value)).filter(Number.isFinite)
+    const currentSubscriptions = Array.isArray(viewer.subscribedTeacherIds)
+      ? viewer.subscribedTeacherIds.map((value) => Number(value)).filter(Number.isFinite)
       : [];
     const isSubscribed = currentSubscriptions.includes(teacher.id);
     const nextSubscriptions = isSubscribed
@@ -159,7 +175,7 @@ module.exports = {
       : [...currentSubscriptions, teacher.id];
 
     await strapi.db.query('plugin::users-permissions.user').update({
-      where: { id: currentUser.id },
+      where: { id: viewer.id },
       data: { subscribedTeacherIds: nextSubscriptions },
     });
 

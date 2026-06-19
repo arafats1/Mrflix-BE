@@ -6,17 +6,13 @@ module.exports = {
       method: 'PUT',
       path: '/provider-profile/me',
       handler: 'provider-profile.updateMe',
-      config: {
-        auth: { scope: [] },
-      },
+      config: { auth: false },
     },
     {
       method: 'POST',
       path: '/provider-profile/teachers/:id/subscribe',
       handler: 'provider-profile.toggleTeacherSubscription',
-      config: {
-        auth: { scope: [] },
-      },
+      config: { auth: false },
     },
   ],
 };

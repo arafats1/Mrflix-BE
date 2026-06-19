@@ -1,6 +1,14 @@
 'use strict';
 
 const { createCoreController } = require('@strapi/strapi').factories;
+const { resolveAuthUser } = require('../../../utils/resolve-auth-user');
+
+async function resolveUser(strapi, ctx) {
+  const user = await resolveAuthUser(strapi, ctx);
+  if (!user) return null;
+  ctx.state.user = user;
+  return user;
+}
 
 function getDisplayName(user, profile, fallback = 'Community Member') {
   return profile?.fullName || user?.fullName || user?.name || user?.username || fallback;
@@ -66,11 +74,6 @@ function buildPublicFilters(query = {}) {
   return filters;
 }
 
-async function resolveUser(strapi, ctx) {
-  if (!ctx.state.user?.id) return null;
-  return strapi.entityService.findOne('plugin::users-permissions.user', ctx.state.user.id, { populate: ['role'] });
-}
-
 async function getProfile(strapi, userId) {
   const list = await strapi.entityService.findMany('api::entrep-profile.entrep-profile', {
     filters: { user: userId },
@@ -96,11 +99,12 @@ module.exports = createCoreController('api::entrep-job.entrep-job', ({ strapi })
     ctx.send({ data: list.map(withPostedByName) });
   },
   async mine(ctx) {
-    if (!ctx.state.user?.id) return ctx.unauthorized();
+    const user = await resolveUser(strapi, ctx);
+    if (!user?.id) return ctx.unauthorized();
 
     const list = await strapi.db.query('api::entrep-job.entrep-job').findMany({
       where: {
-        postedBy: ctx.state.user.id,
+        postedBy: user.id,
         ...buildActiveClosingFilter(),
       },
       orderBy: { createdAt: 'desc' },
@@ -109,7 +113,8 @@ module.exports = createCoreController('api::entrep-job.entrep-job', ({ strapi })
     ctx.send({ data: (list || []).map(withPostedByName) });
   },
   async createJob(ctx) {
-    if (!ctx.state.user?.id) return ctx.unauthorized();
+    const user = await resolveUser(strapi, ctx);
+    if (!user?.id) return ctx.unauthorized();
 
     const profile = await strapi.entityService.findMany('api::entrep-profile.entrep-profile', {
       filters: { user: ctx.state.user.id },
@@ -146,13 +151,14 @@ module.exports = createCoreController('api::entrep-job.entrep-job', ({ strapi })
     ctx.send({ job: withPostedByName(job) });
   },
   async updateJob(ctx) {
-    if (!ctx.state.user?.id) return ctx.unauthorized();
+    const user = await resolveUser(strapi, ctx);
+    if (!user?.id) return ctx.unauthorized();
     const { id } = ctx.params;
     const existing = await strapi.entityService.findOne('api::entrep-job.entrep-job', id, {
       populate: ['postedBy'],
     });
     if (!existing) return ctx.notFound();
-    if (existing.postedBy?.id !== ctx.state.user.id) return ctx.forbidden('Not yours');
+    if (existing.postedBy?.id !== user.id) return ctx.forbidden('Not yours');
 
     const b = ctx.request.body || {};
     const updated = await strapi.entityService.update('api::entrep-job.entrep-job', id, {
@@ -195,7 +201,8 @@ module.exports = createCoreController('api::entrep-job.entrep-job', ({ strapi })
     ctx.send({ success: true });
   },
   async apply(ctx) {
-    if (!ctx.state.user?.id) return ctx.unauthorized();
+    const user = await resolveUser(strapi, ctx);
+    if (!user?.id) return ctx.unauthorized();
     const jobId = Number(ctx.params.id);
     const job = await strapi.entityService.findOne('api::entrep-job.entrep-job', jobId);
     if (!job) return ctx.notFound();
@@ -203,11 +210,11 @@ module.exports = createCoreController('api::entrep-job.entrep-job', ({ strapi })
       return ctx.badRequest('This job is no longer accepting applications');
     }
     const b = ctx.request.body || {};
-    const applicant = await strapi.entityService.findOne('plugin::users-permissions.user', ctx.state.user.id);
+    const applicant = await strapi.entityService.findOne('plugin::users-permissions.user', user.id);
     const application = await strapi.entityService.create('api::entrep-application.entrep-application', {
       data: {
         job: jobId,
-        applicant: ctx.state.user.id,
+        applicant: user.id,
         applicantName: applicant?.fullName || applicant?.username || b.applicantName || 'Applicant',
         coverNote: b.coverNote || b.coverLetter || '',
         portfolioUrls: Array.isArray(b.portfolioUrls) ? b.portfolioUrls : [],

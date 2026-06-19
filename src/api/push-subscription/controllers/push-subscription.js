@@ -2,9 +2,13 @@
 
 const { createCoreController } = require('@strapi/strapi').factories;
 const { getPublicVapidKey, isPushConfigured } = require('../../../utils/push-notifications');
+const { resolveAuthUser } = require('../../../utils/resolve-auth-user');
 
-function resolveUser(ctx) {
-  return ctx.state.user || null;
+async function resolveUser(strapi, ctx) {
+  const user = await resolveAuthUser(strapi, ctx);
+  if (!user) return null;
+  ctx.state.user = user;
+  return user;
 }
 
 function normalizeSubscription(input) {
@@ -34,7 +38,7 @@ module.exports = createCoreController('api::push-subscription.push-subscription'
   },
 
   async upsert(ctx) {
-    const user = resolveUser(ctx);
+    const user = await resolveUser(strapi, ctx);
     if (!user) return ctx.unauthorized('You must be logged in');
 
     if (!isPushConfigured()) {
@@ -71,7 +75,7 @@ module.exports = createCoreController('api::push-subscription.push-subscription'
   },
 
   async remove(ctx) {
-    const user = resolveUser(ctx);
+    const user = await resolveUser(strapi, ctx);
     if (!user) return ctx.unauthorized('You must be logged in');
 
     const endpoint = String((ctx.request.body || {}).endpoint || '').trim();

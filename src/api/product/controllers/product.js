@@ -7,6 +7,14 @@
 const { createCoreController } = require('@strapi/strapi').factories;
 const { scheduleProductImageProcessing, processProductImages } = require('../../../utils/marketplace-image-processing');
 const { assertAdmin } = require('../../../utils/admin-auth');
+const { resolveAuthUser } = require('../../../utils/resolve-auth-user');
+
+async function requireAuthUser(strapi, ctx) {
+  const user = await resolveAuthUser(strapi, ctx);
+  if (!user) return null;
+  ctx.state.user = user;
+  return user;
+}
 
 function normalizeDeliveryAreas(input = []) {
   const values = Array.isArray(input)
@@ -613,13 +621,14 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
    * Get products owned by the current user.
    */
   async mine(ctx) {
-    if (!ctx.state.user) {
+    const user = await requireAuthUser(strapi, ctx);
+    if (!user) {
       return ctx.unauthorized('You must be logged in to view your products');
     }
 
     const products = await strapi.documents('api::product.product').findMany({
       filters: {
-        seller: { id: ctx.state.user.id },
+        seller: { id: user.id },
       },
       populate: {
         seller: true,
@@ -637,7 +646,8 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
    * Create a product and link it to the current user (the seller).
    */
   async create(ctx) {
-    if (!ctx.state.user) {
+    const user = await requireAuthUser(strapi, ctx);
+    if (!user) {
       return ctx.unauthorized('You must be logged in to create a product');
     }
 
@@ -659,7 +669,7 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
     const created = await strapi.documents('api::product.product').create({
       data: {
         ...payload,
-        seller: ctx.state.user.id,
+        seller: user.id,
       },
       populate: {
         seller: true,
@@ -806,7 +816,8 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
   },
 
   async update(ctx) {
-    if (!ctx.state.user) {
+    const user = await requireAuthUser(strapi, ctx);
+    if (!user) {
       return ctx.unauthorized('You must be logged in to update a product');
     }
 
@@ -845,6 +856,28 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
     return { data: await attachReviewSummary(strapi, await withSoldCount(strapi, updated)) };
   },
 
+  async delete(ctx) {
+    const user = await requireAuthUser(strapi, ctx);
+    if (!user) {
+      return ctx.unauthorized('You must be logged in to delete a product');
+    }
+
+    const existingProduct = await findProductByIdentifier(strapi, ctx.params.id);
+    if (!existingProduct) {
+      return ctx.notFound('Product not found');
+    }
+
+    if (!canManageProduct(ctx, existingProduct)) {
+      return ctx.forbidden('You can only delete your own products');
+    }
+
+    await strapi.documents('api::product.product').delete({
+      documentId: existingProduct.documentId,
+    });
+
+    return { data: { documentId: existingProduct.documentId, deleted: true } };
+  },
+
   async findOne(ctx) {
     const product = await findProductByIdentifier(strapi, ctx.params.id);
 
@@ -866,7 +899,8 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
   },
 
   async bookService(ctx) {
-    if (!ctx.state.user) {
+    const user = await requireAuthUser(strapi, ctx);
+    if (!user) {
       return ctx.unauthorized('You must be logged in to book a service');
     }
 

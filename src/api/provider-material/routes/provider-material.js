@@ -1,22 +1,20 @@
 'use strict';
 
+const AUTHENTICATED = { auth: false };
+
 module.exports = {
   routes: [
     {
       method: 'GET',
       path: '/provider-materials/mine',
       handler: 'provider-material.mine',
-      config: {
-        auth: { scope: [] },
-      },
+      config: AUTHENTICATED,
     },
     {
       method: 'GET',
       path: '/provider-materials/summary/me',
       handler: 'provider-material.summary',
-      config: {
-        auth: { scope: [] },
-      },
+      config: AUTHENTICATED,
     },
     {
       method: 'GET',
@@ -38,25 +36,19 @@ module.exports = {
       method: 'POST',
       path: '/provider-materials',
       handler: 'provider-material.create',
-      config: {
-        auth: { scope: [] },
-      },
+      config: AUTHENTICATED,
     },
     {
       method: 'PUT',
       path: '/provider-materials/:id',
       handler: 'provider-material.update',
-      config: {
-        auth: { scope: [] },
-      },
+      config: AUTHENTICATED,
     },
     {
       method: 'DELETE',
       path: '/provider-materials/:id',
       handler: 'provider-material.delete',
-      config: {
-        auth: { scope: [] },
-      },
+      config: AUTHENTICATED,
     }
   ]
 };

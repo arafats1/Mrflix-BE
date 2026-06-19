@@ -1,6 +1,14 @@
 'use strict';
 
 const { createCoreController } = require('@strapi/strapi').factories;
+const { resolveAuthUser } = require('../../../utils/resolve-auth-user');
+
+async function requireAuthUser(strapi, ctx) {
+  const user = await resolveAuthUser(strapi, ctx);
+  if (!user) return null;
+  ctx.state.user = user;
+  return user;
+}
 
 const RELIGION_OPTIONS = ['Catholic', 'Protestant', 'Pentecostal', 'Adventist', 'Orthodox', 'Muslim', 'Hindu', 'Bahai', 'Traditional', 'Other'];
 const EDUCATION_LEVEL_OPTIONS = ['Kindergarten', 'Primary', 'Secondary', 'Technical college', 'University', 'Other'];
@@ -241,9 +249,10 @@ module.exports = createCoreController('api::provider-material.provider-material'
   },
 
   async mine(ctx) {
-    if (!ctx.state.user) return ctx.unauthorized();
+    const user = await requireAuthUser(strapi, ctx);
+    if (!user) return ctx.unauthorized();
 
-    const provider = await getFullUser(strapi, ctx.state.user.id);
+    const provider = await getFullUser(strapi, user.id);
     if (!provider) return ctx.unauthorized();
     if (!['provider', 'both'].includes(provider.accountType)) {
       ctx.body = { data: [] };
@@ -268,9 +277,10 @@ module.exports = createCoreController('api::provider-material.provider-material'
   },
 
   async summary(ctx) {
-    if (!ctx.state.user) return ctx.unauthorized();
+    const user = await requireAuthUser(strapi, ctx);
+    if (!user) return ctx.unauthorized();
 
-    const provider = await getFullUser(strapi, ctx.state.user.id);
+    const provider = await getFullUser(strapi, user.id);
     if (!provider) return ctx.unauthorized();
     if (!['provider', 'both'].includes(provider.accountType)) {
       ctx.body = { data: { materials: 0, totalSales: 0, totalRevenueUGX: 0, published: 0, drafts: 0 } };
@@ -298,9 +308,10 @@ module.exports = createCoreController('api::provider-material.provider-material'
   },
 
   async create(ctx) {
-    if (!ctx.state.user) return ctx.unauthorized();
+    const user = await requireAuthUser(strapi, ctx);
+    if (!user) return ctx.unauthorized();
 
-    const provider = await getFullUser(strapi, ctx.state.user.id);
+    const provider = await getFullUser(strapi, user.id);
     if (!provider || !['provider', 'both'].includes(provider.accountType)) {
       return ctx.forbidden('Only provider accounts can upload materials');
     }
@@ -327,8 +338,9 @@ module.exports = createCoreController('api::provider-material.provider-material'
   },
 
   async update(ctx) {
-    if (!ctx.state.user) return ctx.unauthorized();
-    const provider = await getFullUser(strapi, ctx.state.user.id);
+    const user = await requireAuthUser(strapi, ctx);
+    if (!user) return ctx.unauthorized();
+    const provider = await getFullUser(strapi, user.id);
     if (!provider || !['provider', 'both'].includes(provider.accountType)) {
       return ctx.forbidden('Only provider accounts can update materials');
     }
@@ -363,8 +375,9 @@ module.exports = createCoreController('api::provider-material.provider-material'
   },
 
   async delete(ctx) {
-    if (!ctx.state.user) return ctx.unauthorized();
-    const provider = await getFullUser(strapi, ctx.state.user.id);
+    const user = await requireAuthUser(strapi, ctx);
+    if (!user) return ctx.unauthorized();
+    const provider = await getFullUser(strapi, user.id);
     if (!provider || !['provider', 'both'].includes(provider.accountType)) {
       return ctx.forbidden('Only provider accounts can delete materials');
     }
