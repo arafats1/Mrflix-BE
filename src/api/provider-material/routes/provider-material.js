@@ -6,13 +6,17 @@ module.exports = {
       method: 'GET',
       path: '/provider-materials/mine',
       handler: 'provider-material.mine',
-      config: {},
+      config: {
+        auth: { scope: [] },
+      },
     },
     {
       method: 'GET',
       path: '/provider-materials/summary/me',
       handler: 'provider-material.summary',
-      config: {},
+      config: {
+        auth: { scope: [] },
+      },
     },
     {
       method: 'GET',
@@ -34,19 +38,25 @@ module.exports = {
       method: 'POST',
       path: '/provider-materials',
       handler: 'provider-material.create',
-      config: {},
+      config: {
+        auth: { scope: [] },
+      },
     },
     {
       method: 'PUT',
       path: '/provider-materials/:id',
       handler: 'provider-material.update',
-      config: {},
+      config: {
+        auth: { scope: [] },
+      },
     },
     {
       method: 'DELETE',
       path: '/provider-materials/:id',
       handler: 'provider-material.delete',
-      config: {},
+      config: {
+        auth: { scope: [] },
+      },
     }
   ]
 };

@@ -14,7 +14,9 @@ module.exports = {
       method: 'GET',
       path: '/products/mine',
       handler: 'product.mine',
-      config: {},
+      config: {
+        auth: { scope: [] },
+      },
     },
     {
       method: 'GET',
@@ -44,13 +46,17 @@ module.exports = {
       method: 'POST',
       path: '/products',
       handler: 'product.create',
-      config: {},
+      config: {
+        auth: { scope: [] },
+      },
     },
     {
       method: 'POST',
       path: '/products/:id/book-service',
       handler: 'product.bookService',
-      config: {},
+      config: {
+        auth: { scope: [] },
+      },
     },
     {
       method: 'POST',
@@ -74,13 +80,17 @@ module.exports = {
       method: 'PUT',
       path: '/products/:id',
       handler: 'product.update',
-      config: {},
+      config: {
+        auth: { scope: [] },
+      },
     },
     {
       method: 'DELETE',
       path: '/products/:id',
       handler: 'product.delete',
-      config: {},
+      config: {
+        auth: { scope: [] },
+      },
     },
     {
       method: 'POST',

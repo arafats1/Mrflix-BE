@@ -64,6 +64,27 @@ const AUTHENTICATED_ACTIONS = [
   'api::entrep-live-session.entrep-live-session.recordings',
   // Entrepreneur — trainer course management
   'api::entrep-course.entrep-course.deleteAuthoredCourse',
+  // Marketplace seller / provider dashboard
+  'api::product.product.mine',
+  'api::product.product.create',
+  'api::product.product.update',
+  'api::product.product.delete',
+  'api::product.product.bookService',
+  'api::provider-profile.provider-profile.updateMe',
+  'api::provider-profile.provider-profile.toggleTeacherSubscription',
+  'api::provider-material.provider-material.mine',
+  'api::provider-material.provider-material.summary',
+  'api::provider-material.provider-material.create',
+  'api::provider-material.provider-material.update',
+  'api::provider-material.provider-material.delete',
+  'api::entrep-job.entrep-job.mine',
+  'api::entrep-job.entrep-job.createJob',
+  'api::entrep-job.entrep-job.updateJob',
+  'api::entrep-job.entrep-job.deleteJob',
+  'api::entrep-job.entrep-job.apply',
+  'api::marketplace-promotion.marketplace-promotion.mine',
+  'api::marketplace-promotion.marketplace-promotion.create',
+  'api::marketplace-promotion.marketplace-promotion.checkStatus',
 ];
 
 async function ensureRolePermissions(strapi, roleType, actions) {
