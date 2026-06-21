@@ -7,6 +7,12 @@ const { sendSms } = require('../../utils/sms');
 const { canAccessParentDashboard } = require('../../utils/parent-access');
 
 const { ValidationError } = utils.errors;
+const {
+  looksLikePhone,
+  normalizePhone,
+  findUserByPhoneIdentifier,
+  isInvalidCredentialsError,
+} = require('../../utils/phone-auth');
 
 /**
  * Extend the users-permissions plugin:
@@ -40,20 +46,6 @@ const EDUCATION_LEVEL_OPTIONS = [
   'University',
   'Other',
 ];
-
-function normalizePhone(phone) {
-  const raw = typeof phone === 'string' ? phone.trim() : '';
-  if (!raw) return '';
-
-  let normalized = raw.replace(/[\s()+-]/g, '');
-  if (normalized.startsWith('0')) normalized = `256${normalized.slice(1)}`;
-  return normalized;
-}
-
-function looksLikePhone(identifier) {
-  const normalized = normalizePhone(identifier);
-  return /^\d{9,15}$/.test(normalized);
-}
 
 function normalizeProviderTypes(input) {
   const values = Array.isArray(input)
@@ -407,26 +399,39 @@ module.exports = (plugin) => {
           const identifier = typeof ctx.request.body?.identifier === 'string'
             ? ctx.request.body.identifier.trim()
             : '';
+          const password = ctx.request.body?.password;
+          if (password != null) {
+            ctx.request.body.password = String(password);
+          }
 
           if (identifier && looksLikePhone(identifier)) {
-            const normalizedIdentifier = normalizePhone(identifier);
-            const users = await strapi.db.query('plugin::users-permissions.user').findMany({
-              where: { provider: 'local' },
-              select: ['id', 'email', 'username', 'phone'],
-              limit: 20000,
-            });
+            const matchedUser = await findUserByPhoneIdentifier(strapi, identifier);
 
-            const matchedUser = users.find(
-              (entry) => normalizePhone(entry.phone) === normalizedIdentifier
-            );
-
-            if (matchedUser) {
-              ctx.request.body.identifier = matchedUser.email || matchedUser.username;
+            if (!matchedUser) {
+              throw new ValidationError('No account found with this phone number');
             }
+
+            if (matchedUser.blocked) {
+              throw new ValidationError('Your account has been blocked. Please contact support.');
+            }
+
+            const loginIdentifier = matchedUser.email || matchedUser.username;
+            if (!loginIdentifier) {
+              throw new ValidationError('This account cannot sign in with a phone number yet. Please contact support.');
+            }
+
+            ctx.request.body.identifier = loginIdentifier;
           }
         }
 
-        return originalCallback(ctx);
+        try {
+          return await originalCallback(ctx);
+        } catch (error) {
+          if (provider === 'local' && isInvalidCredentialsError(error)) {
+            throw new ValidationError('Invalid phone number or password');
+          }
+          throw error;
+        }
       },
 
       async register(ctx) {

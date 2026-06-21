@@ -11,6 +11,7 @@ const {
 } = require('../../../utils/savings');
 const { submitPayment, getActiveGateway } = require('../../../utils/payment-gateway');
 const { ensureUnifiedParentAccess } = require('../../../utils/parent-access');
+const { findUserByPhoneIdentifier, looksLikePhone } = require('../../../utils/phone-auth');
 
 const ALLOWED_FIELDS = ['name', 'dateOfBirth', 'religion', 'avatarUrl', 'dailyWatchMinutes', 'blockedMovieIds', 'allowedMovieIds'];
 const MAX_CHILD_PROFILES = 4;
@@ -124,18 +125,11 @@ async function findParentByIdentifier(identifier) {
   if (!normalizedIdentifier) return null;
 
   if (looksLikePhone(normalizedIdentifier)) {
-    const normalizedPhone = normalizePhone(normalizedIdentifier);
-    const users = await strapi.db.query('plugin::users-permissions.user').findMany({
-      where: { provider: 'local', isParent: true, phone: { $notNull: true } },
-      select: ['id', 'email', 'username', 'phone'],
-      limit: 20000,
-    });
-    return users.find((entry) => normalizePhone(entry.phone) === normalizedPhone) || null;
+    return findUserByPhoneIdentifier(strapi, normalizedIdentifier, { requireParent: true });
   }
 
   return strapi.db.query('plugin::users-permissions.user').findOne({
     where: {
-      provider: 'local',
       isParent: true,
       $or: [{ email: normalizedIdentifier }, { username: normalizedIdentifier }],
     },
