@@ -18,19 +18,6 @@ const MAX_CHILD_PROFILES = 4;
 const PIN_PATTERN = /^\d{4}$/;
 const RELIGIONS = new Set(['Catholic', 'Protestant', 'Pentecostal', 'Adventist', 'Orthodox', 'Muslim', 'Hindu', 'Bahai', 'Traditional', 'Other']);
 
-function normalizePhone(phone) {
-  const raw = typeof phone === 'string' ? phone.trim() : '';
-  if (!raw) return '';
-  let normalized = raw.replace(/[\s()+-]/g, '');
-  if (normalized.startsWith('0')) normalized = `256${normalized.slice(1)}`;
-  return normalized;
-}
-
-function looksLikePhone(identifier) {
-  const normalized = normalizePhone(identifier);
-  return /^\d{9,15}$/.test(normalized);
-}
-
 function pickAllowed(input = {}) {
   const out = {};
   for (const key of ALLOWED_FIELDS) {
