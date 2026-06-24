@@ -519,7 +519,7 @@ module.exports = (plugin) => {
         if (existingUser) {
           const passwordMatches = existingUser.password && await bcrypt.compare(String(body.password || ''), existingUser.password);
           if (!passwordMatches) {
-            throw new ValidationError('An account already exists with this phone or email. Enter the same password when filing this form to link them together.');
+            throw new ValidationError('An account already exists with this phone. Enter the same password when filing this form to link them together.');
           }
 
           const currentProviderTypes = normalizeProviderTypes(existingUser.providerTypes || existingUser.providerType);
