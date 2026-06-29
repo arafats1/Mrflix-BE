@@ -1,7 +1,7 @@
 'use strict';
 
 const { createCoreController } = require('@strapi/strapi').factories;
-const { submitPayment, checkPaymentStatus } = require('../../../utils/payment-gateway');
+const { submitPayment, checkPaymentStatus, gatewayNeedsPhone, buildGatewayTrackingUpdate, resolveRecordGateway } = require('../../../utils/payment-gateway');
 const { activatePromotion } = require('../../../utils/marketplace-promotions');
 
 function isAdminUser(user) {
@@ -163,7 +163,7 @@ module.exports = createCoreController('api::marketplace-promotion.marketplace-pr
     if (activeGateway === 'pesapal' && !settings.pesapalIpnId) {
       return ctx.badRequest('Payment system not configured. Please contact support.');
     }
-    if ((activeGateway === 'dgateway' || activeGateway === 'yo') && !normalizedPaymentPhone) {
+    if (gatewayNeedsPhone(activeGateway) && !normalizedPaymentPhone) {
       return ctx.badRequest('Phone number is required for mobile money payment.');
     }
 
@@ -217,10 +217,7 @@ module.exports = createCoreController('api::marketplace-promotion.marketplace-pr
         },
       });
 
-      const updateData = {};
-      if (paymentResult.gateway === 'pesapal') updateData.pesapalTrackingId = paymentResult.order_tracking_id;
-      if (paymentResult.gateway === 'dgateway') updateData.dgatewayReference = paymentResult.reference;
-      if (paymentResult.gateway === 'yo') updateData.yoReference = paymentResult.reference;
+      const updateData = buildGatewayTrackingUpdate(paymentResult);
 
       await strapi.entityService.update('api::marketplace-promotion.marketplace-promotion', entry.id, { data: updateData });
 
@@ -263,7 +260,7 @@ module.exports = createCoreController('api::marketplace-promotion.marketplace-pr
     if (promotion.status === 'pending') {
       try {
         const gatewayStatus = await checkPaymentStatus(strapi, {
-          gateway: promotion.paymentMethod,
+          gateway: resolveRecordGateway(promotion),
           pesapalTrackingId: promotion.pesapalTrackingId,
           dgatewayReference: promotion.dgatewayReference,
           yoReference: promotion.yoReference,

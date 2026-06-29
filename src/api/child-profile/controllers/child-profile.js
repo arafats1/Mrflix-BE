@@ -9,7 +9,7 @@ const {
   allocateUnallocatedSavings,
   SAVINGS_TRANSACTION_PREFIX,
 } = require('../../../utils/savings');
-const { submitPayment, getActiveGateway } = require('../../../utils/payment-gateway');
+const { submitPayment, getActiveGateway, gatewayNeedsPhone, buildGatewayTrackingUpdate } = require('../../../utils/payment-gateway');
 const { ensureUnifiedParentAccess } = require('../../../utils/parent-access');
 const { findUserByPhoneIdentifier, looksLikePhone } = require('../../../utils/phone-auth');
 
@@ -404,7 +404,7 @@ module.exports = createCoreController('api::child-profile.child-profile', ({ str
     }
 
     const paymentPhone = String(body.paymentPhone || '').trim();
-    if ((activeGateway === 'dgateway' || activeGateway === 'yo') && !paymentPhone) {
+    if (gatewayNeedsPhone(activeGateway) && !paymentPhone) {
       return ctx.badRequest('Phone number is required for mobile money payment.');
     }
 
@@ -445,14 +445,7 @@ module.exports = createCoreController('api::child-profile.child-profile', ({ str
         },
       });
 
-      const updateData = {};
-      if (paymentResult.gateway === 'pesapal') {
-        updateData.pesapalTrackingId = paymentResult.order_tracking_id;
-      } else if (paymentResult.gateway === 'dgateway') {
-        updateData.dgatewayReference = paymentResult.reference;
-      } else if (paymentResult.gateway === 'yo') {
-        updateData.yoReference = paymentResult.reference;
-      }
+      const updateData = buildGatewayTrackingUpdate(paymentResult);
 
       if (Object.keys(updateData).length > 0) {
         await strapi.documents('api::purchase.purchase').update({

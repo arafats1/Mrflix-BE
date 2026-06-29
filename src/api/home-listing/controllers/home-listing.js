@@ -1,6 +1,6 @@
 'use strict';
 
-const { submitPayment, checkPaymentStatus: checkGatewayPaymentStatus } = require('../../../utils/payment-gateway');
+const { submitPayment, checkPaymentStatus: checkGatewayPaymentStatus, gatewayNeedsPhone, buildGatewayTrackingUpdate, resolveRecordGateway } = require('../../../utils/payment-gateway');
 const { activateHomesPaymentByFilter, failHomesPaymentByFilter } = require('../../../utils/homes-payments');
 
 const LISTING_UID = 'api::home-listing.home-listing';
@@ -505,7 +505,7 @@ async function submitHomesPayment(ctx, record, amountUGX, prefix, description, p
   const ipnId = settings?.pesapalIpnId;
 
   if (activeGateway === 'pesapal' && !ipnId) return ctx.badRequest('Payment system not configured. Please contact support.');
-  if ((activeGateway === 'dgateway' || activeGateway === 'yo') && !paymentPhone) return ctx.badRequest('Phone number is required for mobile money payment.');
+  if (gatewayNeedsPhone(activeGateway) && !paymentPhone) return ctx.badRequest('Phone number is required for mobile money payment.');
 
   const merchantReference = `${prefix}_${ctx.state.user.id}_${Date.now()}_${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
   const updateData = { transactionId: merchantReference, paymentMethod: activeGateway, paymentPhone: paymentPhone || '' };
@@ -530,10 +530,7 @@ async function submitHomesPayment(ctx, record, amountUGX, prefix, description, p
     },
   });
 
-  const paymentFields = {};
-  if (paymentResult.gateway === 'pesapal') paymentFields.pesapalTrackingId = paymentResult.order_tracking_id;
-  if (paymentResult.gateway === 'dgateway') paymentFields.dgatewayReference = paymentResult.reference;
-  if (paymentResult.gateway === 'yo') paymentFields.yoReference = paymentResult.reference;
+  const paymentFields = buildGatewayTrackingUpdate(paymentResult);
   await strapi.entityService.update(uid, record.id, { data: paymentFields });
 
   return {
@@ -1031,21 +1028,21 @@ module.exports = {
     const record = unlocks?.[0] || bookings?.[0];
     if (!record) return ctx.notFound('Homes payment not found');
 
-    if (record.status === 'pending' && (record.pesapalTrackingId || record.dgatewayReference || record.yoReference)) {
+    if (record.status === 'pending' && (record.pesapalTrackingId || record.dgatewayReference || record.yoReference || resolveRecordGateway(record) === 'airtel')) {
       try {
+        const gateway = resolveRecordGateway(record);
         const gatewayResult = await checkGatewayPaymentStatus(strapi, {
           pesapalTrackingId: record.pesapalTrackingId,
           dgatewayReference: record.dgatewayReference,
           yoReference: record.yoReference,
-          gateway: record.yoReference ? 'yo' : record.dgatewayReference ? 'dgateway' : 'pesapal',
+          gateway,
           merchantReference: transactionId,
         });
         if (gatewayResult.status === 'completed') {
           await activateHomesPaymentByFilter(strapi, { transactionId }, gatewayResult.paymentMethod || record.paymentMethod);
         } else if (gatewayResult.status === 'failed') {
-          const activeGateway = record.yoReference ? 'yo' : record.dgatewayReference ? 'dgateway' : 'pesapal';
           // Pesapal iframe checkout can look "failed" while still in progress — let IPN handle it.
-          if (activeGateway !== 'pesapal') {
+          if (gateway !== 'pesapal') {
             await failHomesPaymentByFilter(strapi, { transactionId });
           }
         }

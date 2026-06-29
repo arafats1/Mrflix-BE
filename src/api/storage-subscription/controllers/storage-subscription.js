@@ -1,6 +1,6 @@
 'use strict';
 
-const { submitPayment, getActiveGateway } = require('../../../utils/payment-gateway');
+const { submitPayment, getActiveGateway, gatewayNeedsPhone, buildGatewayTrackingUpdate } = require('../../../utils/payment-gateway');
 const { getAccessibleSpace, getRequestedSpaceOwnerId } = require('../../../utils/mrkeyp-space');
 
 // Storage pricing tiers (GB options)
@@ -113,7 +113,7 @@ module.exports = {
     if (activeGateway === 'pesapal' && !ipnId) {
       return ctx.badRequest('Payment system not configured. Please contact support.');
     }
-    if (activeGateway === 'dgateway' && !paymentPhone) {
+    if (gatewayNeedsPhone(activeGateway) && !paymentPhone) {
       return ctx.badRequest('Phone number is required for mobile money payment.');
     }
 
@@ -175,14 +175,7 @@ module.exports = {
         },
       });
 
-      const updateData = {};
-      if (paymentResult.gateway === 'pesapal') {
-        updateData.pesapalTrackingId = paymentResult.order_tracking_id;
-      } else if (paymentResult.gateway === 'dgateway') {
-        updateData.dgatewayReference = paymentResult.reference;
-      } else if (paymentResult.gateway === 'yo') {
-        updateData.yoReference = paymentResult.reference;
-      }
+      const updateData = buildGatewayTrackingUpdate(paymentResult);
 
       await strapi.entityService.update('api::storage-subscription.storage-subscription', entry.id, {
         data: updateData,

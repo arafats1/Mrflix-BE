@@ -10,7 +10,45 @@
 const pesapal = require('./pesapal');
 const dgateway = require('./dgateway');
 const yoPayments = require('./yo-payments');
+const airtel = require('./airtel');
 const { normalizePaymentMethod } = require('./payment-methods');
+
+function gatewayNeedsPhone(gateway) {
+  return gateway === 'dgateway' || gateway === 'yo' || gateway === 'airtel';
+}
+
+function buildGatewayTrackingUpdate(paymentResult) {
+  const updateData = {};
+
+  if (paymentResult.gateway === 'pesapal') {
+    updateData.pesapalTrackingId = paymentResult.order_tracking_id;
+  } else if (paymentResult.gateway === 'dgateway') {
+    updateData.dgatewayReference = paymentResult.reference;
+  } else if (paymentResult.gateway === 'yo') {
+    updateData.yoReference = paymentResult.reference;
+  }
+
+  return updateData;
+}
+
+function resolveRecordGateway(record = {}) {
+  if (record.yoReference) return 'yo';
+  if (record.dgatewayReference) return 'dgateway';
+  if (record.pesapalTrackingId) return 'pesapal';
+  if (record.paymentMethod === 'airtel' || record.paymentMethod === 'airtel_money') return 'airtel';
+  return 'pesapal';
+}
+
+function recordHasGatewayTracking(record = {}) {
+  return Boolean(
+    record.pesapalTrackingId
+    || record.dgatewayReference
+    || record.yoReference
+    || record.paymentMethod === 'airtel'
+    || record.paymentMethod === 'airtel_money'
+    || record.transactionId
+  );
+}
 
 function getPesapalIpnCallbackUrl() {
   if (!process.env.PUBLIC_URL) {
@@ -69,6 +107,26 @@ async function getActiveGateway(strapi) {
  */
 async function submitPayment(strapi, params) {
   const gateway = await getActiveGateway(strapi);
+
+  if (gateway === 'airtel') {
+    const phone = (params.paymentPhone || params.billingAddress?.phone || '').replace(/[^\d]/g, '');
+    if (!phone) {
+      throw new Error('Phone number is required for Airtel Money');
+    }
+
+    await airtel.requestCollection({
+      merchantReference: params.merchantReference,
+      amount: params.amount,
+      phone,
+      reference: params.description,
+    });
+
+    return {
+      gateway: 'airtel',
+      reference: params.merchantReference,
+      status: 'pending',
+    };
+  }
 
   if (gateway === 'yo') {
     const phone = (params.paymentPhone || params.billingAddress?.phone || '').replace(/[^\d]/g, '');
@@ -214,6 +272,17 @@ async function checkPaymentStatus(strapi, params) {
     };
   }
 
+  if (gateway === 'airtel' && params.merchantReference) {
+    const result = await airtel.getTransactionStatus(params.merchantReference);
+
+    return {
+      status: result.status,
+      paymentMethod: 'airtel_money',
+      confirmationCode: result.airtelMoneyId || '',
+      raw: result.raw,
+    };
+  }
+
   if (gateway === 'dgateway' && params.dgatewayReference) {
     const result = await dgateway.verifyTransaction(params.dgatewayReference);
     const dgStatus = (result.data?.status || '').toLowerCase();
@@ -255,4 +324,8 @@ module.exports = {
   getActiveGateway,
   submitPayment,
   checkPaymentStatus,
+  gatewayNeedsPhone,
+  buildGatewayTrackingUpdate,
+  resolveRecordGateway,
+  recordHasGatewayTracking,
 };

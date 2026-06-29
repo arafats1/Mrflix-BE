@@ -2,7 +2,7 @@
 
 const { createCoreController } = require('@strapi/strapi').factories;
 const pesapal = require('../../../utils/pesapal');
-const { submitPayment, getActiveGateway } = require('../../../utils/payment-gateway');
+const { submitPayment, getActiveGateway, gatewayNeedsPhone, buildGatewayTrackingUpdate, resolveRecordGateway } = require('../../../utils/payment-gateway');
 
 module.exports = createCoreController('api::subscription.subscription', ({ strapi }) => ({
   // Get current user's active subscription
@@ -83,7 +83,7 @@ module.exports = createCoreController('api::subscription.subscription', ({ strap
       strapi.log.error('Pesapal IPN ID not configured.');
       return ctx.badRequest('Payment system not configured. Please contact support.');
     }
-    if ((activeGateway === 'dgateway' || activeGateway === 'yo') && !paymentPhone) {
+    if (gatewayNeedsPhone(activeGateway) && !paymentPhone) {
       return ctx.badRequest('Phone number is required for mobile money payment.');
     }
 
@@ -145,14 +145,7 @@ module.exports = createCoreController('api::subscription.subscription', ({ strap
       });
 
       // Store tracking ID based on gateway
-      const updateData = {};
-      if (paymentResult.gateway === 'pesapal') {
-        updateData.pesapalTrackingId = paymentResult.order_tracking_id;
-      } else if (paymentResult.gateway === 'dgateway') {
-        updateData.dgatewayReference = paymentResult.reference;
-      } else if (paymentResult.gateway === 'yo') {
-        updateData.yoReference = paymentResult.reference;
-      }
+      const updateData = buildGatewayTrackingUpdate(paymentResult);
 
       await strapi.entityService.update('api::subscription.subscription', entry.id, {
         data: updateData,
@@ -339,22 +332,30 @@ module.exports = createCoreController('api::subscription.subscription', ({ strap
     }
 
     const sub = subs[0];
-    strapi.log.info(`[sub.checkStatus] txn=${transactionId} status=${sub.status} pesapalId=${sub.pesapalTrackingId || 'none'} dgRef=${sub.dgatewayReference || 'none'}`);
+    strapi.log.info(`[sub.checkStatus] txn=${transactionId} status=${sub.status} pesapalId=${sub.pesapalTrackingId || 'none'} dgRef=${sub.dgatewayReference || 'none'} yoRef=${sub.yoReference || 'none'}`);
+
+    const gateway = resolveRecordGateway(sub);
 
     // If still pending, check payment gateway directly
-    if (sub.status === 'pending' && (sub.pesapalTrackingId || sub.dgatewayReference)) {
+    if (sub.status === 'pending' && (sub.pesapalTrackingId || sub.dgatewayReference || sub.yoReference || gateway === 'airtel')) {
       try {
         const { checkPaymentStatus } = require('../../../utils/payment-gateway');
         const result = await checkPaymentStatus(strapi, {
           pesapalTrackingId: sub.pesapalTrackingId,
           dgatewayReference: sub.dgatewayReference,
-          gateway: sub.dgatewayReference ? 'dgateway' : 'pesapal',
+          yoReference: sub.yoReference,
+          merchantReference: sub.transactionId,
+          gateway,
         });
         strapi.log.info(`[sub.checkStatus] Gateway says: ${result.status}`);
 
         if (result.status === 'completed') {
           await strapi.entityService.update('api::subscription.subscription', sub.id, {
-            data: { status: 'active', ...(result.paymentMethod ? { paymentMethod: result.paymentMethod } : {}) },
+            data: {
+              status: 'active',
+              ...(result.paymentMethod ? { paymentMethod: result.paymentMethod } : {}),
+              ...(result.confirmationCode ? { airtelReference: result.confirmationCode } : {}),
+            },
           });
           return { data: { id: sub.id, status: 'active' } };
         } else if (result.status === 'failed') {

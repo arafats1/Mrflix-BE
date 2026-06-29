@@ -1,7 +1,7 @@
 'use strict';
 
 const { createCoreController } = require('@strapi/strapi').factories;
-const { submitPayment, checkPaymentStatus, getActiveGateway } = require('../../../utils/payment-gateway');
+const { submitPayment, checkPaymentStatus, getActiveGateway, gatewayNeedsPhone, buildGatewayTrackingUpdate, resolveRecordGateway } = require('../../../utils/payment-gateway');
 const { recordProviderMaterialSale } = require('../../../utils/provider-material-sales');
 const { notifyBuyerOrderStatus, notifyProductOrderPlaced } = require('../../../utils/marketplace-notifications');
 
@@ -637,7 +637,7 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
         return ctx.badRequest('Payment system not configured. Please contact support.');
       }
 
-      if ((activeGateway === 'dgateway' || activeGateway === 'yo') && !paymentPhone) {
+      if (gatewayNeedsPhone(activeGateway) && !paymentPhone) {
         return ctx.badRequest('Phone number is required for mobile money payment.');
       }
     }
@@ -714,14 +714,7 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
         },
       });
 
-      const updateData = {};
-      if (paymentResult.gateway === 'pesapal') {
-        updateData.pesapalTrackingId = paymentResult.order_tracking_id;
-      } else if (paymentResult.gateway === 'dgateway') {
-        updateData.dgatewayReference = paymentResult.reference;
-      } else if (paymentResult.gateway === 'yo') {
-        updateData.yoReference = paymentResult.reference;
-      }
+      const updateData = buildGatewayTrackingUpdate(paymentResult);
 
       await strapi.documents('api::purchase.purchase').update({
         documentId: purchase.documentId,
@@ -778,7 +771,7 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
     if (activeGateway === 'pesapal' && !ipnId) {
       return ctx.badRequest('Payment system not configured. Please contact support.');
     }
-    if ((activeGateway === 'dgateway' || activeGateway === 'yo') && !paymentPhone) {
+    if (gatewayNeedsPhone(activeGateway) && !paymentPhone) {
       return ctx.badRequest('Phone number is required for mobile money payment.');
     }
 
@@ -860,14 +853,7 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
         },
       });
 
-      const updateData = {};
-      if (paymentResult.gateway === 'pesapal') {
-        updateData.pesapalTrackingId = paymentResult.order_tracking_id;
-      } else if (paymentResult.gateway === 'dgateway') {
-        updateData.dgatewayReference = paymentResult.reference;
-      } else if (paymentResult.gateway === 'yo') {
-        updateData.yoReference = paymentResult.reference;
-      }
+      const updateData = buildGatewayTrackingUpdate(paymentResult);
 
       for (const pid of purchaseIds) {
         await strapi.documents('api::purchase.purchase').update({
@@ -939,15 +925,16 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
     const trackingId = purchases[0].pesapalTrackingId;
     const dgRef = purchases[0].dgatewayReference;
     const yoRef = purchases[0].yoReference;
-    strapi.log.info(`[checkStatus] txn=${transactionId} found=${purchases.length} hasPending=${hasPending} pesapalId=${trackingId || 'none'} dgRef=${dgRef || 'none'} yoRef=${yoRef || 'none'}`);
-    if (hasPending && (trackingId || dgRef || yoRef)) {
+    const gateway = resolveRecordGateway(purchases[0]);
+    strapi.log.info(`[checkStatus] txn=${transactionId} found=${purchases.length} hasPending=${hasPending} pesapalId=${trackingId || 'none'} dgRef=${dgRef || 'none'} yoRef=${yoRef || 'none'} gateway=${gateway}`);
+    if (hasPending && (trackingId || dgRef || yoRef || gateway === 'airtel')) {
       try {
         const result = await checkPaymentStatus(strapi, {
           pesapalTrackingId: trackingId,
           dgatewayReference: dgRef,
           yoReference: yoRef,
           merchantReference: transactionId,
-          gateway: yoRef ? 'yo' : dgRef ? 'dgateway' : 'pesapal',
+          gateway,
         });
         strapi.log.info(`[checkStatus] Gateway says: ${result.status}`);
 
@@ -955,6 +942,7 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
           const data = {};
           if (trackingId) data.pesapalTrackingId = trackingId;
           if (result.paymentMethod) data.paymentMethod = result.paymentMethod;
+          if (result.confirmationCode) data.airtelReference = result.confirmationCode;
           await markPurchasesCompleted(strapi, purchases, data);
           purchases = await strapi.documents('api::purchase.purchase').findMany({
             filters: { transactionId, buyer: { id: ctx.state.user.id } },

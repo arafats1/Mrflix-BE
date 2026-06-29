@@ -4104,7 +4104,7 @@ export interface ApiSiteSettingSiteSetting extends Struct.SingleTypeSchema {
       Schema.Attribute.DefaultTo<2000>;
     movingText: Schema.Attribute.Text;
     paymentGateway: Schema.Attribute.Enumeration<
-      ['pesapal', 'dgateway', 'yo']
+      ['pesapal', 'dgateway', 'yo', 'airtel']
     > &
       Schema.Attribute.DefaultTo<'pesapal'>;
     pesapalIpnId: Schema.Attribute.String;
