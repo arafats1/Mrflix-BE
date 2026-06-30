@@ -67,4 +67,6 @@ async function assertAdmin(ctx, strapi) {
 
 module.exports = {
   assertAdmin,
+  resolveUserWithRole,
+  isAdminUser,
 };

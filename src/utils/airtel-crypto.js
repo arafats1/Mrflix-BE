@@ -33,7 +33,20 @@ function signJsonPayload(publicKeyPem, payload) {
   };
 }
 
+function encryptPin(publicKeyPem, pin) {
+  const ciphertext = crypto.publicEncrypt(
+    {
+      key: publicKeyPem,
+      padding: crypto.constants.RSA_PKCS1_PADDING,
+    },
+    Buffer.from(String(pin), 'utf8')
+  );
+
+  return ciphertext.toString('base64');
+}
+
 module.exports = {
   formatPublicKeyPem,
   signJsonPayload,
+  encryptPin,
 };

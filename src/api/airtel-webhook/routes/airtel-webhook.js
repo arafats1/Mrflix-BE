@@ -26,5 +26,29 @@ module.exports = {
         auth: false,
       },
     },
+    {
+      method: 'GET',
+      path: '/airtel/uat/cases',
+      handler: 'airtel-webhook.uatCases',
+      config: {
+        auth: false,
+      },
+    },
+    {
+      method: 'POST',
+      path: '/airtel/uat/run-case',
+      handler: 'airtel-webhook.uatRunCase',
+      config: {
+        auth: false,
+      },
+    },
+    {
+      method: 'POST',
+      path: '/airtel/uat/run-action',
+      handler: 'airtel-webhook.uatRunAction',
+      config: {
+        auth: false,
+      },
+    },
   ],
 };

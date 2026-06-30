@@ -10,7 +10,7 @@
  * Other Op-Cos default to the Africa hosts unless AIRTEL_BASE_URL is set.
  */
 
-const { formatPublicKeyPem, signJsonPayload } = require('./airtel-crypto');
+const { formatPublicKeyPem, signJsonPayload, encryptPin } = require('./airtel-crypto');
 
 const AIRTEL_ENV = String(process.env.AIRTEL_ENV || 'sandbox').trim().toLowerCase();
 
@@ -175,7 +175,7 @@ async function getRsaPublicKey(accessToken) {
 }
 
 function buildCollectionPayload({ merchantReference, amount, phone, reference }) {
-  const msisdn = String(phone || '').replace(/\D/g, '').replace(/^256/, '');
+  const msisdn = normalizeMsisdn(phone);
 
   return {
     reference: reference || merchantReference,
@@ -193,22 +193,72 @@ function buildCollectionPayload({ merchantReference, amount, phone, reference })
   };
 }
 
+function buildDisbursementPayload({
+  merchantReference,
+  amount,
+  phone,
+  pin,
+  payeeName,
+  reference,
+  transactionType,
+}) {
+  const msisdn = normalizeMsisdn(phone);
+
+  return {
+    payee: {
+      currency: CURRENCY,
+      msisdn,
+      ...(payeeName ? { name: payeeName } : {}),
+    },
+    reference: reference || merchantReference,
+    pin,
+    transaction: {
+      amount: Number(amount),
+      id: merchantReference,
+      type: transactionType || 'B2B',
+    },
+  };
+}
+
+function toApiResult({ res, data }) {
+  const transaction = data?.data?.transaction || {};
+  const status = data?.status || {};
+
+  return {
+    ok: Boolean(res.ok),
+    httpStatus: res.status,
+    statusCode: transaction.status || status.code || null,
+    message: status.message || transaction.message || '',
+    airtelMoneyId: transaction.airtel_money_id || '',
+    transactionId: transaction.id || '',
+    raw: data,
+  };
+}
+
+function normalizeMsisdn(phone) {
+  return String(phone || '').replace(/\D/g, '').replace(/^256/, '');
+}
+
+async function postSignedJsonRequest(accessToken, path, payload) {
+  const publicKey = await getRsaPublicKey(accessToken);
+  const signed = signJsonPayload(publicKey, payload);
+
+  const res = await fetch(`${BASE_URL}${path}`, {
+    method: 'POST',
+    headers: getApiHeaders(accessToken, {
+      'x-signature': signed.xSignature,
+      'x-key': signed.xKey,
+    }),
+    body: signed.body,
+  });
+
+  const data = await res.json().catch(() => ({}));
+  return { res, data };
+}
+
 async function postCollectionRequest(accessToken, payload) {
   if (API_VERSION === '2') {
-    const publicKey = await getRsaPublicKey(accessToken);
-    const signed = signJsonPayload(publicKey, payload);
-
-    const res = await fetch(`${BASE_URL}/merchant/v2/payments/`, {
-      method: 'POST',
-      headers: getApiHeaders(accessToken, {
-        'x-signature': signed.xSignature,
-        'x-key': signed.xKey,
-      }),
-      body: signed.body,
-    });
-
-    const data = await res.json().catch(() => ({}));
-    return { res, data };
+    return postSignedJsonRequest(accessToken, '/merchant/v2/payments/', payload);
   }
 
   const res = await fetch(`${BASE_URL}/merchant/v1/payments/`, {
@@ -257,34 +307,159 @@ async function testConnection() {
  * Initiate a collection (USSD push) payment.
  */
 async function requestCollection({ merchantReference, amount, phone, reference }) {
-  const accessToken = await getAccessToken();
-  const payload = buildCollectionPayload({ merchantReference, amount, phone, reference });
-  const { res, data } = await postCollectionRequest(accessToken, payload);
+  const result = await invokeCollection({ merchantReference, amount, phone, reference });
 
-  if (!res.ok) {
-    throw createAirtelError(extractAirtelErrorMessage(data, 'Airtel collection request failed.'), {
-      status: res.status,
-      code: data.status?.code || data.status_code,
-      raw: data,
+  if (!result.ok) {
+    throw createAirtelError(result.message || 'Airtel collection request failed.', {
+      status: result.httpStatus,
+      code: result.raw?.status?.code || result.raw?.status_code,
+      raw: result.raw,
     });
   }
 
-  const txStatus = data?.data?.transaction?.status || data?.status?.message;
+  const txStatus = result.raw?.data?.transaction?.status || result.raw?.status?.message;
   if (txStatus && normalizeAirtelStatus(txStatus) === 'failed') {
-    throw createAirtelError(extractAirtelErrorMessage(data, 'Airtel collection was rejected.'), {
-      status: res.status,
-      code: data.status?.code || data.status?.response_code,
-      raw: data,
+    throw createAirtelError(extractAirtelErrorMessage(result.raw, 'Airtel collection was rejected.'), {
+      status: result.httpStatus,
+      code: result.raw?.status?.code || result.raw?.status?.response_code,
+      raw: result.raw,
     });
   }
 
-  return data;
+  return result.raw;
 }
 
 /**
- * Fetch transaction status from Airtel.
+ * Raw collection call for UAT — returns Airtel response without throwing.
+ */
+async function invokeCollection({ merchantReference, amount, phone, reference }) {
+  const accessToken = await getAccessToken();
+  const payload = buildCollectionPayload({ merchantReference, amount, phone, reference });
+  const response = await postCollectionRequest(accessToken, payload);
+  return toApiResult(response);
+}
+
+/**
+ * KYC / user enquiry for a subscriber MSISDN.
+ */
+async function enquireUser(msisdn) {
+  const result = await invokeUserEnquiry(msisdn);
+
+  if (!result.ok) {
+    throw createAirtelError(result.message || 'Airtel user enquiry failed.', {
+      status: result.httpStatus,
+      code: result.raw?.status?.response_code || result.raw?.status?.code,
+      raw: result.raw,
+    });
+  }
+
+  return result.raw;
+}
+
+async function invokeUserEnquiry(msisdn) {
+  const accessToken = await getAccessToken();
+  const normalized = normalizeMsisdn(msisdn);
+
+  const res = await fetch(`${BASE_URL}/standard/v1/users/${encodeURIComponent(normalized)}`, {
+    method: 'GET',
+    headers: getApiHeaders(accessToken),
+  });
+
+  const data = await res.json().catch(() => ({}));
+  return toApiResult({ res, data });
+}
+
+/**
+ * Disburse funds to an Airtel Money wallet.
+ */
+async function requestDisbursement({
+  merchantReference,
+  amount,
+  phone,
+  pin,
+  payeeName,
+  reference,
+  transactionType,
+}) {
+  const result = await invokeDisbursement({
+    merchantReference,
+    amount,
+    phone,
+    pin,
+    payeeName,
+    reference,
+    transactionType,
+  });
+
+  if (!result.ok) {
+    throw createAirtelError(result.message || 'Airtel disbursement request failed.', {
+      status: result.httpStatus,
+      code: result.raw?.status?.response_code || result.raw?.status?.code,
+      raw: result.raw,
+    });
+  }
+
+  return result.raw;
+}
+
+async function invokeDisbursement({
+  merchantReference,
+  amount,
+  phone,
+  pin,
+  payeeName,
+  reference,
+  transactionType,
+}) {
+  if (!pin) {
+    throw createAirtelError('Disbursement PIN is required.');
+  }
+
+  const accessToken = await getAccessToken();
+  const publicKey = await getRsaPublicKey(accessToken);
+  const encryptedPin = encryptPin(publicKey, pin);
+  const payload = buildDisbursementPayload({
+    merchantReference,
+    amount,
+    phone,
+    pin: encryptedPin,
+    payeeName,
+    reference,
+    transactionType,
+  });
+
+  const response = await postSignedJsonRequest(accessToken, '/standard/v2/disbursements/', payload);
+  return toApiResult(response);
+}
+
+/**
+ * Fetch collection transaction status from Airtel.
  */
 async function getTransactionStatus(transactionId) {
+  const result = await invokeCollectionStatus(transactionId);
+
+  if (!result.ok) {
+    throw createAirtelError(result.message || 'Failed to fetch Airtel transaction status.', {
+      status: result.httpStatus,
+      code: result.raw?.status?.code || result.raw?.status_code,
+      raw: result.raw,
+    });
+  }
+
+  const transaction = result.raw?.data?.transaction || result.raw?.transaction || {};
+  const statusCode = transaction.status || transaction.status_code || '';
+
+  return {
+    status: normalizeAirtelStatus(statusCode),
+    statusCode,
+    message: transaction.message || result.raw?.status?.message || '',
+    airtelMoneyId: transaction.airtel_money_id || '',
+    transactionId: transaction.id || transactionId,
+    raw: result.raw,
+  };
+}
+
+async function invokeCollectionStatus(transactionId) {
   const accessToken = await getAccessToken();
 
   const res = await fetch(`${BASE_URL}/standard/v1/payments/${encodeURIComponent(transactionId)}`, {
@@ -293,33 +468,65 @@ async function getTransactionStatus(transactionId) {
   });
 
   const data = await res.json().catch(() => ({}));
+  return toApiResult({ res, data });
+}
 
-  if (!res.ok) {
-    throw createAirtelError(extractAirtelErrorMessage(data, 'Failed to fetch Airtel transaction status.'), {
-      status: res.status,
-      code: data.status?.code || data.status_code,
-      raw: data,
+/**
+ * Fetch disbursement transaction status from Airtel.
+ */
+async function getDisbursementStatus(transactionId, transactionType = 'B2B') {
+  const result = await invokeDisbursementStatus(transactionId, transactionType);
+
+  if (!result.ok) {
+    throw createAirtelError(result.message || 'Failed to fetch Airtel disbursement status.', {
+      status: result.httpStatus,
+      code: result.raw?.status?.response_code || result.raw?.status?.code,
+      raw: result.raw,
     });
   }
 
-  const transaction = data?.data?.transaction || data?.transaction || {};
-  const statusCode = transaction.status || transaction.status_code || '';
+  const transaction = result.raw?.data?.transaction || {};
+  const statusCode = transaction.status || '';
 
   return {
     status: normalizeAirtelStatus(statusCode),
     statusCode,
-    message: transaction.message || data?.status?.message || '',
-    airtelMoneyId: transaction.airtel_money_id || '',
+    message: transaction.message || result.raw?.status?.message || '',
     transactionId: transaction.id || transactionId,
-    raw: data,
+    raw: result.raw,
   };
+}
+
+async function invokeDisbursementStatus(transactionId, transactionType = 'B2B') {
+  const accessToken = await getAccessToken();
+  const query = new URLSearchParams({ transactionType }).toString();
+
+  const res = await fetch(
+    `${BASE_URL}/standard/v2/disbursements/${encodeURIComponent(transactionId)}?${query}`,
+    {
+      method: 'GET',
+      headers: getApiHeaders(accessToken),
+    }
+  );
+
+  const data = await res.json().catch(() => ({}));
+  return toApiResult({ res, data });
 }
 
 module.exports = {
   getCallbackUrl,
   getAccessToken,
   requestCollection,
+  invokeCollection,
+  enquireUser,
+  invokeUserEnquiry,
+  requestDisbursement,
+  invokeDisbursement,
   getTransactionStatus,
+  invokeCollectionStatus,
+  getDisbursementStatus,
+  invokeDisbursementStatus,
   normalizeAirtelStatus,
+  normalizeMsisdn,
   testConnection,
 };

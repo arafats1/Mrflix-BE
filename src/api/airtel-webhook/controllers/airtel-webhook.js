@@ -1,10 +1,25 @@
 'use strict';
 
 const airtel = require('../../../utils/airtel');
+const { getUatCases } = require('../../../utils/airtel-uat-cases');
+const { runUatCase, runCustomAction } = require('../../../utils/airtel-uat-runner');
 const {
   activateByMerchantReference,
   failByMerchantReference,
 } = require('../../../utils/airtel-payment-handlers');
+const { resolveUserWithRole, isAdminUser } = require('../../../utils/admin-auth');
+
+async function assertUatAccess(ctx) {
+  const expectedToken = String(process.env.AIRTEL_UAT_TOKEN || '').trim();
+  const providedToken = String(ctx.query.token || ctx.request.body?.token || '').trim();
+
+  if (expectedToken && providedToken === expectedToken) {
+    return true;
+  }
+
+  const user = await resolveUserWithRole(strapi, ctx);
+  return isAdminUser(user);
+}
 
 function parseCallbackBody(ctx) {
   if (typeof ctx.request.body === 'string') {
@@ -68,6 +83,65 @@ module.exports = {
     }
 
     const result = await airtel.testConnection();
+    ctx.body = { data: result };
+  },
+
+  /**
+   * List predefined Airtel UAT test cases.
+   */
+  async uatCases(ctx) {
+    if (!(await assertUatAccess(ctx))) {
+      ctx.status = 401;
+      ctx.body = { error: 'Unauthorized' };
+      return;
+    }
+
+    const group = String(ctx.query.group || '').trim() || null;
+    const config = await airtel.testConnection();
+
+    ctx.body = {
+      data: {
+        config,
+        cases: getUatCases(group),
+      },
+    };
+  },
+
+  /**
+   * Run one predefined UAT case by id.
+   */
+  async uatRunCase(ctx) {
+    if (!(await assertUatAccess(ctx))) {
+      ctx.status = 401;
+      ctx.body = { error: 'Unauthorized' };
+      return;
+    }
+
+    const { caseId, overrides } = ctx.request.body || {};
+    if (!caseId) {
+      return ctx.badRequest('Missing caseId');
+    }
+
+    const result = await runUatCase(caseId, overrides || {});
+    ctx.body = { data: result };
+  },
+
+  /**
+   * Run a custom Airtel UAT action.
+   */
+  async uatRunAction(ctx) {
+    if (!(await assertUatAccess(ctx))) {
+      ctx.status = 401;
+      ctx.body = { error: 'Unauthorized' };
+      return;
+    }
+
+    const { action, params } = ctx.request.body || {};
+    if (!action) {
+      return ctx.badRequest('Missing action');
+    }
+
+    const result = await runCustomAction(action, params || {});
     ctx.body = { data: result };
   },
 
