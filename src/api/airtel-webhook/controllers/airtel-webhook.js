@@ -1,7 +1,7 @@
 'use strict';
 
 const airtel = require('../../../utils/airtel');
-const { getUatCases } = require('../../../utils/airtel-uat-cases');
+const { getUatCases, DEFAULT_UAT_NUMBERS, MSISDN_KEY_LABELS } = require('../../../utils/airtel-uat-cases');
 const { runUatCase, runCustomAction } = require('../../../utils/airtel-uat-runner');
 const {
   activateByMerchantReference,
@@ -103,6 +103,8 @@ module.exports = {
       data: {
         config,
         cases: getUatCases(group),
+        defaultTestNumbers: DEFAULT_UAT_NUMBERS,
+        testNumberLabels: MSISDN_KEY_LABELS,
       },
     };
   },
@@ -117,12 +119,12 @@ module.exports = {
       return;
     }
 
-    const { caseId, overrides } = ctx.request.body || {};
+    const { caseId, overrides, testNumbers } = ctx.request.body || {};
     if (!caseId) {
       return ctx.badRequest('Missing caseId');
     }
 
-    const result = await runUatCase(caseId, overrides || {});
+    const result = await runUatCase(caseId, overrides || {}, testNumbers || {});
     ctx.body = { data: result };
   },
 

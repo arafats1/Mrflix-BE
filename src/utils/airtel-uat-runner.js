@@ -1,7 +1,8 @@
 'use strict';
 
 const airtel = require('./airtel');
-const { getUatCase } = require('./airtel-uat-cases');
+const { getUatCase, resolveCaseMsisdn } = require('./airtel-uat-cases');
+const { describeAirtelResponseCode, getAirtelResponseCodeMeta } = require('./airtel-response-codes');
 
 function readEnv(name) {
   return String(process.env[name] || '').trim().replace(/^['"]|['"]$/g, '');
@@ -14,15 +15,19 @@ function buildReference(prefix, caseIdValue) {
 function summarizeResponse(result) {
   const status = result?.data?.status || result?.raw?.status || {};
   const transaction = result?.data?.transaction || result?.raw?.data?.transaction || {};
+  const responseCode = status.response_code || null;
+  const codeMeta = getAirtelResponseCodeMeta(responseCode);
 
   return {
     httpStatus: result.httpStatus ?? null,
     success: Boolean(status.success ?? result.ok),
     statusCode: status.code || status.response_code || result.statusCode || null,
     message: status.message || result.message || result.error || null,
-    responseCode: status.response_code || null,
+    responseCode,
+    responseReason: codeMeta?.reason || null,
+    responseCodeDescription: codeMeta?.description || describeAirtelResponseCode(responseCode),
     resultCode: status.result_code || null,
-    transactionId: transaction.id || result.transactionId || null,
+    transactionId: transaction.id || result.transactionId || result.payload?.transaction?.id || null,
     transactionStatus: transaction.status || result.statusCode || null,
     airtelMoneyId: transaction.airtel_money_id || result.airtelMoneyId || null,
   };
@@ -38,7 +43,7 @@ async function runCustomAction(action, params = {}) {
         merchantReference,
         amount: params.amount,
         phone: params.msisdn,
-        reference: merchantReference,
+        reference: params.referenceLabel || `MOVOUAT${Math.trunc(Number(params.amount || 0))}`,
       });
 
       return {
@@ -47,8 +52,10 @@ async function runCustomAction(action, params = {}) {
         action,
         request: {
           msisdn: params.msisdn,
-          amount: params.amount,
-          reference: merchantReference,
+          amount: Math.trunc(Number(params.amount)),
+          transactionId: result.payload?.transaction?.id || merchantReference,
+          reference: result.payload?.reference || null,
+          payload: result.payload || null,
         },
         response: summarizeResponse(result),
         raw: result.raw,
@@ -155,7 +162,7 @@ async function runCustomAction(action, params = {}) {
   }
 }
 
-async function runUatCase(caseIdValue, overrides = {}) {
+async function runUatCase(caseIdValue, overrides = {}, testNumbers = {}) {
   const testCase = getUatCase(caseIdValue);
   if (!testCase) {
     return {
@@ -163,9 +170,12 @@ async function runUatCase(caseIdValue, overrides = {}) {
     };
   }
 
+  const resolvedMsisdn = resolveCaseMsisdn(testCase, testNumbers);
+
   const params = {
     ...testCase.params,
     ...overrides,
+    ...(resolvedMsisdn ? { msisdn: resolvedMsisdn } : {}),
     caseId: testCase.id,
   };
 
@@ -173,6 +183,8 @@ async function runUatCase(caseIdValue, overrides = {}) {
 
   return {
     case: testCase,
+    resolvedMsisdn,
+    testNumbers: testNumbers || {},
     result,
   };
 }

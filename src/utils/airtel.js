@@ -177,16 +177,17 @@ async function getRsaPublicKey(accessToken) {
 function buildCollectionPayload({ merchantReference, amount, phone, reference }) {
   const msisdn = normalizeMsisdn(phone);
   const transactionId = sanitizeAirtelReference(merchantReference, 'COL');
+  const paymentReference = sanitizeAirtelReference(reference || `MOVO${transactionId.slice(-12)}`, transactionId);
 
   return {
-    reference: sanitizeAirtelReference(reference || merchantReference, transactionId),
+    reference: paymentReference,
     subscriber: {
       country: COUNTRY,
       currency: CURRENCY,
       msisdn,
     },
     transaction: {
-      amount: Number(amount),
+      amount: Math.trunc(Number(amount)),
       country: COUNTRY,
       currency: CURRENCY,
       id: transactionId,
@@ -215,7 +216,7 @@ function buildDisbursementPayload({
     reference: sanitizeAirtelReference(reference || merchantReference, transactionId),
     pin,
     transaction: {
-      amount: Number(amount),
+      amount: Math.trunc(Number(amount)),
       id: transactionId,
       type: transactionType || 'B2B',
     },
@@ -245,11 +246,11 @@ function normalizeMsisdn(phone) {
  * Airtel requires alphanumeric references/transaction IDs (4-64 chars).
  */
 function sanitizeAirtelReference(value, fallback = 'TXN') {
-  const cleaned = String(value || '').replace(/[^a-zA-Z0-9]/g, '').slice(0, 64);
+  const cleaned = String(value || '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 64);
   if (cleaned.length >= 4) return cleaned;
 
   const suffix = Date.now().toString(36).replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
-  const merged = `${fallback}${suffix}`.replace(/[^a-zA-Z0-9]/g, '').slice(0, 64);
+  const merged = `${fallback}${suffix}`.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 64);
   return merged.length >= 4 ? merged : `TXN${suffix}`.slice(0, 64);
 }
 
@@ -357,7 +358,7 @@ async function invokeCollection({ merchantReference, amount, phone, reference })
   const accessToken = await getAccessToken();
   const payload = buildCollectionPayload({ merchantReference, amount, phone, reference });
   const response = await postCollectionRequest(accessToken, payload);
-  return toApiResult(response);
+  return { ...toApiResult(response), payload };
 }
 
 /**
