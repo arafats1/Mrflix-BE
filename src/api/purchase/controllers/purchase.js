@@ -735,14 +735,15 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
         },
       };
     } catch (err) {
-      strapi.log.error(
-        'Payment order submission failed:',
-        err?.message || err,
-        err?.status ? `status=${err.status}` : '',
-        err?.code ? `code=${err.code}` : '',
-        err?.hint ? `hint=${err.hint}` : '',
-        err?.raw ? `raw=${JSON.stringify(err.raw).substring(0, 500)}` : ''
-      );
+      const details = [
+        `message=${err?.message || String(err)}`,
+        err?.status ? `status=${err.status}` : null,
+        err?.code ? `code=${err.code}` : null,
+        err?.hint ? `hint=${err.hint}` : null,
+        err?.raw ? `raw=${JSON.stringify(err.raw).substring(0, 500)}` : null,
+      ].filter(Boolean).join(' | ');
+
+      strapi.log.error(`[Purchases] Payment order submission failed | ${details}`);
       await strapi.documents('api::purchase.purchase').update({
         documentId: purchase.documentId,
         data: { status: 'failed' },
