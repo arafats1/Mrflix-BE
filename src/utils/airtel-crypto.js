@@ -8,7 +8,60 @@ function formatPublicKeyPem(base64Key) {
   return `-----BEGIN PUBLIC KEY-----\n${lines.join('\n')}\n-----END PUBLIC KEY-----`;
 }
 
-function signJsonPayload(publicKeyPem, payload) {
+function createPublicKeyFromApiMaterial(keyMaterial) {
+  const cleaned = String(keyMaterial || '').replace(/\s+/g, '');
+  if (!cleaned) {
+    throw new Error('Missing Airtel RSA public key material.');
+  }
+
+  const der = Buffer.from(cleaned, 'base64');
+
+  try {
+    return crypto.createPublicKey({ key: der, format: 'der', type: 'spki' });
+  } catch {
+    return crypto.createPublicKey(formatPublicKeyPem(cleaned));
+  }
+}
+
+function isPreEncryptedPin(value) {
+  const candidate = String(value || '').trim();
+  return candidate.length >= 40 && /^[A-Za-z0-9+/=]+$/.test(candidate);
+}
+
+function normalizeDisbursementPin(pin) {
+  return String(pin || '').trim().replace(/\D/g, '').slice(0, 4);
+}
+
+function encryptPin(keyMaterial, pin) {
+  const pinStr = normalizeDisbursementPin(pin);
+  if (!/^\d{4}$/.test(pinStr)) {
+    throw new Error('Disbursement PIN must be exactly 4 digits.');
+  }
+
+  const publicKey = createPublicKeyFromApiMaterial(keyMaterial);
+  const ciphertext = crypto.publicEncrypt(
+    {
+      key: publicKey,
+      padding: crypto.constants.RSA_PKCS1_PADDING,
+    },
+    Buffer.from(pinStr, 'utf8')
+  );
+
+  return ciphertext.toString('base64');
+}
+
+function resolveEncryptedPin(keyMaterial, pin, encryptedPinOverride) {
+  const override = String(encryptedPinOverride || '').trim();
+  if (override) return override;
+  if (isPreEncryptedPin(pin)) return String(pin).trim();
+  return encryptPin(keyMaterial, pin);
+}
+
+function signJsonPayload(keyMaterial, payload) {
+  const publicKey = typeof keyMaterial === 'string' && keyMaterial.includes('BEGIN PUBLIC KEY')
+    ? crypto.createPublicKey(keyMaterial)
+    : createPublicKeyFromApiMaterial(keyMaterial);
+
   const aesKey = crypto.randomBytes(32);
   const iv = crypto.randomBytes(16);
   const payloadString = JSON.stringify(payload);
@@ -20,7 +73,7 @@ function signJsonPayload(publicKeyPem, payload) {
   const keyIv = `${aesKey.toString('base64')}:${iv.toString('base64')}`;
   const xKey = crypto.publicEncrypt(
     {
-      key: publicKeyPem,
+      key: publicKey,
       padding: crypto.constants.RSA_PKCS1_PADDING,
     },
     Buffer.from(keyIv, 'utf8')
@@ -33,20 +86,11 @@ function signJsonPayload(publicKeyPem, payload) {
   };
 }
 
-function encryptPin(publicKeyPem, pin) {
-  const ciphertext = crypto.publicEncrypt(
-    {
-      key: publicKeyPem,
-      padding: crypto.constants.RSA_PKCS1_PADDING,
-    },
-    Buffer.from(String(pin), 'utf8')
-  );
-
-  return ciphertext.toString('base64');
-}
-
 module.exports = {
   formatPublicKeyPem,
   signJsonPayload,
   encryptPin,
+  resolveEncryptedPin,
+  isPreEncryptedPin,
+  normalizeDisbursementPin,
 };

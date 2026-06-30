@@ -119,12 +119,16 @@ module.exports = {
       return;
     }
 
-    const { caseId, overrides, testNumbers } = ctx.request.body || {};
+    const { caseId, overrides, testNumbers, pin, encryptedPin } = ctx.request.body || {};
     if (!caseId) {
       return ctx.badRequest('Missing caseId');
     }
 
-    const result = await runUatCase(caseId, overrides || {}, testNumbers || {});
+    const mergedOverrides = { ...(overrides || {}) };
+    if (pin) mergedOverrides.pin = pin;
+    if (encryptedPin) mergedOverrides.encryptedPin = encryptedPin;
+
+    const result = await runUatCase(caseId, mergedOverrides, testNumbers || {});
     ctx.body = { data: result };
   },
 

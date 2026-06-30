@@ -3,6 +3,9 @@
 /**
  * Airtel Collection-APIs response codes (Uganda developer documentation).
  * https://developers.airtel.ug/documentation/collection-apis/error-codes
+ *
+ * Disbursement-APIs response codes:
+ * https://developers.airtel.ug/documentation/disbursement-apis/error-codes
  */
 
 const COLLECTION_RESPONSE_CODES = {
@@ -69,13 +72,77 @@ const COLLECTION_RESPONSE_CODES = {
 };
 
 const DISBURSEMENT_RESPONSE_CODES = {
+  DP00900001000: {
+    reason: 'Ambiguous',
+    description: 'The transaction is still processing and is in ambiguous state. Please do the transaction enquiry to fetch the transaction status.',
+  },
   DP00900001001: {
     reason: 'Success',
     description: 'Transaction is successful.',
   },
+  DP00900001003: {
+    reason: 'Maximum transaction limit reached',
+    description: 'Maximum transaction limit reached for the day.',
+  },
+  DP00900001004: {
+    reason: 'Invalid Amount',
+    description: 'Amount entered is out of range with respect to defined limits.',
+  },
+  DP00900001005: {
+    reason: 'Failed',
+    description: 'Transaction failed.',
+  },
+  DP00900001006: {
+    reason: 'Processing',
+    description: 'Transaction is in process.',
+  },
+  DP00900001007: {
+    reason: 'Insufficient Funds',
+    description: 'Not enough funds in account to complete the transaction.',
+  },
+  DP00900001009: {
+    reason: 'Invalid Initiatee',
+    description: 'Initiatee of the transaction is invalid.',
+  },
+  DP00900001010: {
+    reason: 'User not allowed',
+    description: 'Payer is not an allowed user.',
+  },
+  DP00900001011: {
+    reason: 'Transaction not allowed',
+    description: 'Transaction with similar information already exists in this system.',
+  },
+  DP00900001012: {
+    reason: 'Invalid mobile number',
+    description: 'Mobile number entered is incorrect.',
+  },
+  DP00900001013: {
+    reason: 'Refused',
+    description: 'The transaction was refused.',
+  },
+  DP00900001014: {
+    reason: 'Transaction Timed Out',
+    description: 'The transaction may be processed or failed due to time out. To know the exact status please do the transaction enquiry.',
+  },
+  DP00900001015: {
+    reason: 'Transaction Not Found',
+    description: 'The transaction was not found.',
+  },
   DP00900001016: {
     reason: 'Forbidden',
     description: 'X-signature and payload did not match.',
+  },
+  DP00900001017: {
+    reason: 'Duplicate transaction Id',
+    description: 'Duplicate Transaction Id. To know the status of the actual transaction, please do transaction enquiry.',
+  },
+};
+
+/** Router / gateway codes returned outside the standard status envelope */
+const ROUTER_RESPONSE_CODES = {
+  ROUTER116: {
+    reason: 'PIN decryption failed',
+    description: 'Airtel could not decrypt the disbursement PIN. Check the 4-digit merchant PIN or use the pre-encrypted PIN from Airtel.',
   },
 };
 
@@ -98,6 +165,7 @@ const ALL_RESPONSE_CODES = {
   ...COLLECTION_RESPONSE_CODES,
   ...DISBURSEMENT_RESPONSE_CODES,
   ...KYC_RESPONSE_CODES,
+  ...ROUTER_RESPONSE_CODES,
 };
 
 function getAirtelResponseCodeMeta(code) {
@@ -118,5 +186,6 @@ module.exports = {
   COLLECTION_RESPONSE_CODES,
   DISBURSEMENT_RESPONSE_CODES,
   KYC_RESPONSE_CODES,
+  ROUTER_RESPONSE_CODES,
   ALL_RESPONSE_CODES,
 };

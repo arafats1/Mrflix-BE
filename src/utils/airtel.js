@@ -10,7 +10,7 @@
  * Other Op-Cos default to the Africa hosts unless AIRTEL_BASE_URL is set.
  */
 
-const { formatPublicKeyPem, signJsonPayload, encryptPin } = require('./airtel-crypto');
+const { formatPublicKeyPem, signJsonPayload, resolveEncryptedPin } = require('./airtel-crypto');
 
 const AIRTEL_ENV = String(process.env.AIRTEL_ENV || 'sandbox').trim().toLowerCase();
 
@@ -50,6 +50,7 @@ const API_VERSION = resolveApiVersion();
 let cachedToken = null;
 let tokenExpiry = 0;
 let cachedRsaKey = null;
+let cachedRsaKeyMaterial = null;
 let cachedRsaKeyExpiry = 0;
 
 function extractAirtelErrorMessage(data, fallback = 'Airtel request failed.') {
@@ -169,9 +170,15 @@ async function getRsaPublicKey(accessToken) {
     });
   }
 
+  cachedRsaKeyMaterial = keyMaterial;
   cachedRsaKey = formatPublicKeyPem(keyMaterial);
   cachedRsaKeyExpiry = Date.now() + (12 * 60 * 60 * 1000);
   return cachedRsaKey;
+}
+
+async function getRsaKeyMaterial(accessToken) {
+  await getRsaPublicKey(accessToken);
+  return cachedRsaKeyMaterial;
 }
 
 function buildCollectionPayload({ merchantReference, amount, phone, reference }) {
@@ -230,8 +237,8 @@ function toApiResult({ res, data }) {
   return {
     ok: Boolean(res.ok),
     httpStatus: res.status,
-    statusCode: transaction.status || status.code || null,
-    message: status.message || transaction.message || '',
+    statusCode: transaction.status || status.code || data.status_code || null,
+    message: status.message || transaction.message || data.status_message || data.message || '',
     airtelMoneyId: transaction.airtel_money_id || '',
     transactionId: transaction.id || '',
     raw: data,
@@ -262,8 +269,8 @@ function buildAirtelReference(prefix, parts = []) {
 }
 
 async function postSignedJsonRequest(accessToken, path, payload) {
-  const publicKey = await getRsaPublicKey(accessToken);
-  const signed = signJsonPayload(publicKey, payload);
+  const keyMaterial = await getRsaKeyMaterial(accessToken);
+  const signed = signJsonPayload(keyMaterial, payload);
 
   const res = await fetch(`${BASE_URL}${path}`, {
     method: 'POST',
@@ -429,22 +436,26 @@ async function invokeDisbursement({
   amount,
   phone,
   pin,
+  encryptedPin,
   payeeName,
   reference,
   transactionType,
 }) {
-  if (!pin) {
+  const plainPin = pin || readEnv('AIRTEL_DISBURSEMENT_PIN');
+  const encryptedPinOverride = encryptedPin || readEnv('AIRTEL_DISBURSEMENT_PIN_ENCRYPTED');
+
+  if (!plainPin && !encryptedPinOverride) {
     throw createAirtelError('Disbursement PIN is required.');
   }
 
   const accessToken = await getAccessToken();
-  const publicKey = await getRsaPublicKey(accessToken);
-  const encryptedPin = encryptPin(publicKey, pin);
+  const keyMaterial = await getRsaKeyMaterial(accessToken);
+  const encryptedPinValue = resolveEncryptedPin(keyMaterial, plainPin, encryptedPinOverride);
   const payload = buildDisbursementPayload({
     merchantReference,
     amount,
     phone,
-    pin: encryptedPin,
+    pin: encryptedPinValue,
     payeeName,
     reference,
     transactionType,

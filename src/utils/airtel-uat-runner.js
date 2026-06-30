@@ -15,14 +15,15 @@ function buildReference(prefix, caseIdValue) {
 function summarizeResponse(result) {
   const status = result?.data?.status || result?.raw?.status || {};
   const transaction = result?.data?.transaction || result?.raw?.data?.transaction || {};
-  const responseCode = status.response_code || null;
+  const raw = result?.raw || {};
+  const responseCode = status.response_code || raw.status_code || null;
   const codeMeta = getAirtelResponseCodeMeta(responseCode);
 
   return {
     httpStatus: result.httpStatus ?? null,
     success: Boolean(status.success ?? result.ok),
-    statusCode: status.code || status.response_code || result.statusCode || null,
-    message: status.message || result.message || result.error || null,
+    statusCode: status.code || raw.status_code || result.statusCode || null,
+    message: status.message || result.message || raw.status_message || result.error || null,
     responseCode,
     responseReason: codeMeta?.reason || null,
     responseCodeDescription: codeMeta?.description || describeAirtelResponseCode(responseCode),
@@ -65,13 +66,14 @@ async function runCustomAction(action, params = {}) {
     if (action === 'disbursement') {
       const merchantReference = params.reference || buildReference('UATDIS', params.caseId);
       const pin = params.pin || readEnv('AIRTEL_DISBURSEMENT_PIN');
+      const encryptedPin = params.encryptedPin || readEnv('AIRTEL_DISBURSEMENT_PIN_ENCRYPTED');
 
-      if (!pin) {
+      if (!pin && !encryptedPin) {
         return {
           startedAt,
           finishedAt: new Date().toISOString(),
           action,
-          error: 'AIRTEL_DISBURSEMENT_PIN is not configured on the server.',
+          error: 'Disbursement PIN is required. Set AIRTEL_DISBURSEMENT_PIN on the server or enter it in the UAT dashboard.',
         };
       }
 
@@ -80,6 +82,7 @@ async function runCustomAction(action, params = {}) {
         amount: params.amount,
         phone: params.msisdn,
         pin,
+        encryptedPin,
         payeeName: params.payeeName || 'MovoBrands UAT',
         reference: merchantReference,
         transactionType: params.transactionType || 'B2B',
@@ -93,8 +96,9 @@ async function runCustomAction(action, params = {}) {
           msisdn: params.msisdn,
           amount: params.amount,
           reference: merchantReference,
-          pinProvided: Boolean(pin),
-          pinOverridden: Boolean(params.pin),
+          pinProvided: Boolean(pin || encryptedPin),
+          pinOverridden: Boolean(params.pin || params.encryptedPin),
+          pinSource: params.encryptedPin || encryptedPin ? 'encrypted_override' : params.pin ? 'dashboard_override' : 'server_env',
         },
         response: summarizeResponse(result),
         raw: result.raw,
