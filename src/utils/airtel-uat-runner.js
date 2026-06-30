@@ -86,6 +86,7 @@ async function runCustomAction(action, params = {}) {
         payeeName: params.payeeName || 'MovoBrands UAT',
         reference: merchantReference,
         transactionType: params.transactionType || 'B2B',
+        signRequest: params.signRequest,
       });
 
       return {
@@ -99,6 +100,8 @@ async function runCustomAction(action, params = {}) {
           pinProvided: Boolean(pin || encryptedPin),
           pinOverridden: Boolean(params.pin || params.encryptedPin),
           pinSource: params.encryptedPin || encryptedPin ? 'encrypted_override' : params.pin ? 'dashboard_override' : 'server_env',
+          disbursementSigned: result.disbursementSigned ?? false,
+          pinKeySource: result.pinKeySource || null,
         },
         response: summarizeResponse(result),
         raw: result.raw,

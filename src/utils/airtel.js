@@ -51,6 +51,7 @@ let cachedToken = null;
 let tokenExpiry = 0;
 let cachedRsaKey = null;
 let cachedRsaKeyMaterial = null;
+let cachedRsaPinKeyMaterial = null;
 let cachedRsaKeyExpiry = 0;
 
 function extractAirtelErrorMessage(data, fallback = 'Airtel request failed.') {
@@ -161,7 +162,9 @@ async function getRsaPublicKey(accessToken) {
   });
 
   const data = await res.json().catch(() => ({}));
-  const keyMaterial = data?.data?.key || data?.key;
+  const keyData = data?.data || data;
+  const keyMaterial = keyData?.key || data?.key;
+  const pinKeyMaterial = keyData?.pin_key || keyData?.pinKey || null;
 
   if (!res.ok || !keyMaterial) {
     throw createAirtelError(extractAirtelErrorMessage(data, 'Failed to fetch Airtel encryption key.'), {
@@ -171,9 +174,46 @@ async function getRsaPublicKey(accessToken) {
   }
 
   cachedRsaKeyMaterial = keyMaterial;
+  cachedRsaPinKeyMaterial = pinKeyMaterial;
   cachedRsaKey = formatPublicKeyPem(keyMaterial);
   cachedRsaKeyExpiry = Date.now() + (12 * 60 * 60 * 1000);
   return cachedRsaKey;
+}
+
+async function getPinKeyMaterial(accessToken) {
+  const override = readEnv('AIRTEL_PIN_PUBLIC_KEY');
+  if (override) return override;
+
+  await getRsaPublicKey(accessToken);
+  return cachedRsaPinKeyMaterial || cachedRsaKeyMaterial;
+}
+
+function shouldSignDisbursement(override) {
+  if (override === true) return true;
+  if (override === false) return false;
+
+  const configured = readEnv('AIRTEL_DISBURSEMENT_SIGNED');
+  if (configured === 'true') return true;
+  if (configured === 'false') return false;
+
+  // Uganda disbursement docs list x-signature/x-key as optional.
+  // Signed collection works; signed disbursement often triggers ROUTER116 PIN decrypt errors.
+  return false;
+}
+
+async function postDisbursementRequest(accessToken, payload, signRequest) {
+  if (shouldSignDisbursement(signRequest)) {
+    return postSignedJsonRequest(accessToken, '/standard/v2/disbursements/', payload);
+  }
+
+  const res = await fetch(`${BASE_URL}/standard/v2/disbursements/`, {
+    method: 'POST',
+    headers: getApiHeaders(accessToken),
+    body: JSON.stringify(payload),
+  });
+
+  const data = await res.json().catch(() => ({}));
+  return { res, data };
 }
 
 async function getRsaKeyMaterial(accessToken) {
@@ -440,6 +480,7 @@ async function invokeDisbursement({
   payeeName,
   reference,
   transactionType,
+  signRequest,
 }) {
   const plainPin = pin || readEnv('AIRTEL_DISBURSEMENT_PIN');
   const encryptedPinOverride = encryptedPin || readEnv('AIRTEL_DISBURSEMENT_PIN_ENCRYPTED');
@@ -449,8 +490,8 @@ async function invokeDisbursement({
   }
 
   const accessToken = await getAccessToken();
-  const keyMaterial = await getRsaKeyMaterial(accessToken);
-  const encryptedPinValue = resolveEncryptedPin(keyMaterial, plainPin, encryptedPinOverride);
+  const pinKeyMaterial = await getPinKeyMaterial(accessToken);
+  const encryptedPinValue = resolveEncryptedPin(pinKeyMaterial, plainPin, encryptedPinOverride);
   const payload = buildDisbursementPayload({
     merchantReference,
     amount,
@@ -461,8 +502,21 @@ async function invokeDisbursement({
     transactionType,
   });
 
-  const response = await postSignedJsonRequest(accessToken, '/standard/v2/disbursements/', payload);
-  return toApiResult(response);
+  const signed = shouldSignDisbursement(signRequest);
+  const response = await postDisbursementRequest(accessToken, payload, signRequest);
+  return {
+    ...toApiResult(response),
+    payload: {
+      ...payload,
+      pin: '[encrypted]',
+    },
+    disbursementSigned: signed,
+    pinKeySource: readEnv('AIRTEL_PIN_PUBLIC_KEY')
+      ? 'AIRTEL_PIN_PUBLIC_KEY'
+      : cachedRsaPinKeyMaterial
+        ? 'api_pin_key'
+        : 'api_encryption_key',
+  };
 }
 
 /**
