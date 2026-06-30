@@ -121,7 +121,19 @@ async function requestAccessToken() {
     }),
   });
 
-  const data = await res.json().catch(() => ({}));
+  const text = await res.text().catch(() => '');
+  let data = {};
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch {
+    data = {
+      message: text.includes('503') || res.status === 503
+        ? 'Airtel sandbox is temporarily unavailable (503). Retry later or contact Airtel support.'
+        : text.slice(0, 200) || `Non-JSON response from Airtel (HTTP ${res.status}).`,
+      response_text: text.slice(0, 500),
+    };
+  }
+
   return { res, data };
 }
 
