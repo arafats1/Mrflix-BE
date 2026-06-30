@@ -2,7 +2,7 @@
 
 const { createCoreController } = require('@strapi/strapi').factories;
 const pesapal = require('../../../utils/pesapal');
-const { submitPayment, getActiveGateway, gatewayNeedsPhone, buildGatewayTrackingUpdate, resolveRecordGateway } = require('../../../utils/payment-gateway');
+const { submitPayment, getActiveGateway, gatewayNeedsPhone, buildGatewayTrackingUpdate, toStoredPaymentMethod, resolveRecordGateway } = require('../../../utils/payment-gateway');
 
 module.exports = createCoreController('api::subscription.subscription', ({ strapi }) => ({
   // Get current user's active subscription
@@ -114,7 +114,7 @@ module.exports = createCoreController('api::subscription.subscription', ({ strap
       data: {
         subscriber: ctx.state.user.id,
         amount: totalPrice,
-        paymentMethod: paymentMethod || activeGateway,
+        paymentMethod: toStoredPaymentMethod(paymentMethod || activeGateway),
         paymentPhone: paymentPhone || '',
         transactionId: merchantReference,
         status: 'pending',

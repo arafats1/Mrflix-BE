@@ -1,7 +1,7 @@
 'use strict';
 
 const { createCoreController } = require('@strapi/strapi').factories;
-const { submitPayment, checkPaymentStatus, gatewayNeedsPhone, buildGatewayTrackingUpdate, resolveRecordGateway } = require('../../../utils/payment-gateway');
+const { submitPayment, checkPaymentStatus, gatewayNeedsPhone, buildGatewayTrackingUpdate, toStoredPaymentMethod, resolveRecordGateway } = require('../../../utils/payment-gateway');
 const { activatePromotion } = require('../../../utils/marketplace-promotions');
 
 function isAdminUser(user) {
@@ -182,7 +182,7 @@ module.exports = createCoreController('api::marketplace-promotion.marketplace-pr
         promotionType,
         durationDays,
         amount,
-        paymentMethod: activeGateway,
+        paymentMethod: toStoredPaymentMethod(activeGateway),
         paymentPhone: normalizedPaymentPhone || paymentPhone,
         transactionId: merchantReference,
         status: 'pending',

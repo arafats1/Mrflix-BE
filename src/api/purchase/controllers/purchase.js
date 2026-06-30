@@ -1,7 +1,7 @@
 'use strict';
 
 const { createCoreController } = require('@strapi/strapi').factories;
-const { submitPayment, checkPaymentStatus, getActiveGateway, gatewayNeedsPhone, buildGatewayTrackingUpdate, resolveRecordGateway } = require('../../../utils/payment-gateway');
+const { submitPayment, checkPaymentStatus, getActiveGateway, gatewayNeedsPhone, buildGatewayTrackingUpdate, toStoredPaymentMethod, resolveRecordGateway } = require('../../../utils/payment-gateway');
 const { recordProviderMaterialSale } = require('../../../utils/provider-material-sales');
 const { notifyBuyerOrderStatus, notifyProductOrderPlaced } = require('../../../utils/marketplace-notifications');
 
@@ -653,7 +653,7 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
       childProfile: childProfile?.id || null,
       amount,
       quantity: target.kind === 'product' ? quantity : 1,
-      paymentMethod: manualSupplierPayment ? 'manual_supplier_payment' : payOnDeliveryOrder ? 'pay_on_delivery' : (paymentMethod || activeGateway),
+      paymentMethod: manualSupplierPayment ? 'manual_supplier_payment' : payOnDeliveryOrder ? 'pay_on_delivery' : toStoredPaymentMethod(paymentMethod || activeGateway),
       paymentPhone: paymentPhone || '',
       transactionId: merchantReference,
       customerTransactionId: manualSupplierPayment ? String(customerTransactionId || '').trim() : '',
@@ -820,7 +820,7 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
           buyer: ctx.state.user.id,
           childProfile: childProfile?.id || null,
           amount,
-          paymentMethod: paymentMethod || activeGateway,
+          paymentMethod: toStoredPaymentMethod(paymentMethod || activeGateway),
           paymentPhone: paymentPhone || '',
           transactionId: merchantReference,
           status: 'pending',

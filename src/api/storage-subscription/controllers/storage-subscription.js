@@ -1,6 +1,6 @@
 'use strict';
 
-const { submitPayment, getActiveGateway, gatewayNeedsPhone, buildGatewayTrackingUpdate } = require('../../../utils/payment-gateway');
+const { submitPayment, getActiveGateway, gatewayNeedsPhone, buildGatewayTrackingUpdate, toStoredPaymentMethod } = require('../../../utils/payment-gateway');
 const { getAccessibleSpace, getRequestedSpaceOwnerId } = require('../../../utils/mrkeyp-space');
 
 // Storage pricing tiers (GB options)
@@ -145,7 +145,7 @@ module.exports = {
         storageGB: gb,
         amount: totalPrice,
         durationMonths,
-        paymentMethod: activeGateway,
+        paymentMethod: toStoredPaymentMethod(activeGateway),
         paymentPhone: paymentPhone || '',
         transactionId: merchantReference,
         status: 'pending',

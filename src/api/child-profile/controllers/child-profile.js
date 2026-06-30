@@ -9,7 +9,7 @@ const {
   allocateUnallocatedSavings,
   SAVINGS_TRANSACTION_PREFIX,
 } = require('../../../utils/savings');
-const { submitPayment, getActiveGateway, gatewayNeedsPhone, buildGatewayTrackingUpdate } = require('../../../utils/payment-gateway');
+const { submitPayment, getActiveGateway, gatewayNeedsPhone, buildGatewayTrackingUpdate, toStoredPaymentMethod } = require('../../../utils/payment-gateway');
 const { ensureUnifiedParentAccess } = require('../../../utils/parent-access');
 const { findUserByPhoneIdentifier, looksLikePhone } = require('../../../utils/phone-auth');
 
@@ -420,7 +420,7 @@ module.exports = createCoreController('api::child-profile.child-profile', ({ str
         buyer: user.id,
         childProfile: profile.id,
         amount,
-        paymentMethod: body.paymentMethod || activeGateway,
+        paymentMethod: toStoredPaymentMethod(body.paymentMethod || activeGateway),
         paymentPhone: paymentPhone || '',
         transactionId: merchantReference,
         status: 'pending',

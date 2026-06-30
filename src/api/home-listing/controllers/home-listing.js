@@ -1,6 +1,6 @@
 'use strict';
 
-const { submitPayment, checkPaymentStatus: checkGatewayPaymentStatus, gatewayNeedsPhone, buildGatewayTrackingUpdate, resolveRecordGateway } = require('../../../utils/payment-gateway');
+const { submitPayment, checkPaymentStatus: checkGatewayPaymentStatus, gatewayNeedsPhone, buildGatewayTrackingUpdate, toStoredPaymentMethod, resolveRecordGateway } = require('../../../utils/payment-gateway');
 const { activateHomesPaymentByFilter, failHomesPaymentByFilter } = require('../../../utils/homes-payments');
 const { notifyHomesBookingConfirmed } = require('../../../utils/homes-notifications');
 
@@ -509,7 +509,7 @@ async function submitHomesPayment(ctx, record, amountUGX, prefix, description, p
   if (gatewayNeedsPhone(activeGateway) && !paymentPhone) return ctx.badRequest('Phone number is required for mobile money payment.');
 
   const merchantReference = `${prefix}_${ctx.state.user.id}_${Date.now()}_${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
-  const updateData = { transactionId: merchantReference, paymentMethod: activeGateway, paymentPhone: paymentPhone || '' };
+  const updateData = { transactionId: merchantReference, paymentMethod: toStoredPaymentMethod(activeGateway), paymentPhone: paymentPhone || '' };
 
   const uid = prefix === 'HBOOK' ? BOOKING_UID : CONTACT_UID;
   await strapi.entityService.update(uid, record.id, { data: updateData });

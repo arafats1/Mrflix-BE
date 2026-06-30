@@ -17,6 +17,10 @@ function gatewayNeedsPhone(gateway) {
   return gateway === 'dgateway' || gateway === 'yo' || gateway === 'airtel';
 }
 
+function toStoredPaymentMethod(paymentMethod) {
+  return paymentMethod === 'airtel' ? 'airtel_money' : paymentMethod;
+}
+
 function buildGatewayTrackingUpdate(paymentResult) {
   const updateData = {};
 
@@ -328,4 +332,5 @@ module.exports = {
   buildGatewayTrackingUpdate,
   resolveRecordGateway,
   recordHasGatewayTracking,
+  toStoredPaymentMethod,
 };

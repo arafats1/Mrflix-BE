@@ -2,7 +2,7 @@
 
 const { createCoreController } = require('@strapi/strapi').factories;
 const pesapal = require('../../../utils/pesapal');
-const { submitPayment, getActiveGateway, gatewayNeedsPhone, buildGatewayTrackingUpdate, resolveRecordGateway } = require('../../../utils/payment-gateway');
+const { submitPayment, getActiveGateway, gatewayNeedsPhone, buildGatewayTrackingUpdate, toStoredPaymentMethod, resolveRecordGateway } = require('../../../utils/payment-gateway');
 const { evaluatePromoCode, incrementPromoUsage } = require('../../../utils/promo-code');
 
 function resolvePaymentCallbackUrl(rawValue, fallbackUrl) {
@@ -161,7 +161,7 @@ module.exports = createCoreController('api::exclusive-subscription.exclusive-sub
         originalAmount: baseTotal,
         promoCode: appliedPromoCode || null,
         promoDiscountPercent: appliedPromoDiscount || 0,
-        paymentMethod: paymentMethod || activeGateway,
+        paymentMethod: toStoredPaymentMethod(paymentMethod || activeGateway),
         paymentPhone: paymentPhone || '',
         transactionId: merchantReference,
         status: 'pending',
