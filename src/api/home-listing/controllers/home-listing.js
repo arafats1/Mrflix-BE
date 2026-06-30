@@ -2,6 +2,7 @@
 
 const { submitPayment, checkPaymentStatus: checkGatewayPaymentStatus, gatewayNeedsPhone, buildGatewayTrackingUpdate, resolveRecordGateway } = require('../../../utils/payment-gateway');
 const { activateHomesPaymentByFilter, failHomesPaymentByFilter } = require('../../../utils/homes-payments');
+const { notifyHomesBookingConfirmed } = require('../../../utils/homes-notifications');
 
 const LISTING_UID = 'api::home-listing.home-listing';
 const KYC_UID = 'api::home-kyc.home-kyc';
@@ -895,7 +896,12 @@ module.exports = {
     const entry = await strapi.entityService.create(BOOKING_UID, {
       data: { listing: listing.id, guest: ctx.state.user.id, host: listing.owner?.id || null, checkIn, checkOut, guests, nights, amountUGX: amount, roomOptionIndex, paymentPhone: cleanString(input.paymentPhone, 40), status: amount > 0 ? 'pending' : 'confirmed', specialRequests: cleanString(input.specialRequests, 1000) },
     });
-    if (amount <= 0) return { data: { booking: entry } };
+    if (amount <= 0) {
+      notifyHomesBookingConfirmed(strapi, entry.id).catch((error) => {
+        strapi.log.warn(`[Homes Booking] Notification failed: ${error.message}`);
+      });
+      return { data: { booking: entry } };
+    }
 
     const payment = await submitHomesPayment(ctx, entry, amount, 'HBOOK', `Homes booking: ${listing.title}`, cleanString(input.paymentPhone, 40));
     if (payment?.data || payment?.status) return payment;

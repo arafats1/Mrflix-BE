@@ -3,6 +3,7 @@
 const CONTACT_UID = 'api::home-contact-unlock.home-contact-unlock';
 const BOOKING_UID = 'api::home-booking.home-booking';
 const LISTING_UID = 'api::home-listing.home-listing';
+const { notifyHomesBookingConfirmed } = require('./homes-notifications');
 
 async function activateHomesPaymentByFilter(strapi, filter, paymentMethod) {
   const now = new Date().toISOString();
@@ -33,6 +34,9 @@ async function activateHomesPaymentByFilter(strapi, filter, paymentMethod) {
         }).catch((error) => strapi.log.warn(`[Homes Payment] Could not increment booking count: ${error.message}`));
       }
       strapi.log.info(`[Homes Payment] Booking ${booking.id} confirmed`);
+      notifyHomesBookingConfirmed(strapi, booking.id).catch((error) => {
+        strapi.log.warn(`[Homes Payment] Booking notification failed: ${error.message}`);
+      });
     }
   }
 }

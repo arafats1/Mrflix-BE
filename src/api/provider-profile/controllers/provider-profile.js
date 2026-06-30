@@ -87,6 +87,7 @@ module.exports = {
     const paymentPhone = typeof body.paymentPhone === 'string' ? body.paymentPhone.trim() : '';
     const paymentCode = typeof body.paymentCode === 'string' ? body.paymentCode.trim() : '';
     const contactPhone = typeof body.phone === 'string' ? normalizePhone(body.phone) : '';
+    const whatsappNumber = typeof body.whatsappNumber === 'string' ? normalizePhone(body.whatsappNumber) : undefined;
     const avatarUrl = typeof body.avatarUrl === 'string' ? body.avatarUrl.trim() : null;
 
     if (!fullName) return ctx.badRequest('Full name is required');
@@ -94,6 +95,9 @@ module.exports = {
     const updateData = { fullName };
 
     if (avatarUrl) updateData.avatarUrl = avatarUrl;
+    if (whatsappNumber !== undefined) {
+      updateData.whatsappNumber = whatsappNumber || null;
+    }
 
     if (requestedProviderType === 'teacher') {
       if (!schoolName) return ctx.badRequest('School is required for teacher accounts');

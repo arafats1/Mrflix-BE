@@ -2,6 +2,7 @@
 
 const { createNotification } = require('./entrep-notifications');
 const { notifyHomesMessage } = require('./homes-notifications');
+const { notifySellerMarketplaceOrder } = require('./seller-whatsapp');
 
 function threadHasProduct(thread) {
   return Boolean(thread?.product?.id || thread?.product?.documentId || thread?.product);
@@ -89,6 +90,9 @@ async function notifyProductOrderPlaced(strapi, purchase, options = {}) {
         },
       }),
     ]);
+    notifySellerMarketplaceOrder(strapi, purchase).catch((err) => {
+      strapi.log.warn(`Seller WhatsApp order notification failed: ${err.message}`);
+    });
   } catch (err) {
     strapi.log.warn(`Marketplace order notification failed: ${err.message}`);
   }

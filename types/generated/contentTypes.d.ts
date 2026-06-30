@@ -5055,6 +5055,7 @@ export interface PluginUsersPermissionsUser
       Schema.Attribute.SetMinMaxLength<{
         minLength: 3;
       }>;
+    whatsappNumber: Schema.Attribute.String;
   };
 }
 

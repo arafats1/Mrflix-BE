@@ -27,9 +27,6 @@ function formatUgandanNumber(number) {
   // Strip everything except digits
   let digits = number.replace(/[^0-9]/g, '');
 
-  // If starts with +256, strip the +
-  // digits already has no + at this point
-
   // 07XXXXXXXX → 2567XXXXXXXX
   if (digits.startsWith('0') && digits.length === 10) {
     digits = '256' + digits.substring(1);
@@ -38,18 +35,18 @@ function formatUgandanNumber(number) {
   else if (digits.length === 9 && digits.startsWith('7')) {
     digits = '256' + digits;
   }
-  // Already has 256 prefix — leave as is
-  // Any other format — pass through as-is
 
   return digits;
 }
 
+function recipientNotOnWhatsApp(errorCode) {
+  const code = Number(errorCode || 0);
+  return code === 131026 || code === 133010;
+}
+
 /**
  * Send a template message via WhatsApp Cloud API
- * @param {string} to - recipient phone number (will be formatted)
- * @param {string} templateName - approved template name
- * @param {string} languageCode - template language code
- * @param {Array} bodyParams - array of parameter values for the template body
+ * @returns {Promise<{ ok: boolean, data?: object, errorCode?: number, errorMessage?: string, recipientNotOnWhatsApp?: boolean }|null>}
  */
 async function sendTemplateMessage(to, templateName, languageCode, bodyParams = []) {
   const { phoneNumberId, accessToken } = getConfig();
@@ -60,7 +57,7 @@ async function sendTemplateMessage(to, templateName, languageCode, bodyParams = 
 
   const recipient = formatUgandanNumber(to);
   if (!recipient) {
-    return null;
+    return { ok: false, errorMessage: 'Invalid recipient number' };
   }
 
   const url = `${WHATSAPP_API_URL}/${phoneNumberId}/messages`;
@@ -69,7 +66,7 @@ async function sendTemplateMessage(to, templateName, languageCode, bodyParams = 
   if (bodyParams.length > 0) {
     components.push({
       type: 'body',
-      parameters: bodyParams.map(value => ({
+      parameters: bodyParams.map((value) => ({
         type: 'text',
         text: String(value),
       })),
@@ -92,7 +89,7 @@ async function sendTemplateMessage(to, templateName, languageCode, bodyParams = 
     const res = await fetch(url, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${accessToken}`,
+        Authorization: `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(payload),
@@ -101,12 +98,18 @@ async function sendTemplateMessage(to, templateName, languageCode, bodyParams = 
     const data = await res.json();
 
     if (!res.ok) {
-      return null;
+      const errorCode = Number(data?.error?.code || 0);
+      return {
+        ok: false,
+        errorCode,
+        errorMessage: data?.error?.message || 'WhatsApp API error',
+        recipientNotOnWhatsApp: recipientNotOnWhatsApp(errorCode),
+      };
     }
 
-    return data;
+    return { ok: true, data };
   } catch (err) {
-    return null;
+    return { ok: false, errorMessage: err.message || 'WhatsApp request failed' };
   }
 }
 
@@ -147,6 +150,7 @@ async function notifyUserMovieAvailable({ to, title, userName }) {
 
 module.exports = {
   formatUgandanNumber,
+  recipientNotOnWhatsApp,
   sendTemplateMessage,
   notifyAdminNewRequest,
   notifyUserMovieAvailable,

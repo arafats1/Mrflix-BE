@@ -137,6 +137,10 @@ module.exports = (plugin) => {
     type: 'string',
   };
 
+  plugin.contentTypes.user.schema.attributes.whatsappNumber = {
+    type: 'string',
+  };
+
   plugin.contentTypes.user.schema.attributes.homesRole = {
     type: 'enumeration',
     enum: HOMES_ROLE_OPTIONS,
@@ -321,6 +325,7 @@ module.exports = (plugin) => {
       country: userWithRole.country || null,
       paymentPhone: userWithRole.paymentPhone || null,
       paymentCode: userWithRole.paymentCode || null,
+      whatsappNumber: userWithRole.whatsappNumber || null,
       homesRole: userWithRole.homesRole || null,
       foundationRole: userWithRole.foundationRole || null,
       educationLevel: userWithRole.educationLevel || null,
