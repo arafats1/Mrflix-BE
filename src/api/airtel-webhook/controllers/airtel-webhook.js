@@ -54,6 +54,24 @@ async function processAirtelStatus(strapi, merchantReference, normalizedStatus, 
 
 module.exports = {
   /**
+   * Safe Airtel config/auth diagnostic for Railway debugging.
+   * Optional: set AIRTEL_CONFIG_CHECK_TOKEN and pass ?token=...
+   */
+  async configCheck(ctx) {
+    const expectedToken = String(process.env.AIRTEL_CONFIG_CHECK_TOKEN || '').trim();
+    const providedToken = String(ctx.query.token || '').trim();
+
+    if (expectedToken && providedToken !== expectedToken) {
+      ctx.status = 401;
+      ctx.body = { error: 'Unauthorized' };
+      return;
+    }
+
+    const result = await airtel.testConnection();
+    ctx.body = { data: result };
+  },
+
+  /**
    * Airtel Collections callback handler.
    * Airtel POSTs: { transaction: { id, status_code, airtel_money_id, message } }
    */

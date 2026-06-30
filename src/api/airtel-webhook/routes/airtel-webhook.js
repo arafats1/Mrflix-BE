@@ -18,5 +18,13 @@ module.exports = {
         auth: false,
       },
     },
+    {
+      method: 'GET',
+      path: '/airtel/config-check',
+      handler: 'airtel-webhook.configCheck',
+      config: {
+        auth: false,
+      },
+    },
   ],
 };

@@ -3,18 +3,16 @@
 /**
  * Airtel Money Collections API utility.
  *
- * Docs: https://developers.airtel.africa/documentation/collection-apis/2.0
+ * Uganda (UG) uses country-specific hosts and v2 signed collection requests:
+ *   - Sandbox: https://openapiuat.airtel.ug
+ *   - Production: https://openapi.airtel.ug
  *
- * Flow:
- *   1. getAccessToken() – OAuth2 client credentials
- *   2. requestCollection() – initiate USSD push collection (used by payment gateway)
- *   3. getTransactionStatus() – verify payment status (callback + polling)
+ * Other Op-Cos default to the Africa hosts unless AIRTEL_BASE_URL is set.
  */
 
+const { formatPublicKeyPem, signJsonPayload } = require('./airtel-crypto');
+
 const AIRTEL_ENV = String(process.env.AIRTEL_ENV || 'sandbox').trim().toLowerCase();
-const BASE_URL = AIRTEL_ENV === 'production'
-  ? 'https://openapi.airtel.africa'
-  : 'https://openapiuat.airtel.africa';
 
 function readEnv(name) {
   return String(process.env[name] || '').trim().replace(/^['"]|['"]$/g, '');
@@ -25,8 +23,34 @@ const CLIENT_SECRET = readEnv('AIRTEL_CLIENT_SECRET');
 const COUNTRY = readEnv('AIRTEL_COUNTRY') || 'UG';
 const CURRENCY = readEnv('AIRTEL_CURRENCY') || 'UGX';
 
+function resolveBaseUrl() {
+  const override = readEnv('AIRTEL_BASE_URL');
+  if (override) return override.replace(/\/$/, '');
+
+  if (COUNTRY === 'UG') {
+    return AIRTEL_ENV === 'production'
+      ? 'https://openapi.airtel.ug'
+      : 'https://openapiuat.airtel.ug';
+  }
+
+  return AIRTEL_ENV === 'production'
+    ? 'https://openapi.airtel.africa'
+    : 'https://openapiuat.airtel.africa';
+}
+
+function resolveApiVersion() {
+  const configured = readEnv('AIRTEL_API_VERSION');
+  if (configured) return configured;
+  return COUNTRY === 'UG' ? '2' : '1';
+}
+
+const BASE_URL = resolveBaseUrl();
+const API_VERSION = resolveApiVersion();
+
 let cachedToken = null;
 let tokenExpiry = 0;
+let cachedRsaKey = null;
+let cachedRsaKeyExpiry = 0;
 
 function extractAirtelErrorMessage(data, fallback = 'Airtel request failed.') {
   if (!data || typeof data !== 'object') return fallback;
@@ -56,37 +80,35 @@ function getCallbackUrl() {
   return new URL('/api/airtel/callback', process.env.PUBLIC_URL).toString();
 }
 
-function getApiHeaders(accessToken) {
+function getApiHeaders(accessToken, extra = {}) {
   return {
     'Content-Type': 'application/json',
     Accept: '*/*',
     'X-Country': COUNTRY,
     'X-Currency': CURRENCY,
     Authorization: `Bearer ${accessToken}`,
+    ...extra,
   };
 }
 
 /**
  * Normalize Airtel transaction status codes.
- * TS = success, TF = failed, TIP = in progress, TA = ambiguous.
+ * v1: TS / TF / TIP / TA
+ * v2: SUCCESS / FAILED / etc.
  */
 function normalizeAirtelStatus(statusCode) {
   const code = String(statusCode || '').toUpperCase();
 
-  if (code === 'TS') return 'completed';
-  if (code === 'TF') return 'failed';
+  if (code === 'TS' || code === 'SUCCESS' || code === 'SUCCESSFUL' || code === 'SUCCEEDED') {
+    return 'completed';
+  }
+  if (code === 'TF' || code === 'FAILED' || code === 'FAILURE') {
+    return 'failed';
+  }
   return 'pending';
 }
 
-async function getAccessToken() {
-  if (cachedToken && Date.now() < tokenExpiry) {
-    return cachedToken;
-  }
-
-  if (!CLIENT_ID || !CLIENT_SECRET) {
-    throw createAirtelError('AIRTEL_CLIENT_ID and AIRTEL_CLIENT_SECRET are required.');
-  }
-
+async function requestAccessToken() {
   const res = await fetch(`${BASE_URL}/auth/oauth2/token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: '*/*' },
@@ -98,6 +120,19 @@ async function getAccessToken() {
   });
 
   const data = await res.json().catch(() => ({}));
+  return { res, data };
+}
+
+async function getAccessToken() {
+  if (cachedToken && Date.now() < tokenExpiry) {
+    return cachedToken;
+  }
+
+  if (!CLIENT_ID || !CLIENT_SECRET) {
+    throw createAirtelError('AIRTEL_CLIENT_ID and AIRTEL_CLIENT_SECRET are required.');
+  }
+
+  const { res, data } = await requestAccessToken();
 
   if (!res.ok || !data.access_token) {
     const message = extractAirtelErrorMessage(data, 'Failed to authenticate with Airtel.');
@@ -105,9 +140,7 @@ async function getAccessToken() {
       status: res.status,
       code: data.status_code || data.status?.code,
       raw: data,
-      hint: !CLIENT_ID || !CLIENT_SECRET
-        ? 'Set AIRTEL_CLIENT_ID and AIRTEL_CLIENT_SECRET on the server (Railway), then redeploy.'
-        : `Verify credentials match ${AIRTEL_ENV} mode in the Airtel portal and whitelist Railway outbound IPs.`,
+      hint: `Use Uganda host ${BASE_URL} for UG credentials. clientIdPrefix=${CLIENT_ID.slice(0, 8)} secretLength=${CLIENT_SECRET.length} env=${AIRTEL_ENV} apiVersion=${API_VERSION}`,
     });
   }
 
@@ -116,39 +149,117 @@ async function getAccessToken() {
   return cachedToken;
 }
 
-/**
- * Initiate a collection (USSD push) payment.
- *
- * @param {object} params
- * @param {string} params.merchantReference – unique transaction id (PUR_, SUB_, etc.)
- * @param {number} params.amount
- * @param {string} params.phone – subscriber msisdn (local or international)
- * @param {string} [params.reference] – optional human-readable reference
- */
-async function requestCollection({ merchantReference, amount, phone, reference }) {
-  const accessToken = await getAccessToken();
+async function getRsaPublicKey(accessToken) {
+  if (cachedRsaKey && Date.now() < cachedRsaKeyExpiry) {
+    return cachedRsaKey;
+  }
+
+  const res = await fetch(`${BASE_URL}/v1/rsa/encryption-keys`, {
+    method: 'GET',
+    headers: getApiHeaders(accessToken),
+  });
+
+  const data = await res.json().catch(() => ({}));
+  const keyMaterial = data?.data?.key || data?.key;
+
+  if (!res.ok || !keyMaterial) {
+    throw createAirtelError(extractAirtelErrorMessage(data, 'Failed to fetch Airtel encryption key.'), {
+      status: res.status,
+      raw: data,
+    });
+  }
+
+  cachedRsaKey = formatPublicKeyPem(keyMaterial);
+  cachedRsaKeyExpiry = Date.now() + (12 * 60 * 60 * 1000);
+  return cachedRsaKey;
+}
+
+function buildCollectionPayload({ merchantReference, amount, phone, reference }) {
   const msisdn = String(phone || '').replace(/\D/g, '').replace(/^256/, '');
+
+  return {
+    reference: reference || merchantReference,
+    subscriber: {
+      country: COUNTRY,
+      currency: CURRENCY,
+      msisdn,
+    },
+    transaction: {
+      amount: Number(amount),
+      country: COUNTRY,
+      currency: CURRENCY,
+      id: merchantReference,
+    },
+  };
+}
+
+async function postCollectionRequest(accessToken, payload) {
+  if (API_VERSION === '2') {
+    const publicKey = await getRsaPublicKey(accessToken);
+    const signed = signJsonPayload(publicKey, payload);
+
+    const res = await fetch(`${BASE_URL}/merchant/v2/payments/`, {
+      method: 'POST',
+      headers: getApiHeaders(accessToken, {
+        'x-signature': signed.xSignature,
+        'x-key': signed.xKey,
+      }),
+      body: signed.body,
+    });
+
+    const data = await res.json().catch(() => ({}));
+    return { res, data };
+  }
 
   const res = await fetch(`${BASE_URL}/merchant/v1/payments/`, {
     method: 'POST',
     headers: getApiHeaders(accessToken),
-    body: JSON.stringify({
-      reference: reference || merchantReference,
-      subscriber: {
-        country: COUNTRY,
-        currency: CURRENCY,
-        msisdn,
-      },
-      transaction: {
-        amount: Number(amount),
-        country: COUNTRY,
-        currency: CURRENCY,
-        id: merchantReference,
-      },
-    }),
+    body: JSON.stringify(payload),
   });
 
   const data = await res.json().catch(() => ({}));
+  return { res, data };
+}
+
+async function testConnection() {
+  const config = {
+    env: AIRTEL_ENV,
+    baseUrl: BASE_URL,
+    apiVersion: API_VERSION,
+    country: COUNTRY,
+    currency: CURRENCY,
+    clientIdConfigured: Boolean(CLIENT_ID),
+    clientIdPrefix: CLIENT_ID ? `${CLIENT_ID.slice(0, 8)}...` : null,
+    secretConfigured: Boolean(CLIENT_SECRET),
+    secretLength: CLIENT_SECRET ? CLIENT_SECRET.length : 0,
+    callbackUrl: process.env.PUBLIC_URL ? getCallbackUrl() : null,
+  };
+
+  try {
+    const token = await getAccessToken();
+    if (API_VERSION === '2') {
+      await getRsaPublicKey(token);
+    }
+    return { ...config, auth: 'ok', encryption: API_VERSION === '2' ? 'ok' : 'not_required' };
+  } catch (error) {
+    return {
+      ...config,
+      auth: 'failed',
+      error: error.message,
+      status: error.status || null,
+      raw: error.raw || null,
+      hint: error.hint || null,
+    };
+  }
+}
+
+/**
+ * Initiate a collection (USSD push) payment.
+ */
+async function requestCollection({ merchantReference, amount, phone, reference }) {
+  const accessToken = await getAccessToken();
+  const payload = buildCollectionPayload({ merchantReference, amount, phone, reference });
+  const { res, data } = await postCollectionRequest(accessToken, payload);
 
   if (!res.ok) {
     throw createAirtelError(extractAirtelErrorMessage(data, 'Airtel collection request failed.'), {
@@ -158,13 +269,20 @@ async function requestCollection({ merchantReference, amount, phone, reference }
     });
   }
 
+  const txStatus = data?.data?.transaction?.status || data?.status?.message;
+  if (txStatus && normalizeAirtelStatus(txStatus) === 'failed') {
+    throw createAirtelError(extractAirtelErrorMessage(data, 'Airtel collection was rejected.'), {
+      status: res.status,
+      code: data.status?.code || data.status?.response_code,
+      raw: data,
+    });
+  }
+
   return data;
 }
 
 /**
  * Fetch transaction status from Airtel.
- *
- * @param {string} transactionId – merchant transaction id used when initiating payment
  */
 async function getTransactionStatus(transactionId) {
   const accessToken = await getAccessToken();
@@ -177,7 +295,7 @@ async function getTransactionStatus(transactionId) {
   const data = await res.json().catch(() => ({}));
 
   if (!res.ok) {
-    throw createAirtelError(data.message || 'Failed to fetch Airtel transaction status.', {
+    throw createAirtelError(extractAirtelErrorMessage(data, 'Failed to fetch Airtel transaction status.'), {
       status: res.status,
       code: data.status?.code || data.status_code,
       raw: data,
@@ -190,7 +308,7 @@ async function getTransactionStatus(transactionId) {
   return {
     status: normalizeAirtelStatus(statusCode),
     statusCode,
-    message: transaction.message || '',
+    message: transaction.message || data?.status?.message || '',
     airtelMoneyId: transaction.airtel_money_id || '',
     transactionId: transaction.id || transactionId,
     raw: data,
@@ -203,4 +321,5 @@ module.exports = {
   requestCollection,
   getTransactionStatus,
   normalizeAirtelStatus,
+  testConnection,
 };
