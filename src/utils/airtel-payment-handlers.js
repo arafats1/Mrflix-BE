@@ -21,7 +21,7 @@ async function activateByMerchantReference(strapi, merchantReference, airtelMone
   const updateData = buildAirtelUpdateData(airtelMoneyId);
   const ref = merchantReference;
 
-  if (ref.startsWith('SUB_')) {
+  if (ref.startsWith('SUB')) {
     const subs = await strapi.entityService.findMany('api::subscription.subscription', {
       filters: { transactionId: ref },
       limit: 1,
@@ -38,7 +38,7 @@ async function activateByMerchantReference(strapi, merchantReference, airtelMone
     return;
   }
 
-  if (ref.startsWith('EXCL_')) {
+  if (ref.startsWith('EXCL')) {
     const exclSubs = await strapi.entityService.findMany('api::exclusive-subscription.exclusive-subscription', {
       filters: { transactionId: ref },
       limit: 1,
@@ -55,7 +55,7 @@ async function activateByMerchantReference(strapi, merchantReference, airtelMone
     return;
   }
 
-  if (ref.startsWith('PROMO_')) {
+  if (ref.startsWith('PROMO')) {
     await activatePromotionByFilter(strapi, { transactionId: ref }, PAYMENT_METHOD);
     if (airtelMoneyId) {
       const promotions = await strapi.entityService.findMany('api::marketplace-promotion.marketplace-promotion', {
@@ -72,7 +72,7 @@ async function activateByMerchantReference(strapi, merchantReference, airtelMone
     return;
   }
 
-  if (ref.startsWith('HCU_') || ref.startsWith('HBOOK_')) {
+  if (ref.startsWith('HCU') || ref.startsWith('HBOOK')) {
     await activateHomesPaymentByFilter(strapi, { transactionId: ref }, PAYMENT_METHOD);
     if (airtelMoneyId) {
       const unlocks = await strapi.entityService.findMany('api::home-contact-unlock.home-contact-unlock', {
@@ -155,7 +155,7 @@ async function activateByMerchantReference(strapi, merchantReference, airtelMone
 async function failByMerchantReference(strapi, merchantReference) {
   const ref = merchantReference;
 
-  if (ref.startsWith('SUB_')) {
+  if (ref.startsWith('SUB')) {
     const subs = await strapi.entityService.findMany('api::subscription.subscription', {
       filters: { transactionId: ref },
       limit: 1,
@@ -170,7 +170,7 @@ async function failByMerchantReference(strapi, merchantReference) {
     return;
   }
 
-  if (ref.startsWith('EXCL_')) {
+  if (ref.startsWith('EXCL')) {
     const exclSubs = await strapi.entityService.findMany('api::exclusive-subscription.exclusive-subscription', {
       filters: { transactionId: ref },
       limit: 1,
@@ -185,12 +185,12 @@ async function failByMerchantReference(strapi, merchantReference) {
     return;
   }
 
-  if (ref.startsWith('PROMO_')) {
+  if (ref.startsWith('PROMO')) {
     await failPromotionByFilter(strapi, { transactionId: ref });
     return;
   }
 
-  if (ref.startsWith('HCU_') || ref.startsWith('HBOOK_')) {
+  if (ref.startsWith('HCU') || ref.startsWith('HBOOK')) {
     await failHomesPaymentByFilter(strapi, { transactionId: ref });
     return;
   }

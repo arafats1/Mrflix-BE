@@ -176,9 +176,10 @@ async function getRsaPublicKey(accessToken) {
 
 function buildCollectionPayload({ merchantReference, amount, phone, reference }) {
   const msisdn = normalizeMsisdn(phone);
+  const transactionId = sanitizeAirtelReference(merchantReference, 'COL');
 
   return {
-    reference: reference || merchantReference,
+    reference: sanitizeAirtelReference(reference || merchantReference, transactionId),
     subscriber: {
       country: COUNTRY,
       currency: CURRENCY,
@@ -188,7 +189,7 @@ function buildCollectionPayload({ merchantReference, amount, phone, reference })
       amount: Number(amount),
       country: COUNTRY,
       currency: CURRENCY,
-      id: merchantReference,
+      id: transactionId,
     },
   };
 }
@@ -203,6 +204,7 @@ function buildDisbursementPayload({
   transactionType,
 }) {
   const msisdn = normalizeMsisdn(phone);
+  const transactionId = sanitizeAirtelReference(merchantReference, 'DIS');
 
   return {
     payee: {
@@ -210,11 +212,11 @@ function buildDisbursementPayload({
       msisdn,
       ...(payeeName ? { name: payeeName } : {}),
     },
-    reference: reference || merchantReference,
+    reference: sanitizeAirtelReference(reference || merchantReference, transactionId),
     pin,
     transaction: {
       amount: Number(amount),
-      id: merchantReference,
+      id: transactionId,
       type: transactionType || 'B2B',
     },
   };
@@ -237,6 +239,25 @@ function toApiResult({ res, data }) {
 
 function normalizeMsisdn(phone) {
   return String(phone || '').replace(/\D/g, '').replace(/^256/, '');
+}
+
+/**
+ * Airtel requires alphanumeric references/transaction IDs (4-64 chars).
+ */
+function sanitizeAirtelReference(value, fallback = 'TXN') {
+  const cleaned = String(value || '').replace(/[^a-zA-Z0-9]/g, '').slice(0, 64);
+  if (cleaned.length >= 4) return cleaned;
+
+  const suffix = Date.now().toString(36).replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+  const merged = `${fallback}${suffix}`.replace(/[^a-zA-Z0-9]/g, '').slice(0, 64);
+  return merged.length >= 4 ? merged : `TXN${suffix}`.slice(0, 64);
+}
+
+function buildAirtelReference(prefix, parts = []) {
+  const raw = [prefix, ...parts, Date.now().toString(36), Math.random().toString(36).slice(2, 8)]
+    .filter(Boolean)
+    .join('');
+  return sanitizeAirtelReference(raw, String(prefix || 'TXN').replace(/[^a-zA-Z0-9]/g, '') || 'TXN');
 }
 
 async function postSignedJsonRequest(accessToken, path, payload) {
@@ -461,8 +482,9 @@ async function getTransactionStatus(transactionId) {
 
 async function invokeCollectionStatus(transactionId) {
   const accessToken = await getAccessToken();
+  const normalizedId = sanitizeAirtelReference(transactionId, 'COL');
 
-  const res = await fetch(`${BASE_URL}/standard/v1/payments/${encodeURIComponent(transactionId)}`, {
+  const res = await fetch(`${BASE_URL}/standard/v1/payments/${encodeURIComponent(normalizedId)}`, {
     method: 'GET',
     headers: getApiHeaders(accessToken),
   });
@@ -499,10 +521,11 @@ async function getDisbursementStatus(transactionId, transactionType = 'B2B') {
 
 async function invokeDisbursementStatus(transactionId, transactionType = 'B2B') {
   const accessToken = await getAccessToken();
+  const normalizedId = sanitizeAirtelReference(transactionId, 'DIS');
   const query = new URLSearchParams({ transactionType }).toString();
 
   const res = await fetch(
-    `${BASE_URL}/standard/v2/disbursements/${encodeURIComponent(transactionId)}?${query}`,
+    `${BASE_URL}/standard/v2/disbursements/${encodeURIComponent(normalizedId)}?${query}`,
     {
       method: 'GET',
       headers: getApiHeaders(accessToken),
@@ -528,5 +551,7 @@ module.exports = {
   invokeDisbursementStatus,
   normalizeAirtelStatus,
   normalizeMsisdn,
+  sanitizeAirtelReference,
+  buildAirtelReference,
   testConnection,
 };

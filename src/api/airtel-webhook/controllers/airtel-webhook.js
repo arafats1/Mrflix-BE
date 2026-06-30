@@ -232,13 +232,13 @@ module.exports = {
 
       const ref = transactionId;
 
-      if (ref.startsWith('SUB_')) {
+      if (ref.startsWith('SUB')) {
         purchaseType = 'subscription';
-      } else if (ref.startsWith('EXCL_')) {
+      } else if (ref.startsWith('EXCL')) {
         purchaseType = 'exclusive';
-      } else if (ref.startsWith('PROMO_')) {
+      } else if (ref.startsWith('PROMO')) {
         purchaseType = 'marketplace_promotion';
-      } else if (ref.startsWith('HCU_') || ref.startsWith('HBOOK_')) {
+      } else if (ref.startsWith('HCU') || ref.startsWith('HBOOK')) {
         purchaseType = 'homes';
       } else {
         const purchases = await strapi.db.query('api::purchase.purchase').findMany({

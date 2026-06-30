@@ -30,6 +30,8 @@ function buildGatewayTrackingUpdate(paymentResult) {
     updateData.dgatewayReference = paymentResult.reference;
   } else if (paymentResult.gateway === 'yo') {
     updateData.yoReference = paymentResult.reference;
+  } else if (paymentResult.gateway === 'airtel' && paymentResult.reference) {
+    updateData.transactionId = paymentResult.reference;
   }
 
   return updateData;
@@ -118,16 +120,18 @@ async function submitPayment(strapi, params) {
       throw new Error('Phone number is required for Airtel Money');
     }
 
+    const airtelTransactionId = airtel.sanitizeAirtelReference(params.merchantReference, 'COL');
+
     await airtel.requestCollection({
-      merchantReference: params.merchantReference,
+      merchantReference: airtelTransactionId,
       amount: params.amount,
       phone,
-      reference: params.description,
+      reference: airtel.sanitizeAirtelReference(params.description || params.merchantReference, airtelTransactionId),
     });
 
     return {
       gateway: 'airtel',
-      reference: params.merchantReference,
+      reference: airtelTransactionId,
       status: 'pending',
     };
   }

@@ -8,9 +8,7 @@ function readEnv(name) {
 }
 
 function buildReference(prefix, caseIdValue) {
-  const stamp = Date.now().toString(36).toUpperCase();
-  const safeCaseId = String(caseIdValue || 'custom').replace(/[^a-zA-Z0-9_-]/g, '_').toUpperCase();
-  return `${prefix}_${safeCaseId}_${stamp}`;
+  return airtel.buildAirtelReference(prefix, [caseIdValue || 'custom']);
 }
 
 function summarizeResponse(result) {
@@ -35,12 +33,12 @@ async function runCustomAction(action, params = {}) {
 
   try {
     if (action === 'collection') {
-      const merchantReference = params.reference || buildReference('UAT_COL', params.caseId);
+      const merchantReference = params.reference || buildReference('UATCOL', params.caseId);
       const result = await airtel.invokeCollection({
         merchantReference,
         amount: params.amount,
         phone: params.msisdn,
-        reference: params.referenceLabel || `UAT ${params.caseId || 'custom'}`,
+        reference: merchantReference,
       });
 
       return {
@@ -58,7 +56,7 @@ async function runCustomAction(action, params = {}) {
     }
 
     if (action === 'disbursement') {
-      const merchantReference = params.reference || buildReference('UAT_DIS', params.caseId);
+      const merchantReference = params.reference || buildReference('UATDIS', params.caseId);
       const pin = params.pin || readEnv('AIRTEL_DISBURSEMENT_PIN');
 
       if (!pin) {
@@ -76,7 +74,7 @@ async function runCustomAction(action, params = {}) {
         phone: params.msisdn,
         pin,
         payeeName: params.payeeName || 'MovoBrands UAT',
-        reference: params.referenceLabel || `UAT ${params.caseId || 'custom'}`,
+        reference: merchantReference,
         transactionType: params.transactionType || 'B2B',
       });
 
