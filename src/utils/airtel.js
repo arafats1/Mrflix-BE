@@ -11,18 +11,36 @@
  *   3. getTransactionStatus() – verify payment status (callback + polling)
  */
 
-const AIRTEL_ENV = process.env.AIRTEL_ENV || 'sandbox';
+const AIRTEL_ENV = String(process.env.AIRTEL_ENV || 'sandbox').trim().toLowerCase();
 const BASE_URL = AIRTEL_ENV === 'production'
   ? 'https://openapi.airtel.africa'
   : 'https://openapiuat.airtel.africa';
 
-const CLIENT_ID = process.env.AIRTEL_CLIENT_ID;
-const CLIENT_SECRET = process.env.AIRTEL_CLIENT_SECRET;
-const COUNTRY = process.env.AIRTEL_COUNTRY || 'UG';
-const CURRENCY = process.env.AIRTEL_CURRENCY || 'UGX';
+function readEnv(name) {
+  return String(process.env[name] || '').trim().replace(/^['"]|['"]$/g, '');
+}
+
+const CLIENT_ID = readEnv('AIRTEL_CLIENT_ID');
+const CLIENT_SECRET = readEnv('AIRTEL_CLIENT_SECRET');
+const COUNTRY = readEnv('AIRTEL_COUNTRY') || 'UG';
+const CURRENCY = readEnv('AIRTEL_CURRENCY') || 'UGX';
 
 let cachedToken = null;
 let tokenExpiry = 0;
+
+function extractAirtelErrorMessage(data, fallback = 'Airtel request failed.') {
+  if (!data || typeof data !== 'object') return fallback;
+
+  return (
+    data.message
+    || data.error_description
+    || data.error
+    || data.status?.message
+    || data.status?.response_message
+    || (typeof data.status === 'string' ? data.status : null)
+    || fallback
+  );
+}
 
 function createAirtelError(message, details = {}) {
   const error = new Error(message);
@@ -82,10 +100,14 @@ async function getAccessToken() {
   const data = await res.json().catch(() => ({}));
 
   if (!res.ok || !data.access_token) {
-    throw createAirtelError(data.message || 'Failed to authenticate with Airtel.', {
+    const message = extractAirtelErrorMessage(data, 'Failed to authenticate with Airtel.');
+    throw createAirtelError(message, {
       status: res.status,
-      code: data.status_code,
+      code: data.status_code || data.status?.code,
       raw: data,
+      hint: !CLIENT_ID || !CLIENT_SECRET
+        ? 'Set AIRTEL_CLIENT_ID and AIRTEL_CLIENT_SECRET on the server (Railway), then redeploy.'
+        : `Verify credentials match ${AIRTEL_ENV} mode in the Airtel portal and whitelist Railway outbound IPs.`,
     });
   }
 
@@ -129,7 +151,7 @@ async function requestCollection({ merchantReference, amount, phone, reference }
   const data = await res.json().catch(() => ({}));
 
   if (!res.ok) {
-    throw createAirtelError(data.message || 'Airtel collection request failed.', {
+    throw createAirtelError(extractAirtelErrorMessage(data, 'Airtel collection request failed.'), {
       status: res.status,
       code: data.status?.code || data.status_code,
       raw: data,
