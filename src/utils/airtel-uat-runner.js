@@ -22,6 +22,8 @@ function resolveDisbursementTransactionType(params = {}) {
 
 const PENDING_DISBURSEMENT_CODES = new Set(['DP00900001000', 'DP00900001006']);
 const PENDING_DISBURSEMENT_STATUSES = new Set(['250', 'TIP', 'TA', 'IN PROCESS', 'PROCESSING']);
+const PENDING_COLLECTION_CODES = new Set(['DP00800001000', 'DP00800001006']);
+const PENDING_COLLECTION_STATUSES = new Set(['250', 'TIP', 'TA', 'IN PROCESS', 'PROCESSING']);
 
 function isPendingDisbursement(summary) {
   if (!summary) return false;
@@ -70,6 +72,53 @@ async function pollDisbursementStatus(transactionId, transactionType) {
   return attempts;
 }
 
+function isPendingCollection(summary) {
+  if (!summary) return false;
+
+  const status = String(summary.transactionStatus || summary.statusCode || '').toUpperCase();
+  return PENDING_COLLECTION_CODES.has(summary.responseCode)
+    || PENDING_COLLECTION_STATUSES.has(status);
+}
+
+function isTerminalCollection(summary) {
+  if (!summary) return false;
+  if (summary.responseCode === 'DP00800001001') return true;
+
+  const status = String(summary.transactionStatus || summary.statusCode || '').toUpperCase();
+  if (['TS', 'SUCCESS', 'SUCCESSFUL', 'TF', 'FAILED', 'FAILURE'].includes(status)) {
+    return true;
+  }
+
+  if (summary.responseCode && !isPendingCollection(summary)) {
+    return true;
+  }
+
+  return false;
+}
+
+async function pollCollectionStatus(transactionId) {
+  const delaysMs = [2000, 3000, 5000, 5000, 8000];
+  const attempts = [];
+
+  for (let i = 0; i < delaysMs.length; i += 1) {
+    await sleep(delaysMs[i]);
+    const result = await airtel.invokeCollectionStatus(transactionId);
+    const response = summarizeResponse(result);
+    attempts.push({
+      attempt: i + 1,
+      polledAt: new Date().toISOString(),
+      response,
+      raw: result.raw,
+    });
+
+    if (isTerminalCollection(response)) {
+      break;
+    }
+  }
+
+  return attempts;
+}
+
 function summarizeResponse(result) {
   const status = result?.data?.status || result?.raw?.status || {};
   const transaction = result?.data?.transaction || result?.raw?.data?.transaction || {};
@@ -105,6 +154,18 @@ async function runCustomAction(action, params = {}) {
         reference: params.referenceLabel || `MOVOUAT${Math.trunc(Number(params.amount || 0))}`,
       });
 
+      const response = summarizeResponse(result);
+      let statusEnquiry = null;
+      let resolvedResponse = null;
+
+      if (response.transactionId && isPendingCollection(response)) {
+        statusEnquiry = await pollCollectionStatus(response.transactionId);
+        const lastAttempt = statusEnquiry[statusEnquiry.length - 1];
+        if (lastAttempt && isTerminalCollection(lastAttempt.response)) {
+          resolvedResponse = lastAttempt.response;
+        }
+      }
+
       return {
         startedAt,
         finishedAt: new Date().toISOString(),
@@ -116,7 +177,9 @@ async function runCustomAction(action, params = {}) {
           reference: result.payload?.reference || null,
           payload: result.payload || null,
         },
-        response: summarizeResponse(result),
+        response,
+        resolvedResponse,
+        statusEnquiry,
         raw: result.raw,
       };
     }

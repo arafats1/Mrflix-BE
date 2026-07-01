@@ -8,6 +8,7 @@ const {
   failByMerchantReference,
 } = require('../../../utils/airtel-payment-handlers');
 const { resolveUserWithRole, isAdminUser } = require('../../../utils/admin-auth');
+const { recordAirtelCallback, listAirtelCallbacks } = require('../../../utils/airtel-callback-log');
 
 async function assertUatAccess(ctx) {
   const expectedToken = String(process.env.AIRTEL_UAT_TOKEN || '').trim();
@@ -65,6 +66,10 @@ async function processAirtelStatus(strapi, merchantReference, normalizedStatus, 
   if (normalizedStatus === 'failed') {
     await failByMerchantReference(strapi, merchantReference);
   }
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 module.exports = {
@@ -154,6 +159,27 @@ module.exports = {
   },
 
   /**
+   * List recent Airtel callback payloads received by this server (UAT debugging).
+   */
+  async uatCallbacks(ctx) {
+    if (!(await assertUatAccess(ctx))) {
+      ctx.status = 401;
+      ctx.body = { error: 'Unauthorized' };
+      return;
+    }
+
+    const transactionId = String(ctx.query.transactionId || '').trim() || null;
+    const limit = Number(ctx.query.limit) || 50;
+
+    ctx.body = {
+      data: {
+        callbackUrl: process.env.PUBLIC_URL ? airtel.getCallbackUrl() : null,
+        callbacks: listAirtelCallbacks({ transactionId, limit }),
+      },
+    };
+  },
+
+  /**
    * Airtel Collections callback handler.
    * Airtel POSTs: { transaction: { id, status_code, airtel_money_id, message } }
    */
@@ -170,6 +196,10 @@ module.exports = {
     strapi.log.info(`[Airtel Callback] Received: ${JSON.stringify(payload || {}).substring(0, 500)}`);
 
     if (!callbackTx) {
+      recordAirtelCallback({
+        payload,
+        error: 'Ignored — missing transaction.id in callback body',
+      });
       ctx.status = 200;
       ctx.body = { status: 'ignored' };
       return;
@@ -180,12 +210,14 @@ module.exports = {
     try {
       let finalStatus = normalizedStatus;
       let finalAirtelMoneyId = airtelMoneyId;
+      let verifiedStatusCode = null;
 
       if (process.env.AIRTEL_VERIFY_CALLBACKS !== 'false') {
         try {
           const verified = await airtel.getTransactionStatus(merchantReference);
           finalStatus = verified.status;
           finalAirtelMoneyId = verified.airtelMoneyId || airtelMoneyId;
+          verifiedStatusCode = verified.statusCode || null;
           strapi.log.info(
             `[Airtel Callback] Verified ${merchantReference}: callback=${statusCode}, api=${verified.statusCode}, status=${finalStatus}`
           );
@@ -196,11 +228,29 @@ module.exports = {
         }
       }
 
+      recordAirtelCallback({
+        payload,
+        merchantReference,
+        statusCode,
+        airtelMoneyId: finalAirtelMoneyId,
+        normalizedStatus,
+        verifiedStatus: finalStatus,
+        verifiedStatusCode,
+      });
+
       await processAirtelStatus(strapi, merchantReference, finalStatus, finalAirtelMoneyId);
 
       ctx.status = 200;
       ctx.body = { status: 'received', transactionId: merchantReference };
     } catch (err) {
+      recordAirtelCallback({
+        payload,
+        merchantReference,
+        statusCode,
+        airtelMoneyId,
+        normalizedStatus,
+        error: err.message || 'Callback processing failed',
+      });
       strapi.log.error('[Airtel Callback] Error processing:', err);
       ctx.status = 200;
       ctx.body = { status: 'error', transactionId: merchantReference };
@@ -218,7 +268,22 @@ module.exports = {
     }
 
     try {
-      const result = await airtel.getTransactionStatus(transactionId);
+      const pollDelaysMs = [0, 2000, 3000, 5000];
+      let result = null;
+      let pollAttempts = 0;
+
+      for (const delay of pollDelaysMs) {
+        if (delay > 0) {
+          await sleep(delay);
+        }
+
+        result = await airtel.getTransactionStatus(transactionId);
+        pollAttempts += 1;
+
+        if (result.status === 'completed' || result.status === 'failed') {
+          break;
+        }
+      }
 
       if (result.status === 'completed') {
         try {
@@ -283,6 +348,8 @@ module.exports = {
           airtelMoneyId: result.airtelMoneyId,
           message: result.message,
           statusCode: result.statusCode,
+          polled: pollAttempts > 1,
+          pollAttempts,
           paymentMethod: 'airtel_money',
           purchaseType,
           movieInfo,

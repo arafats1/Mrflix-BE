@@ -43,6 +43,14 @@ module.exports = {
       },
     },
     {
+      method: 'GET',
+      path: '/airtel/uat/callbacks',
+      handler: 'airtel-webhook.uatCallbacks',
+      config: {
+        auth: false,
+      },
+    },
+    {
       method: 'POST',
       path: '/airtel/uat/run-action',
       handler: 'airtel-webhook.uatRunAction',
