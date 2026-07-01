@@ -12,6 +12,64 @@ function buildReference(prefix, caseIdValue) {
   return airtel.buildAirtelReference(prefix, [caseIdValue || 'custom']);
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function resolveDisbursementTransactionType(params = {}) {
+  return params.transactionType || readEnv('AIRTEL_DISBURSEMENT_TRANSACTION_TYPE') || 'B2C';
+}
+
+const PENDING_DISBURSEMENT_CODES = new Set(['DP00900001000', 'DP00900001006']);
+const PENDING_DISBURSEMENT_STATUSES = new Set(['250', 'TIP', 'TA', 'IN PROCESS', 'PROCESSING']);
+
+function isPendingDisbursement(summary) {
+  if (!summary) return false;
+
+  const status = String(summary.transactionStatus || summary.statusCode || '').toUpperCase();
+  return PENDING_DISBURSEMENT_CODES.has(summary.responseCode)
+    || PENDING_DISBURSEMENT_STATUSES.has(status);
+}
+
+function isTerminalDisbursement(summary) {
+  if (!summary) return false;
+  if (summary.responseCode === 'DP00900001001') return true;
+
+  const status = String(summary.transactionStatus || summary.statusCode || '').toUpperCase();
+  if (['TS', 'SUCCESS', 'SUCCESSFUL', 'TF', 'FAILED', 'FAILURE'].includes(status)) {
+    return true;
+  }
+
+  if (summary.responseCode && !isPendingDisbursement(summary)) {
+    return true;
+  }
+
+  return false;
+}
+
+async function pollDisbursementStatus(transactionId, transactionType) {
+  const delaysMs = [2000, 3000, 5000, 5000, 8000];
+  const attempts = [];
+
+  for (let i = 0; i < delaysMs.length; i += 1) {
+    await sleep(delaysMs[i]);
+    const result = await airtel.invokeDisbursementStatus(transactionId, transactionType);
+    const response = summarizeResponse(result);
+    attempts.push({
+      attempt: i + 1,
+      polledAt: new Date().toISOString(),
+      response,
+      raw: result.raw,
+    });
+
+    if (isTerminalDisbursement(response)) {
+      break;
+    }
+  }
+
+  return attempts;
+}
+
 function summarizeResponse(result) {
   const status = result?.data?.status || result?.raw?.status || {};
   const transaction = result?.data?.transaction || result?.raw?.data?.transaction || {};
@@ -77,6 +135,7 @@ async function runCustomAction(action, params = {}) {
         };
       }
 
+      const transactionType = resolveDisbursementTransactionType(params);
       const result = await airtel.invokeDisbursement({
         merchantReference,
         amount: params.amount,
@@ -85,9 +144,21 @@ async function runCustomAction(action, params = {}) {
         encryptedPin,
         payeeName: params.payeeName || 'MovoBrands UAT',
         reference: merchantReference,
-        transactionType: params.transactionType || 'B2B',
+        transactionType,
         signRequest: params.signRequest,
       });
+
+      const response = summarizeResponse(result);
+      let statusEnquiry = null;
+      let resolvedResponse = null;
+
+      if (response.transactionId && isPendingDisbursement(response)) {
+        statusEnquiry = await pollDisbursementStatus(response.transactionId, transactionType);
+        const lastAttempt = statusEnquiry[statusEnquiry.length - 1];
+        if (lastAttempt && isTerminalDisbursement(lastAttempt.response)) {
+          resolvedResponse = lastAttempt.response;
+        }
+      }
 
       return {
         startedAt,
@@ -97,13 +168,16 @@ async function runCustomAction(action, params = {}) {
           msisdn: params.msisdn,
           amount: params.amount,
           reference: merchantReference,
+          transactionType,
           pinProvided: Boolean(pin || encryptedPin),
           pinOverridden: Boolean(params.pin || params.encryptedPin),
           pinSource: params.encryptedPin || encryptedPin ? 'encrypted_override' : params.pin ? 'dashboard_override' : 'server_env',
           disbursementSigned: result.disbursementSigned ?? false,
           pinKeySource: result.pinKeySource || null,
         },
-        response: summarizeResponse(result),
+        response,
+        resolvedResponse,
+        statusEnquiry,
         raw: result.raw,
       };
     }
@@ -132,7 +206,7 @@ async function runCustomAction(action, params = {}) {
 
     if (action === 'collection_status' || action === 'disbursement_status') {
       const result = action === 'disbursement_status'
-        ? await airtel.invokeDisbursementStatus(params.transactionId, params.transactionType || 'B2B')
+        ? await airtel.invokeDisbursementStatus(params.transactionId, resolveDisbursementTransactionType(params))
         : await airtel.invokeCollectionStatus(params.transactionId);
 
       return {

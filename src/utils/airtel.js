@@ -22,6 +22,7 @@ const CLIENT_ID = readEnv('AIRTEL_CLIENT_ID');
 const CLIENT_SECRET = readEnv('AIRTEL_CLIENT_SECRET');
 const COUNTRY = readEnv('AIRTEL_COUNTRY') || 'UG';
 const CURRENCY = readEnv('AIRTEL_CURRENCY') || 'UGX';
+const DEFAULT_DISBURSEMENT_TRANSACTION_TYPE = readEnv('AIRTEL_DISBURSEMENT_TRANSACTION_TYPE') || 'B2C';
 
 function resolveBaseUrl() {
   const override = readEnv('AIRTEL_BASE_URL');
@@ -277,7 +278,7 @@ function buildDisbursementPayload({
     transaction: {
       amount: Math.trunc(Number(amount)),
       id: transactionId,
-      type: transactionType || 'B2B',
+      type: transactionType || DEFAULT_DISBURSEMENT_TRANSACTION_TYPE,
     },
   };
 }
@@ -574,7 +575,7 @@ async function invokeCollectionStatus(transactionId) {
 /**
  * Fetch disbursement transaction status from Airtel.
  */
-async function getDisbursementStatus(transactionId, transactionType = 'B2B') {
+async function getDisbursementStatus(transactionId, transactionType = DEFAULT_DISBURSEMENT_TRANSACTION_TYPE) {
   const result = await invokeDisbursementStatus(transactionId, transactionType);
 
   if (!result.ok) {
@@ -597,7 +598,7 @@ async function getDisbursementStatus(transactionId, transactionType = 'B2B') {
   };
 }
 
-async function invokeDisbursementStatus(transactionId, transactionType = 'B2B') {
+async function invokeDisbursementStatus(transactionId, transactionType = DEFAULT_DISBURSEMENT_TRANSACTION_TYPE) {
   const accessToken = await getAccessToken();
   const normalizedId = sanitizeAirtelReference(transactionId, 'DIS');
   const query = new URLSearchParams({ transactionType }).toString();
