@@ -12,6 +12,14 @@ module.exports = {
     },
     {
       method: 'POST',
+      path: '/airtel/collections/callback',
+      handler: 'airtel-webhook.collectionsCallback',
+      config: {
+        auth: false,
+      },
+    },
+    {
+      method: 'POST',
       path: '/airtel/verify',
       handler: 'airtel-webhook.verify',
       config: {

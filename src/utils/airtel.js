@@ -83,6 +83,18 @@ function getCallbackUrl() {
   return new URL('/api/airtel/callback', process.env.PUBLIC_URL).toString();
 }
 
+/**
+ * New collections callback URL (Airtel docs: Callback With/Without Authentication).
+ * Register this in the Airtel developer portal Application settings.
+ */
+function getCollectionsCallbackUrl() {
+  if (!process.env.PUBLIC_URL) {
+    throw new Error('PUBLIC_URL is required to register Airtel callback URLs.');
+  }
+
+  return new URL('/api/airtel/collections/callback', process.env.PUBLIC_URL).toString();
+}
+
 function getApiHeaders(accessToken, extra = {}) {
   return {
     'Content-Type': 'application/json',
@@ -365,6 +377,7 @@ async function testConnection() {
     secretConfigured: Boolean(CLIENT_SECRET),
     secretLength: CLIENT_SECRET ? CLIENT_SECRET.length : 0,
     callbackUrl: process.env.PUBLIC_URL ? getCallbackUrl() : null,
+    collectionsCallbackUrl: process.env.PUBLIC_URL ? getCollectionsCallbackUrl() : null,
   };
 
   try {
@@ -617,6 +630,7 @@ async function invokeDisbursementStatus(transactionId, transactionType = DEFAULT
 
 module.exports = {
   getCallbackUrl,
+  getCollectionsCallbackUrl,
   getAccessToken,
   requestCollection,
   invokeCollection,

@@ -1,6 +1,7 @@
 'use strict';
 
 const airtel = require('../../../utils/airtel');
+const { verifyCallbackHash } = require('../../../utils/airtel-crypto');
 const { getUatCases, DEFAULT_UAT_NUMBERS, MSISDN_KEY_LABELS } = require('../../../utils/airtel-uat-cases');
 const { runUatCase, runCustomAction } = require('../../../utils/airtel-uat-runner');
 const {
@@ -9,6 +10,14 @@ const {
 } = require('../../../utils/airtel-payment-handlers');
 const { resolveUserWithRole, isAdminUser } = require('../../../utils/admin-auth');
 const { recordAirtelCallback, listAirtelCallbacks } = require('../../../utils/airtel-callback-log');
+
+function getCallbackHmacSecret() {
+  return String(process.env.AIRTEL_CALLBACK_HMAC_SECRET || process.env.AIRTEL_CLIENT_SECRET || '').trim();
+}
+
+function requireCallbackHash() {
+  return String(process.env.AIRTEL_CALLBACK_REQUIRE_HASH || '').trim().toLowerCase() === 'true';
+}
 
 async function assertUatAccess(ctx) {
   const expectedToken = String(process.env.AIRTEL_UAT_TOKEN || '').trim();
@@ -174,6 +183,7 @@ module.exports = {
     ctx.body = {
       data: {
         callbackUrl: process.env.PUBLIC_URL ? airtel.getCallbackUrl() : null,
+        collectionsCallbackUrl: process.env.PUBLIC_URL ? airtel.getCollectionsCallbackUrl() : null,
         callbacks: listAirtelCallbacks({ transactionId, limit }),
       },
     };
@@ -252,6 +262,130 @@ module.exports = {
         error: err.message || 'Callback processing failed',
       });
       strapi.log.error('[Airtel Callback] Error processing:', err);
+      ctx.status = 200;
+      ctx.body = { status: 'error', transactionId: merchantReference };
+    }
+  },
+
+  /**
+   * Fresh Airtel Collections callback (docs: Callback With/Without Authentication).
+   *
+   * Without auth:
+   *   { transaction: { id, message, status_code, airtel_money_id } }
+   *
+   * With auth:
+   *   { transaction: { ... }, hash: "<HMAC-SHA256 base64>" }
+   *
+   * Register in Airtel portal: {PUBLIC_URL}/api/airtel/collections/callback
+   */
+  async collectionsCallback(ctx) {
+    if (ctx.request.method !== 'POST') {
+      ctx.status = 405;
+      ctx.body = { error: 'Method not allowed' };
+      return;
+    }
+
+    const payload = parseCallbackBody(ctx);
+    const contentType = String(ctx.request.headers['content-type'] || '');
+    const hasHash = Boolean(payload?.hash);
+    const hmacSecret = getCallbackHmacSecret();
+    const mustVerifyHash = requireCallbackHash() || hasHash;
+
+    strapi.log.info(
+      `[Airtel Collections Callback] Received content-type=${contentType || 'n/a'} hasHash=${hasHash}: ${JSON.stringify(payload || {}).substring(0, 500)}`
+    );
+
+    if (mustVerifyHash) {
+      if (!hmacSecret) {
+        recordAirtelCallback({
+          payload,
+          error: 'Rejected — callback hash present/required but AIRTEL_CLIENT_SECRET is not configured',
+        });
+        ctx.status = 401;
+        ctx.body = { status: 'unauthorized', error: 'Callback HMAC secret not configured' };
+        return;
+      }
+
+      if (!verifyCallbackHash(payload, hmacSecret)) {
+        recordAirtelCallback({
+          payload,
+          error: 'Rejected — invalid callback hash (DP00800001026 style mismatch)',
+        });
+        strapi.log.warn('[Airtel Collections Callback] Invalid hash — rejecting');
+        ctx.status = 401;
+        ctx.body = { status: 'unauthorized', error: 'Invalid callback hash' };
+        return;
+      }
+    }
+
+    const callbackTx = extractCallbackTransaction(payload);
+
+    if (!callbackTx) {
+      recordAirtelCallback({
+        payload,
+        error: 'Ignored — missing transaction.id in collections callback body',
+      });
+      // Still 200 so Airtel does not keep retrying a malformed payload forever.
+      ctx.status = 200;
+      ctx.body = { status: 'ignored', reason: 'missing transaction.id' };
+      return;
+    }
+
+    const { merchantReference, statusCode, airtelMoneyId, message, normalizedStatus } = callbackTx;
+
+    try {
+      let finalStatus = normalizedStatus;
+      let finalAirtelMoneyId = airtelMoneyId;
+      let verifiedStatusCode = null;
+
+      if (process.env.AIRTEL_VERIFY_CALLBACKS !== 'false') {
+        try {
+          const verified = await airtel.getTransactionStatus(merchantReference);
+          finalStatus = verified.status;
+          finalAirtelMoneyId = verified.airtelMoneyId || airtelMoneyId;
+          verifiedStatusCode = verified.statusCode || null;
+          strapi.log.info(
+            `[Airtel Collections Callback] Verified ${merchantReference}: callback=${statusCode}, api=${verified.statusCode}, status=${finalStatus}`
+          );
+        } catch (verifyErr) {
+          strapi.log.warn(
+            `[Airtel Collections Callback] Status verification failed for ${merchantReference}, using callback status ${statusCode}: ${verifyErr.message}`
+          );
+        }
+      }
+
+      recordAirtelCallback({
+        payload,
+        merchantReference,
+        statusCode,
+        airtelMoneyId: finalAirtelMoneyId,
+        normalizedStatus,
+        verifiedStatus: finalStatus,
+        verifiedStatusCode,
+      });
+
+      await processAirtelStatus(strapi, merchantReference, finalStatus, finalAirtelMoneyId);
+
+      ctx.status = 200;
+      ctx.body = {
+        status: 'received',
+        transactionId: merchantReference,
+        airtelMoneyId: finalAirtelMoneyId || null,
+        statusCode,
+        message: message || null,
+        hashVerified: mustVerifyHash,
+      };
+    } catch (err) {
+      recordAirtelCallback({
+        payload,
+        merchantReference,
+        statusCode,
+        airtelMoneyId,
+        normalizedStatus,
+        error: err.message || 'Collections callback processing failed',
+      });
+      strapi.log.error('[Airtel Collections Callback] Error processing:', err);
+      // Acknowledge receipt so Airtel does not hammer retries; activation can be recovered via /airtel/verify.
       ctx.status = 200;
       ctx.body = { status: 'error', transactionId: merchantReference };
     }

@@ -86,6 +86,46 @@ function signJsonPayload(keyMaterial, payload) {
   };
 }
 
+function hmacSha256Base64(secret, message) {
+  return crypto.createHmac('sha256', secret).update(message, 'utf8').digest('base64');
+}
+
+function hashesMatch(expected, received) {
+  const expectedBuf = Buffer.from(String(expected || ''));
+  const receivedBuf = Buffer.from(String(received || ''));
+  if (expectedBuf.length !== receivedBuf.length || expectedBuf.length === 0) {
+    return false;
+  }
+  return crypto.timingSafeEqual(expectedBuf, receivedBuf);
+}
+
+/**
+ * Verify Airtel "Callback With Authentication" body hash.
+ * HMAC-SHA256(compact JSON of transaction) with client secret, base64-encoded.
+ * Tries parse-order stringify plus the documented field order as fallbacks.
+ */
+function verifyCallbackHash(payload, secret) {
+  const received = String(payload?.hash || '').trim();
+  const key = String(secret || '').trim();
+  const transaction = payload?.transaction;
+
+  if (!received || !key || !transaction || typeof transaction !== 'object') {
+    return false;
+  }
+
+  const candidates = [
+    JSON.stringify(transaction),
+    JSON.stringify({
+      id: transaction.id,
+      message: transaction.message,
+      status_code: transaction.status_code,
+      airtel_money_id: transaction.airtel_money_id,
+    }),
+  ];
+
+  return candidates.some((message) => hashesMatch(hmacSha256Base64(key, message), received));
+}
+
 module.exports = {
   formatPublicKeyPem,
   signJsonPayload,
@@ -93,4 +133,5 @@ module.exports = {
   resolveEncryptedPin,
   isPreEncryptedPin,
   normalizeDisbursementPin,
+  verifyCallbackHash,
 };
