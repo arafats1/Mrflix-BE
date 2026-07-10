@@ -2,7 +2,11 @@
 
 const airtel = require('./airtel');
 const { getUatCase, resolveCaseMsisdn } = require('./airtel-uat-cases');
-const { describeAirtelResponseCode, getAirtelResponseCodeMeta } = require('./airtel-response-codes');
+const {
+  describeAirtelResponseCode,
+  getAirtelResponseCodeMeta,
+  classifyAirtelStatus,
+} = require('./airtel-response-codes');
 
 function readEnv(name) {
   return String(process.env[name] || '').trim().replace(/^['"]|['"]$/g, '');
@@ -20,33 +24,15 @@ function resolveDisbursementTransactionType(params = {}) {
   return params.transactionType || readEnv('AIRTEL_DISBURSEMENT_TRANSACTION_TYPE') || 'B2C';
 }
 
-const PENDING_DISBURSEMENT_CODES = new Set(['DP00900001000', 'DP00900001006']);
-const PENDING_DISBURSEMENT_STATUSES = new Set(['250', 'TIP', 'TA', 'IN PROCESS', 'PROCESSING']);
-const PENDING_COLLECTION_CODES = new Set(['DP00800001000', 'DP00800001006']);
-const PENDING_COLLECTION_STATUSES = new Set(['250', 'TIP', 'TA', 'IN PROCESS', 'PROCESSING']);
-
 function isPendingDisbursement(summary) {
   if (!summary) return false;
-
-  const status = String(summary.transactionStatus || summary.statusCode || '').toUpperCase();
-  return PENDING_DISBURSEMENT_CODES.has(summary.responseCode)
-    || PENDING_DISBURSEMENT_STATUSES.has(status);
+  return classifyAirtelStatus(summary.responseCode || summary.transactionStatus || summary.statusCode) === 'pending';
 }
 
 function isTerminalDisbursement(summary) {
   if (!summary) return false;
-  if (summary.responseCode === 'DP00900001001') return true;
-
-  const status = String(summary.transactionStatus || summary.statusCode || '').toUpperCase();
-  if (['TS', 'SUCCESS', 'SUCCESSFUL', 'TF', 'FAILED', 'FAILURE'].includes(status)) {
-    return true;
-  }
-
-  if (summary.responseCode && !isPendingDisbursement(summary)) {
-    return true;
-  }
-
-  return false;
+  const status = classifyAirtelStatus(summary.responseCode || summary.transactionStatus || summary.statusCode);
+  return status === 'completed' || status === 'failed';
 }
 
 async function pollDisbursementStatus(transactionId, transactionType) {
@@ -74,30 +60,18 @@ async function pollDisbursementStatus(transactionId, transactionType) {
 
 function isPendingCollection(summary) {
   if (!summary) return false;
-
-  const status = String(summary.transactionStatus || summary.statusCode || '').toUpperCase();
-  return PENDING_COLLECTION_CODES.has(summary.responseCode)
-    || PENDING_COLLECTION_STATUSES.has(status);
+  return classifyAirtelStatus(summary.responseCode || summary.transactionStatus || summary.statusCode) === 'pending';
 }
 
 function isTerminalCollection(summary) {
   if (!summary) return false;
-  if (summary.responseCode === 'DP00800001001') return true;
-
-  const status = String(summary.transactionStatus || summary.statusCode || '').toUpperCase();
-  if (['TS', 'SUCCESS', 'SUCCESSFUL', 'TF', 'FAILED', 'FAILURE'].includes(status)) {
-    return true;
-  }
-
-  if (summary.responseCode && !isPendingCollection(summary)) {
-    return true;
-  }
-
-  return false;
+  const status = classifyAirtelStatus(summary.responseCode || summary.transactionStatus || summary.statusCode);
+  return status === 'completed' || status === 'failed';
 }
 
 async function pollCollectionStatus(transactionId) {
-  const delaysMs = [2000, 3000, 5000, 5000, 8000];
+  // Wrong-pin / limit / over-limit outcomes often arrive after the USSD prompt closes.
+  const delaysMs = [2000, 3000, 5000, 5000, 8000, 10000];
   const attempts = [];
 
   for (let i = 0; i < delaysMs.length; i += 1) {
@@ -125,10 +99,16 @@ function summarizeResponse(result) {
   const raw = result?.raw || {};
   const responseCode = status.response_code || raw.status_code || null;
   const codeMeta = getAirtelResponseCodeMeta(responseCode);
+  const transactionStatus = transaction.status || transaction.status_code || result.statusCode || null;
+  const normalizedStatus = classifyAirtelStatus(responseCode || transactionStatus || status.code);
 
   return {
     httpStatus: result.httpStatus ?? null,
-    success: Boolean(status.success ?? result.ok),
+    success: normalizedStatus === 'completed'
+      ? true
+      : normalizedStatus === 'failed'
+        ? false
+        : Boolean(status.success ?? result.ok),
     statusCode: status.code || raw.status_code || result.statusCode || null,
     message: status.message || result.message || raw.status_message || result.error || null,
     responseCode,
@@ -136,7 +116,8 @@ function summarizeResponse(result) {
     responseCodeDescription: codeMeta?.description || describeAirtelResponseCode(responseCode),
     resultCode: status.result_code || null,
     transactionId: transaction.id || result.transactionId || result.payload?.transaction?.id || null,
-    transactionStatus: transaction.status || result.statusCode || null,
+    transactionStatus,
+    normalizedStatus,
     airtelMoneyId: transaction.airtel_money_id || result.airtelMoneyId || null,
   };
 }
@@ -172,7 +153,7 @@ async function runCustomAction(action, params = {}) {
         action,
         request: {
           msisdn: params.msisdn,
-          amount: Math.trunc(Number(params.amount)),
+          amount: Number(params.amount),
           transactionId: result.payload?.transaction?.id || merchantReference,
           reference: result.payload?.reference || null,
           payload: result.payload || null,

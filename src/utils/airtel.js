@@ -11,6 +11,7 @@
  */
 
 const { formatPublicKeyPem, signJsonPayload, resolveEncryptedPin } = require('./airtel-crypto');
+const { classifyAirtelStatus, describeAirtelResponseCode } = require('./airtel-response-codes');
 
 const AIRTEL_ENV = String(process.env.AIRTEL_ENV || 'sandbox').trim().toLowerCase();
 
@@ -107,20 +108,52 @@ function getApiHeaders(accessToken, extra = {}) {
 }
 
 /**
- * Normalize Airtel transaction status codes.
+ * Normalize Airtel transaction status codes / response codes.
  * v1: TS / TF / TIP / TA
  * v2: SUCCESS / FAILED / etc.
+ * Enquiry: DP00800001001 (success), DP00800001002 (wrong pin), DP00800001003 (over limit), ...
  */
 function normalizeAirtelStatus(statusCode) {
-  const code = String(statusCode || '').toUpperCase();
+  return classifyAirtelStatus(statusCode);
+}
 
-  if (code === 'TS' || code === 'SUCCESS' || code === 'SUCCESSFUL' || code === 'SUCCEEDED') {
-    return 'completed';
+/**
+ * Resolve the best available status signal from an Airtel payload.
+ * Prefers transaction.status / status_code, then status.response_code.
+ */
+function resolveStatusFromAirtelPayload(raw = {}) {
+  const transaction = raw?.data?.transaction || raw?.transaction || {};
+  const status = raw?.status || {};
+  const statusCode = transaction.status || transaction.status_code || status.code || raw.status_code || null;
+  const responseCode = status.response_code || raw.status_code || null;
+
+  const fromStatus = statusCode ? normalizeAirtelStatus(statusCode) : null;
+  const fromResponse = responseCode ? normalizeAirtelStatus(responseCode) : null;
+
+  // Prefer an explicit terminal signal from either field.
+  let normalized = 'pending';
+  if (fromStatus === 'completed' || fromResponse === 'completed') {
+    normalized = 'completed';
+  } else if (fromStatus === 'failed' || fromResponse === 'failed') {
+    normalized = 'failed';
+  } else if (fromStatus === 'pending' || fromResponse === 'pending') {
+    normalized = 'pending';
   }
-  if (code === 'TF' || code === 'FAILED' || code === 'FAILURE') {
-    return 'failed';
-  }
-  return 'pending';
+
+  const message = transaction.message
+    || status.message
+    || describeAirtelResponseCode(responseCode)
+    || raw.status_message
+    || '';
+
+  return {
+    status: normalized,
+    statusCode,
+    responseCode,
+    message,
+    airtelMoneyId: transaction.airtel_money_id || '',
+    transactionId: transaction.id || null,
+  };
 }
 
 async function requestAccessToken() {
@@ -259,12 +292,20 @@ function buildCollectionPayload({ merchantReference, amount, phone, reference })
       msisdn,
     },
     transaction: {
-      amount: Math.trunc(Number(amount)),
+      // Keep non-integers as-is so UAT decimal-amount cases reach Airtel for rejection.
+      amount: normalizeCollectionAmount(amount),
       country: COUNTRY,
       currency: CURRENCY,
       id: transactionId,
     },
   };
+}
+
+function normalizeCollectionAmount(amount) {
+  const n = Number(amount);
+  if (!Number.isFinite(n)) return amount;
+  if (!Number.isInteger(n)) return n;
+  return Math.trunc(n);
 }
 
 function buildDisbursementPayload({
@@ -288,7 +329,7 @@ function buildDisbursementPayload({
     reference: sanitizeAirtelReference(reference || merchantReference, transactionId),
     pin,
     transaction: {
-      amount: Math.trunc(Number(amount)),
+      amount: normalizeCollectionAmount(amount),
       id: transactionId,
       type: transactionType || DEFAULT_DISBURSEMENT_TRANSACTION_TYPE,
     },
@@ -412,13 +453,16 @@ async function requestCollection({ merchantReference, amount, phone, reference }
     });
   }
 
-  const txStatus = result.raw?.data?.transaction?.status || result.raw?.status?.message;
-  if (txStatus && normalizeAirtelStatus(txStatus) === 'failed') {
-    throw createAirtelError(extractAirtelErrorMessage(result.raw, 'Airtel collection was rejected.'), {
-      status: result.httpStatus,
-      code: result.raw?.status?.code || result.raw?.status?.response_code,
-      raw: result.raw,
-    });
+  const resolved = resolveStatusFromAirtelPayload(result.raw);
+  if (resolved.status === 'failed') {
+    throw createAirtelError(
+      resolved.message || extractAirtelErrorMessage(result.raw, 'Airtel collection was rejected.'),
+      {
+        status: result.httpStatus,
+        code: resolved.responseCode || resolved.statusCode,
+        raw: result.raw,
+      }
+    );
   }
 
   return result.raw;
@@ -559,15 +603,15 @@ async function getTransactionStatus(transactionId) {
     });
   }
 
-  const transaction = result.raw?.data?.transaction || result.raw?.transaction || {};
-  const statusCode = transaction.status || transaction.status_code || '';
+  const resolved = resolveStatusFromAirtelPayload(result.raw);
 
   return {
-    status: normalizeAirtelStatus(statusCode),
-    statusCode,
-    message: transaction.message || result.raw?.status?.message || '',
-    airtelMoneyId: transaction.airtel_money_id || '',
-    transactionId: transaction.id || transactionId,
+    status: resolved.status,
+    statusCode: resolved.statusCode,
+    responseCode: resolved.responseCode,
+    message: resolved.message || '',
+    airtelMoneyId: resolved.airtelMoneyId || '',
+    transactionId: resolved.transactionId || transactionId,
     raw: result.raw,
   };
 }
@@ -599,14 +643,14 @@ async function getDisbursementStatus(transactionId, transactionType = DEFAULT_DI
     });
   }
 
-  const transaction = result.raw?.data?.transaction || {};
-  const statusCode = transaction.status || '';
+  const resolved = resolveStatusFromAirtelPayload(result.raw);
 
   return {
-    status: normalizeAirtelStatus(statusCode),
-    statusCode,
-    message: transaction.message || result.raw?.status?.message || '',
-    transactionId: transaction.id || transactionId,
+    status: resolved.status,
+    statusCode: resolved.statusCode,
+    responseCode: resolved.responseCode,
+    message: resolved.message || '',
+    transactionId: resolved.transactionId || transactionId,
     raw: result.raw,
   };
 }
@@ -643,6 +687,7 @@ module.exports = {
   getDisbursementStatus,
   invokeDisbursementStatus,
   normalizeAirtelStatus,
+  resolveStatusFromAirtelPayload,
   normalizeMsisdn,
   sanitizeAirtelReference,
   buildAirtelReference,

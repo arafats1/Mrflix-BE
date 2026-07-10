@@ -180,9 +180,83 @@ function describeAirtelResponseCode(code) {
   return `${meta.reason} — ${meta.description}`;
 }
 
+/** Codes that mean the transaction is still processing (keep polling). */
+const PENDING_RESPONSE_CODES = new Set([
+  'DP00800001000', // Ambiguous
+  'DP00800001006', // In process
+  'DP00900001000', // Ambiguous
+  'DP00900001006', // Processing
+]);
+
+/** Codes that mean a successful final state. */
+const SUCCESS_RESPONSE_CODES = new Set([
+  'DP00800001001',
+  'DP00900001001',
+  'DP02200000001',
+]);
+
+/**
+ * Classify an Airtel status string or response_code into completed|failed|pending.
+ * Accepts TS/TF, SUCCESS/FAILED, TIP/TA, and documented DP008/DP009 codes.
+ */
+function classifyAirtelStatus(statusOrCode) {
+  const code = String(statusOrCode || '').trim().toUpperCase();
+  if (!code) return 'pending';
+
+  if (
+    code === 'TS'
+    || code === 'SUCCESS'
+    || code === 'SUCCESSFUL'
+    || code === 'SUCCEEDED'
+    || SUCCESS_RESPONSE_CODES.has(code)
+  ) {
+    return 'completed';
+  }
+
+  if (
+    code === 'TIP'
+    || code === 'TA'
+    || code === '250'
+    || code === 'IN PROCESS'
+    || code === 'PROCESSING'
+    || code === 'AMBIGUOUS'
+    || PENDING_RESPONSE_CODES.has(code)
+  ) {
+    return 'pending';
+  }
+
+  if (
+    code === 'TF'
+    || code === 'TE'
+    || code === 'FAILED'
+    || code === 'FAILURE'
+    || code === 'EXPIRED'
+    || code === 'TIMED OUT'
+    || code === 'TIMEOUT'
+  ) {
+    return 'failed';
+  }
+
+  // Any other documented DP00x / ROUTER code is a terminal failure
+  // (incorrect pin, over limit, insufficient balance, refused, etc.).
+  if (ALL_RESPONSE_CODES[code] && !PENDING_RESPONSE_CODES.has(code) && !SUCCESS_RESPONSE_CODES.has(code)) {
+    return 'failed';
+  }
+
+  // Unknown DP00* response codes that are not pending/success → treat as failed
+  if (/^DP00\d{9}$/.test(code) || /^ROUTER\d+$/.test(code)) {
+    return 'failed';
+  }
+
+  return 'pending';
+}
+
 module.exports = {
   describeAirtelResponseCode,
   getAirtelResponseCodeMeta,
+  classifyAirtelStatus,
+  PENDING_RESPONSE_CODES,
+  SUCCESS_RESPONSE_CODES,
   COLLECTION_RESPONSE_CODES,
   DISBURSEMENT_RESPONSE_CODES,
   KYC_RESPONSE_CODES,

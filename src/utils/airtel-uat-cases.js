@@ -49,7 +49,8 @@ const COLLECTION_CASES = [
     action: 'collection',
     msisdnKey: 'collection',
     params: { msisdn: DEFAULT_COLLECTION_MSISDN, amount: 6000 },
-    notes: 'Successful collection on a registered subscriber.',
+    notes: 'Successful collection on a registered subscriber. Approve with the correct PIN. For wrong-PIN testing: enter an incorrect PIN on the handset, then click Status — expect DP00800001002 (Incorrect Pin). Airtel often does not send a callback for wrong PIN; Status enquiry is the source of truth.',
+    expectedCodes: ['DP00800001001', 'DP00800001002', 'DP00800001005'],
   },
   {
     id: caseId('collection', 2),
@@ -58,7 +59,8 @@ const COLLECTION_CASES = [
     action: 'collection',
     msisdnKey: 'barred',
     params: { msisdn: BARRED_MSISDN, amount: 2000 },
-    notes: 'Expect failure while the subscriber is barred.',
+    notes: 'Expect failure while the subscriber is barred (often DP00800001008 / DP00800001010).',
+    expectedCodes: ['DP00800001008', 'DP00800001010', 'DP00800001009'],
   },
   {
     id: caseId('collection', 3),
@@ -67,7 +69,8 @@ const COLLECTION_CASES = [
     action: 'collection',
     msisdnKey: 'barred',
     params: { msisdn: BARRED_MSISDN, amount: 2500 },
-    notes: 'Run after Airtel unbars the test number in sandbox.',
+    notes: 'Run after Airtel unbars the test number in sandbox. Approve on phone for success.',
+    expectedCodes: ['DP00800001001'],
   },
   {
     id: caseId('collection', 4),
@@ -76,7 +79,8 @@ const COLLECTION_CASES = [
     action: 'collection',
     msisdnKey: 'collection',
     params: { msisdn: DEFAULT_COLLECTION_MSISDN, amount: 2000000 },
-    notes: 'Expect insufficient balance rejection.',
+    notes: 'Expect DP00800001007 (Not enough balance). If push is accepted first, approve/decline on phone then click Status.',
+    expectedCodes: ['DP00800001007'],
   },
   {
     id: caseId('collection', 5),
@@ -85,7 +89,8 @@ const COLLECTION_CASES = [
     action: 'collection',
     msisdnKey: 'collection',
     params: { msisdn: DEFAULT_COLLECTION_MSISDN, amount: 5100000 },
-    notes: 'Expect above-limit rejection.',
+    notes: 'Expect DP00800001003 (Exceeds withdrawal amount limit). May return on submit or after Status enquiry — click Status if still pending.',
+    expectedCodes: ['DP00800001003'],
   },
   {
     id: caseId('collection', 6),
@@ -94,7 +99,8 @@ const COLLECTION_CASES = [
     action: 'collection',
     msisdnKey: 'collection',
     params: { msisdn: DEFAULT_COLLECTION_MSISDN, amount: 499 },
-    notes: 'Expect below-minimum rejection.',
+    notes: 'Expect DP00800001004 (Invalid Amount / below minimum).',
+    expectedCodes: ['DP00800001004'],
   },
   {
     id: caseId('collection', 7),
@@ -103,7 +109,8 @@ const COLLECTION_CASES = [
     action: 'collection',
     msisdnKey: 'collection',
     params: { msisdn: DEFAULT_COLLECTION_MSISDN, amount: 0 },
-    notes: 'Expect validation failure.',
+    notes: 'Expect validation failure (invalid amount).',
+    expectedCodes: ['DP00800001004'],
   },
   {
     id: caseId('collection', 8),
@@ -112,7 +119,8 @@ const COLLECTION_CASES = [
     action: 'collection',
     msisdnKey: 'collection',
     params: { msisdn: DEFAULT_COLLECTION_MSISDN, amount: 500.78 },
-    notes: 'Expect decimal amount rejection.',
+    notes: 'Sends 500.78 without truncating. Expect decimal amount rejection.',
+    expectedCodes: ['DP00800001004'],
   },
   {
     id: caseId('collection', 9),
@@ -121,7 +129,8 @@ const COLLECTION_CASES = [
     action: 'collection',
     msisdnKey: 'collection',
     params: { msisdn: DEFAULT_COLLECTION_MSISDN, amount: -8000 },
-    notes: 'Expect validation failure.',
+    notes: 'Expect validation failure for negative amount.',
+    expectedCodes: ['DP00800001004'],
   },
   {
     id: caseId('collection', 10),
@@ -130,7 +139,8 @@ const COLLECTION_CASES = [
     action: 'collection',
     msisdnKey: 'unregistered',
     params: { msisdn: UNREGISTERED_MSISDN, amount: 5000 },
-    notes: 'Expect user-not-found / invalid MSISDN rejection.',
+    notes: 'Expect user-not-found / invalid MSISDN rejection (often DP00800001010).',
+    expectedCodes: ['DP00800001010', 'DP00800001008'],
   },
   {
     id: caseId('collection', 11),
@@ -139,7 +149,8 @@ const COLLECTION_CASES = [
     action: 'kyc',
     msisdnKey: 'collection',
     params: { msisdn: DEFAULT_COLLECTION_MSISDN },
-    notes: 'User enquiry before collection.',
+    notes: 'User enquiry before collection. Expect DP02200000001.',
+    expectedCodes: ['DP02200000001'],
   },
 ];
 
@@ -187,7 +198,8 @@ const DISBURSEMENT_CASES = [
     action: 'disbursement',
     msisdnKey: 'disbursement',
     params: { msisdn: '706218827', amount: 500000, pin: '0000' },
-    notes: 'Override PIN with an invalid value for this test.',
+    notes: 'Override PIN with an invalid value for this test. Expect PIN / auth failure (ROUTER116 or disbursement failed code).',
+    expectedCodes: ['ROUTER116', 'DP00900001005'],
   },
   {
     id: caseId('disbursement', 6),
