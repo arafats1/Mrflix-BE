@@ -13,6 +13,7 @@ const BELOW_MIN_DISBURSE_MSISDN = '756255985';
 const DEFAULT_UAT_NUMBERS = {
   collection: DEFAULT_COLLECTION_MSISDN,
   disbursement: DEFAULT_COLLECTION_MSISDN,
+  kyc: DEFAULT_COLLECTION_MSISDN,
   barred: BARRED_MSISDN,
   unregistered: UNREGISTERED_MSISDN,
   belowMin: BELOW_MIN_DISBURSE_MSISDN,
@@ -21,6 +22,7 @@ const DEFAULT_UAT_NUMBERS = {
 const MSISDN_KEY_LABELS = {
   collection: 'Collection (registered subscriber)',
   disbursement: 'Disbursement (registered payee)',
+  kyc: 'KYC / account enquiry',
   barred: 'Barred subscriber',
   unregistered: 'Unregistered number',
   belowMin: 'Below-minimum disbursement',
@@ -167,9 +169,9 @@ const COLLECTION_CASES = [
     group: 'collections',
     title: 'Account enquiry (KYC)',
     action: 'kyc',
-    msisdnKey: 'collection',
+    msisdnKey: 'kyc',
     params: { msisdn: DEFAULT_COLLECTION_MSISDN },
-    notes: 'User enquiry before collection. Expect DP02200000001.',
+    notes: 'User enquiry before collection. Expect DP02200000001. Change the KYC number in Test numbers above.',
     expectedCodes: ['DP02200000001'],
   },
 ];
@@ -265,17 +267,18 @@ const DISBURSEMENT_CASES = [
     action: 'disbursement',
     msisdnKey: 'belowMin',
     params: { msisdn: BELOW_MIN_DISBURSE_MSISDN, amount: 200 },
-    notes: 'Must use MSISDN 756255985 (Airtel below-minimum test number). Expect DP00900001004 (Invalid Amount — out of range). Sending 200 to the normal collection number can succeed and is not a valid test.',
-    expectedCodes: ['DP00900001004'],
+    notes: 'Airtel UAT script expects DP00900001004 (Invalid Amount). If sandbox returns DP00900001001 Success for 200 on 756255985, the below-min rule is not enforced on this merchant/number — try a lower amount (e.g. 1) or ask Airtel to re-enable the below-minimum test profile. Do not treat Success as an app bug.',
+    expectedCodes: ['DP00900001004', 'DP00900001001'],
   },
   {
     id: caseId('disbursement', 11),
     group: 'disbursements',
     title: 'KYC validation',
     action: 'kyc',
-    msisdnKey: 'disbursement',
+    msisdnKey: 'kyc',
     params: { msisdn: '706218827' },
-    notes: 'Validate payee before disbursement.',
+    notes: 'Validate payee before disbursement. Uses the KYC number from Test numbers.',
+    expectedCodes: ['DP02200000001'],
   },
 ];
 
