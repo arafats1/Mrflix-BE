@@ -161,10 +161,26 @@ const KYC_RESPONSE_CODES = {
   },
 };
 
+const ACCOUNT_RESPONSE_CODES = {
+  DP02100000000: {
+    reason: 'Failed',
+    description: 'Balance enquiry is failed.',
+  },
+  DP02100000001: {
+    reason: 'Success',
+    description: 'Balance enquiry is successful.',
+  },
+  DP02100000002: {
+    reason: 'User Not Found',
+    description: 'Invalid MSISDN provided as input.',
+  },
+};
+
 const ALL_RESPONSE_CODES = {
   ...COLLECTION_RESPONSE_CODES,
   ...DISBURSEMENT_RESPONSE_CODES,
   ...KYC_RESPONSE_CODES,
+  ...ACCOUNT_RESPONSE_CODES,
   ...ROUTER_RESPONSE_CODES,
 };
 
@@ -192,6 +208,7 @@ const PENDING_RESPONSE_CODES = new Set([
 const SUCCESS_RESPONSE_CODES = new Set([
   'DP00800001001',
   'DP00900001001',
+  'DP02100000001',
   'DP02200000001',
 ]);
 
@@ -260,6 +277,7 @@ module.exports = {
   COLLECTION_RESPONSE_CODES,
   DISBURSEMENT_RESPONSE_CODES,
   KYC_RESPONSE_CODES,
+  ACCOUNT_RESPONSE_CODES,
   ROUTER_RESPONSE_CODES,
   ALL_RESPONSE_CODES,
 };

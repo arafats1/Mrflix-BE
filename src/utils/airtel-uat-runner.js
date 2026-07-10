@@ -248,6 +248,28 @@ async function runCustomAction(action, params = {}) {
       };
     }
 
+    if (action === 'account_balance' || action === 'balance') {
+      const result = await airtel.invokeAccountBalance();
+      const balanceData = result.raw?.data || {};
+
+      return {
+        startedAt,
+        finishedAt: new Date().toISOString(),
+        action: 'account_balance',
+        request: {
+          path: '/standard/v1/users/balance',
+          method: 'GET',
+        },
+        response: {
+          ...summarizeResponse(result),
+          balance: balanceData.balance ?? balanceData.available_balance ?? null,
+          currency: balanceData.currency || null,
+          accountStatus: balanceData.account_status || balanceData.status || null,
+        },
+        raw: result.raw,
+      };
+    }
+
     if (action === 'collection_status' || action === 'disbursement_status') {
       const result = action === 'disbursement_status'
         ? await airtel.invokeDisbursementStatus(params.transactionId, resolveDisbursementTransactionType(params))

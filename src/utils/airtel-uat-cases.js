@@ -282,7 +282,19 @@ const DISBURSEMENT_CASES = [
   },
 ];
 
-const ALL_CASES = [...COLLECTION_CASES, ...DISBURSEMENT_CASES];
+const ACCOUNT_CASES = [
+  {
+    id: caseId('account', 1),
+    group: 'account',
+    title: 'Collection wallet balance enquiry',
+    action: 'account_balance',
+    params: {},
+    notes: 'GET /standard/v1/users/balance — returns the merchant collection wallet balance. Expect DP02100000001.',
+    expectedCodes: ['DP02100000001'],
+  },
+];
+
+const ALL_CASES = [...COLLECTION_CASES, ...DISBURSEMENT_CASES, ...ACCOUNT_CASES];
 
 function getUatCases(group) {
   if (!group) return ALL_CASES;
@@ -297,6 +309,7 @@ module.exports = {
   ALL_CASES,
   COLLECTION_CASES,
   DISBURSEMENT_CASES,
+  ACCOUNT_CASES,
   DEFAULT_UAT_NUMBERS,
   MSISDN_KEY_LABELS,
   getUatCases,

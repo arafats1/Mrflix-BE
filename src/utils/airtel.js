@@ -672,6 +672,47 @@ async function invokeDisbursementStatus(transactionId, transactionType = DEFAULT
   return toApiResult({ res, data });
 }
 
+/**
+ * Collection wallet balance enquiry.
+ * GET /standard/v1/users/balance
+ */
+async function getAccountBalance() {
+  const result = await invokeAccountBalance();
+
+  if (!result.ok) {
+    throw createAirtelError(result.message || 'Failed to fetch Airtel account balance.', {
+      status: result.httpStatus,
+      code: result.raw?.status?.response_code || result.raw?.status?.code,
+      raw: result.raw,
+    });
+  }
+
+  const balanceData = result.raw?.data || {};
+  const resolved = resolveStatusFromAirtelPayload(result.raw);
+
+  return {
+    status: resolved.status === 'completed' ? 'completed' : resolved.status,
+    balance: balanceData.balance ?? balanceData.available_balance ?? null,
+    currency: balanceData.currency || CURRENCY,
+    accountStatus: balanceData.account_status || balanceData.status || null,
+    responseCode: resolved.responseCode,
+    message: resolved.message || '',
+    raw: result.raw,
+  };
+}
+
+async function invokeAccountBalance() {
+  const accessToken = await getAccessToken();
+
+  const res = await fetch(`${BASE_URL}/standard/v1/users/balance`, {
+    method: 'GET',
+    headers: getApiHeaders(accessToken),
+  });
+
+  const data = await res.json().catch(() => ({}));
+  return toApiResult({ res, data });
+}
+
 module.exports = {
   getCallbackUrl,
   getCollectionsCallbackUrl,
@@ -680,6 +721,8 @@ module.exports = {
   invokeCollection,
   enquireUser,
   invokeUserEnquiry,
+  getAccountBalance,
+  invokeAccountBalance,
   requestDisbursement,
   invokeDisbursement,
   getTransactionStatus,

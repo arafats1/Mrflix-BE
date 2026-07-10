@@ -101,6 +101,37 @@ module.exports = {
   },
 
   /**
+   * Collection wallet balance enquiry.
+   * Proxies GET /standard/v1/users/balance
+   * Optional: AIRTEL_CONFIG_CHECK_TOKEN via ?token=... (same as config-check),
+   * or UAT/admin auth.
+   */
+  async balance(ctx) {
+    const expectedToken = String(process.env.AIRTEL_CONFIG_CHECK_TOKEN || process.env.AIRTEL_UAT_TOKEN || '').trim();
+    const providedToken = String(ctx.query.token || '').trim();
+    const tokenOk = expectedToken && providedToken === expectedToken;
+    const adminOk = await assertUatAccess(ctx);
+
+    if (!tokenOk && !adminOk) {
+      ctx.status = 401;
+      ctx.body = { error: 'Unauthorized' };
+      return;
+    }
+
+    try {
+      const result = await airtel.getAccountBalance();
+      ctx.body = { data: result };
+    } catch (err) {
+      ctx.status = err.status && Number.isInteger(err.status) ? err.status : 502;
+      ctx.body = {
+        error: err.message || 'Failed to fetch Airtel balance',
+        code: err.code || null,
+        raw: err.raw || null,
+      };
+    }
+  },
+
+  /**
    * List predefined Airtel UAT test cases.
    */
   async uatCases(ctx) {

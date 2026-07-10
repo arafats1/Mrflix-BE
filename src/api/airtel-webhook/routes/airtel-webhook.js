@@ -36,6 +36,14 @@ module.exports = {
     },
     {
       method: 'GET',
+      path: '/airtel/balance',
+      handler: 'airtel-webhook.balance',
+      config: {
+        auth: false,
+      },
+    },
+    {
+      method: 'GET',
       path: '/airtel/uat/cases',
       handler: 'airtel-webhook.uatCases',
       config: {
