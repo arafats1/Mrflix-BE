@@ -36,9 +36,29 @@ function normalizeUatMsisdn(value) {
 
 function resolveCaseMsisdn(testCase, testNumbers = {}) {
   const key = testCase.msisdnKey;
+  const caseDefault = normalizeUatMsisdn(testCase.params?.msisdn);
   const configured = key ? normalizeUatMsisdn(testNumbers[key]) : '';
+
+  // Airtel UAT special numbers (barred / unregistered / below-min) must not
+  // silently fall back to the main collection MSISDN — that makes limit tests
+  // succeed incorrectly (e.g. 200 UGX to 706218827 returns Success).
+  const lockedKeys = new Set(['belowMin', 'barred', 'unregistered']);
+  if (lockedKeys.has(key) && caseDefault) {
+    const mainNumbers = new Set(
+      [
+        normalizeUatMsisdn(testNumbers.collection),
+        normalizeUatMsisdn(testNumbers.disbursement),
+        DEFAULT_COLLECTION_MSISDN,
+      ].filter(Boolean)
+    );
+
+    if (!configured || mainNumbers.has(configured)) {
+      return caseDefault;
+    }
+  }
+
   if (configured) return configured;
-  return normalizeUatMsisdn(testCase.params?.msisdn);
+  return caseDefault;
 }
 
 const COLLECTION_CASES = [
@@ -89,8 +109,8 @@ const COLLECTION_CASES = [
     action: 'collection',
     msisdnKey: 'collection',
     params: { msisdn: DEFAULT_COLLECTION_MSISDN, amount: 5100000 },
-    notes: 'Expect DP00800001003 (Exceeds withdrawal amount limit). May return on submit or after Status enquiry — click Status if still pending.',
-    expectedCodes: ['DP00800001003'],
+    notes: 'Airtel often accepts the push first as DP00800001006 (In process). Over-limit DP00800001003 is a wallet/authorization check — it may only appear after the handset USSD/PIN attempt, a later Status enquiry, or transaction timeout (DP00800001024/029). If Status stays In process with no USSD, ask Airtel to confirm the sandbox collection limit for this merchant.',
+    expectedCodes: ['DP00800001003', 'DP00800001006', 'DP00800001024', 'DP00800001029'],
   },
   {
     id: caseId('collection', 6),
@@ -189,7 +209,8 @@ const DISBURSEMENT_CASES = [
     action: 'disbursement',
     msisdnKey: 'disbursement',
     params: { msisdn: '706218827', amount: 5100000 },
-    notes: 'Expect above-limit rejection.',
+    notes: 'Same as collection over-limit: Airtel may first return Ambiguous/In process. Expect DP00900001003 or DP00900001004 after Status enquiry, or ask Airtel if sandbox never rejects.',
+    expectedCodes: ['DP00900001003', 'DP00900001004', 'DP00900001000', 'DP00900001006'],
   },
   {
     id: caseId('disbursement', 5),
@@ -244,7 +265,8 @@ const DISBURSEMENT_CASES = [
     action: 'disbursement',
     msisdnKey: 'belowMin',
     params: { msisdn: BELOW_MIN_DISBURSE_MSISDN, amount: 200 },
-    notes: 'Expect below-minimum rejection.',
+    notes: 'Must use MSISDN 756255985 (Airtel below-minimum test number). Expect DP00900001004 (Invalid Amount — out of range). Sending 200 to the normal collection number can succeed and is not a valid test.',
+    expectedCodes: ['DP00900001004'],
   },
   {
     id: caseId('disbursement', 11),
