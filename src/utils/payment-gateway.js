@@ -12,6 +12,7 @@ const dgateway = require('./dgateway');
 const yoPayments = require('./yo-payments');
 const airtel = require('./airtel');
 const { normalizePaymentMethod } = require('./payment-methods');
+const { describeAirtelResponseCode } = require('./airtel-response-codes');
 
 function gatewayNeedsPhone(gateway) {
   return gateway === 'dgateway' || gateway === 'yo' || gateway === 'airtel';
@@ -19,6 +20,32 @@ function gatewayNeedsPhone(gateway) {
 
 function toStoredPaymentMethod(paymentMethod) {
   return paymentMethod === 'airtel' ? 'airtel_money' : paymentMethod;
+}
+
+/**
+ * Build a user-facing payment initiation error (avoid generic "try again" when Airtel gives a reason).
+ */
+function formatPaymentInitiationError(err) {
+  const code = err?.code || err?.raw?.status?.response_code || err?.raw?.status?.code || err?.raw?.status_code || null;
+  const fromCode = code ? describeAirtelResponseCode(code) : null;
+  const message = String(err?.message || '').trim();
+
+  if (fromCode) {
+    if (String(code).includes('01007') || /not enough balance|insufficient/i.test(fromCode)) {
+      return 'Insufficient Airtel Money balance. Please top up and try again.';
+    }
+    return fromCode;
+  }
+
+  if (/not enough balance|insufficient/i.test(message)) {
+    return 'Insufficient Airtel Money balance. Please top up and try again.';
+  }
+
+  if (message && message !== 'Airtel collection request failed.' && message.length < 180) {
+    return message;
+  }
+
+  return 'Payment initiation failed. Please try again.';
 }
 
 function buildGatewayTrackingUpdate(paymentResult) {
@@ -337,4 +364,5 @@ module.exports = {
   resolveRecordGateway,
   recordHasGatewayTracking,
   toStoredPaymentMethod,
+  formatPaymentInitiationError,
 };

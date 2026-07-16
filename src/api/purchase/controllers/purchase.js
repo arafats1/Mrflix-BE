@@ -1,7 +1,7 @@
 'use strict';
 
 const { createCoreController } = require('@strapi/strapi').factories;
-const { submitPayment, checkPaymentStatus, getActiveGateway, gatewayNeedsPhone, buildGatewayTrackingUpdate, toStoredPaymentMethod, resolveRecordGateway } = require('../../../utils/payment-gateway');
+const { submitPayment, checkPaymentStatus, getActiveGateway, gatewayNeedsPhone, buildGatewayTrackingUpdate, toStoredPaymentMethod, resolveRecordGateway, formatPaymentInitiationError } = require('../../../utils/payment-gateway');
 const { recordProviderMaterialSale } = require('../../../utils/provider-material-sales');
 const { notifyBuyerOrderStatus, notifyProductOrderPlaced } = require('../../../utils/marketplace-notifications');
 
@@ -751,7 +751,7 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
         documentId: purchase.documentId,
         data: { status: 'failed' },
       });
-      return ctx.badRequest('Payment initiation failed. Please try again.');
+      return ctx.badRequest(formatPaymentInitiationError(err));
     }
   },
 
@@ -893,7 +893,7 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
           data: { status: 'failed' },
         });
       }
-      return ctx.badRequest('Payment initiation failed. Please try again.');
+      return ctx.badRequest(formatPaymentInitiationError(err));
     }
   },
 

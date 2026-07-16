@@ -2,7 +2,7 @@
 
 const { createCoreController } = require('@strapi/strapi').factories;
 const pesapal = require('../../../utils/pesapal');
-const { submitPayment, getActiveGateway, gatewayNeedsPhone, buildGatewayTrackingUpdate, toStoredPaymentMethod, resolveRecordGateway } = require('../../../utils/payment-gateway');
+const { submitPayment, getActiveGateway, gatewayNeedsPhone, buildGatewayTrackingUpdate, toStoredPaymentMethod, resolveRecordGateway, formatPaymentInitiationError } = require('../../../utils/payment-gateway');
 const { evaluatePromoCode, incrementPromoUsage } = require('../../../utils/promo-code');
 
 function resolvePaymentCallbackUrl(rawValue, fallbackUrl) {
@@ -226,7 +226,7 @@ module.exports = createCoreController('api::exclusive-subscription.exclusive-sub
       await strapi.entityService.update('api::exclusive-subscription.exclusive-subscription', entry.id, {
         data: { status: 'cancelled' },
       });
-      return ctx.badRequest('Payment initiation failed. Please try again.');
+      return ctx.badRequest(formatPaymentInitiationError(err));
     }
   },
 
