@@ -3,9 +3,12 @@
 /**
  * Airtel Money Collections API utility.
  *
- * Uganda (UG) uses country-specific hosts and v2 signed collection requests:
+ * Uganda (UG) uses country-specific hosts:
  *   - Sandbox: https://openapiuat.airtel.ug
  *   - Production: https://openapi.airtel.ug
+ *
+ * Message signing (v2 + x-signature/x-key) is optional and must stay OFF until
+ * Airtel confirms it is live. Default collections use unsigned /merchant/v1/payments/.
  *
  * Other Op-Cos default to the Africa hosts unless AIRTEL_BASE_URL is set.
  */
@@ -43,7 +46,8 @@ function resolveBaseUrl() {
 function resolveApiVersion() {
   const configured = readEnv('AIRTEL_API_VERSION');
   if (configured) return configured;
-  return COUNTRY === 'UG' ? '2' : '1';
+  // Default unsigned v1 until Airtel enables message signing in production.
+  return '1';
 }
 
 const BASE_URL = resolveBaseUrl();
@@ -261,6 +265,19 @@ function shouldSignDisbursement(override) {
   return false;
 }
 
+/**
+ * Collections message signing (AES payload + RSA x-key) — OFF until Airtel says it is live.
+ * Set AIRTEL_COLLECTION_SIGNED=true to use /merchant/v2/payments/ with x-signature/x-key.
+ */
+function shouldSignCollection() {
+  const configured = readEnv('AIRTEL_COLLECTION_SIGNED');
+  if (configured === 'true') return true;
+  if (configured === 'false') return false;
+
+  // Explicit API v2 alone used to imply signing; keep that opt-in via AIRTEL_COLLECTION_SIGNED.
+  return false;
+}
+
 async function postDisbursementRequest(accessToken, payload, signRequest) {
   if (shouldSignDisbursement(signRequest)) {
     return postSignedJsonRequest(accessToken, '/standard/v2/disbursements/', payload);
@@ -394,7 +411,7 @@ async function postSignedJsonRequest(accessToken, path, payload) {
 }
 
 async function postCollectionRequest(accessToken, payload) {
-  if (API_VERSION === '2') {
+  if (shouldSignCollection()) {
     return postSignedJsonRequest(accessToken, '/merchant/v2/payments/', payload);
   }
 
@@ -409,10 +426,12 @@ async function postCollectionRequest(accessToken, payload) {
 }
 
 async function testConnection() {
+  const collectionSigned = shouldSignCollection();
   const config = {
     env: AIRTEL_ENV,
     baseUrl: BASE_URL,
     apiVersion: API_VERSION,
+    collectionSigned,
     country: COUNTRY,
     currency: CURRENCY,
     clientIdConfigured: Boolean(CLIENT_ID),
@@ -425,10 +444,14 @@ async function testConnection() {
 
   try {
     const token = await getAccessToken();
-    if (API_VERSION === '2') {
+    if (collectionSigned) {
       await getRsaPublicKey(token);
     }
-    return { ...config, auth: 'ok', encryption: API_VERSION === '2' ? 'ok' : 'not_required' };
+    return {
+      ...config,
+      auth: 'ok',
+      encryption: collectionSigned ? 'ok' : 'not_required',
+    };
   } catch (error) {
     return {
       ...config,
