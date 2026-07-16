@@ -1,5 +1,6 @@
 'use strict';
 
+const airtel = require('./airtel');
 const { recordProviderMaterialSale } = require('./provider-material-sales');
 const { activatePromotionByFilter, failPromotionByFilter } = require('./marketplace-promotions');
 const { notifyProductOrderPlaced } = require('./marketplace-notifications');
@@ -12,6 +13,19 @@ function buildAirtelUpdateData(airtelMoneyId) {
     paymentMethod: PAYMENT_METHOD,
     ...(airtelMoneyId ? { airtelReference: airtelMoneyId } : {}),
   };
+}
+
+function merchantReferenceVariants(ref) {
+  const sanitized = airtel.sanitizeAirtelReference(ref, 'COL');
+  return [...new Set([String(ref || '').trim(), sanitized].filter(Boolean))];
+}
+
+function merchantReferenceWhere(ref) {
+  const variants = merchantReferenceVariants(ref);
+  if (variants.length <= 1) {
+    return { transactionId: ref };
+  }
+  return { $or: variants.map((transactionId) => ({ transactionId })) };
 }
 
 /**
@@ -100,7 +114,7 @@ async function activateByMerchantReference(strapi, merchantReference, airtelMone
   }
 
   const purchases = await strapi.db.query('api::purchase.purchase').findMany({
-    where: { transactionId: ref },
+    where: merchantReferenceWhere(ref),
     populate: {
       providerMaterial: true,
       buyer: true,
@@ -196,7 +210,7 @@ async function failByMerchantReference(strapi, merchantReference) {
   }
 
   const purchases = await strapi.db.query('api::purchase.purchase').findMany({
-    where: { transactionId: ref },
+    where: merchantReferenceWhere(ref),
   });
 
   for (const purchase of purchases) {

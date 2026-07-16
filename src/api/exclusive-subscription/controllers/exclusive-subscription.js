@@ -184,6 +184,8 @@ module.exports = createCoreController('api::exclusive-subscription.exclusive-sub
         callbackUrl,
         ipnId,
         paymentPhone: paymentPhone || '',
+        gateway: paymentMethod || activeGateway,
+        paymentMethod: paymentMethod || activeGateway,
         billingAddress: {
           email: user.email || '',
           phone: paymentPhone || '',
@@ -216,6 +218,7 @@ module.exports = createCoreController('api::exclusive-subscription.exclusive-sub
           order_tracking_id: paymentResult.order_tracking_id || null,
           reference: paymentResult.reference || null,
           paymentStatus: paymentResult.status || null,
+          airtelTransactionId: paymentResult.gateway === 'airtel' ? paymentResult.reference || null : null,
         },
       };
     } catch (err) {

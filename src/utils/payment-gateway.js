@@ -112,7 +112,7 @@ async function getActiveGateway(strapi) {
  * @returns {{ gateway, redirect_url?, order_tracking_id?, reference?, status? }}
  */
 async function submitPayment(strapi, params) {
-  const gateway = await getActiveGateway(strapi);
+  const gateway = params.gateway || params.paymentMethod || await getActiveGateway(strapi);
 
   if (gateway === 'airtel') {
     const phone = (params.paymentPhone || params.billingAddress?.phone || '').replace(/[^\d]/g, '');

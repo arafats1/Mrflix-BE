@@ -522,12 +522,18 @@ module.exports = {
         },
       };
     } catch (err) {
-      strapi.log.error(`[Airtel Verify] Error for ${transactionId}:`, err?.message || err);
+      const detail = [
+        err?.message,
+        err?.code ? `code=${err.code}` : null,
+        err?.status ? `status=${err.status}` : null,
+        err?.raw ? `raw=${JSON.stringify(err.raw).slice(0, 400)}` : null,
+      ].filter(Boolean).join(' | ') || String(err);
+      strapi.log.error(`[Airtel Verify] Error for ${transactionId}: ${detail}`);
       return {
         data: {
           status: 'pending',
           merchantReference: transactionId,
-          errorDetail: err.message || 'Verification temporarily unavailable',
+          errorDetail: detail || 'Verification temporarily unavailable',
         },
       };
     }

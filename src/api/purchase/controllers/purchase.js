@@ -706,6 +706,8 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
         callbackUrl,
         ipnId,
         paymentPhone: paymentPhone || '',
+        gateway: paymentMethod || activeGateway,
+        paymentMethod: paymentMethod || activeGateway,
         billingAddress: {
           email: user.email || '',
           phone: paymentPhone || '',
@@ -729,9 +731,10 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
           // Pesapal fields
           redirect_url: paymentResult.redirect_url || null,
           order_tracking_id: paymentResult.order_tracking_id || null,
-          // DGateway fields
+          // DGateway / Airtel fields
           reference: paymentResult.reference || null,
           paymentStatus: paymentResult.status || null,
+          airtelTransactionId: paymentResult.gateway === 'airtel' ? paymentResult.reference || null : null,
         },
       };
     } catch (err) {
