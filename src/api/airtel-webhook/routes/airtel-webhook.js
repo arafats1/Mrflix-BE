@@ -11,9 +11,25 @@ module.exports = {
       },
     },
     {
+      method: 'GET',
+      path: '/airtel/callback',
+      handler: 'airtel-webhook.callbackPing',
+      config: {
+        auth: false,
+      },
+    },
+    {
       method: 'POST',
       path: '/airtel/collections/callback',
       handler: 'airtel-webhook.collectionsCallback',
+      config: {
+        auth: false,
+      },
+    },
+    {
+      method: 'GET',
+      path: '/airtel/collections/callback',
+      handler: 'airtel-webhook.callbackPing',
       config: {
         auth: false,
       },

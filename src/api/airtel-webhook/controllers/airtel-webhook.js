@@ -221,14 +221,25 @@ module.exports = {
   },
 
   /**
+   * Airtel portal probes callback URLs with GET/HEAD before accepting them.
+   * Return 200 so validation succeeds; real payment notifications use POST.
+   */
+  async callbackPing(ctx) {
+    ctx.status = 200;
+    ctx.body = {
+      status: 'ok',
+      message: 'Airtel callback endpoint is reachable. Payment notifications must use POST.',
+      methods: ['POST'],
+    };
+  },
+
+  /**
    * Airtel Collections callback handler.
    * Airtel POSTs: { transaction: { id, status_code, airtel_money_id, message } }
    */
   async callback(ctx) {
     if (ctx.request.method !== 'POST') {
-      ctx.status = 405;
-      ctx.body = { error: 'Method not allowed' };
-      return;
+      return this.callbackPing(ctx);
     }
 
     const payload = parseCallbackBody(ctx);
@@ -311,9 +322,7 @@ module.exports = {
    */
   async collectionsCallback(ctx) {
     if (ctx.request.method !== 'POST') {
-      ctx.status = 405;
-      ctx.body = { error: 'Method not allowed' };
-      return;
+      return this.callbackPing(ctx);
     }
 
     const payload = parseCallbackBody(ctx);

@@ -20,6 +20,7 @@ const activeStoragePublicUrl = (
 module.exports = [
   'strapi::logger',
   'strapi::errors',
+  'global::airtel-callback-head',
   {
     name: 'strapi::security',
     config: {
