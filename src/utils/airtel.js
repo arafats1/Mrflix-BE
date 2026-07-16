@@ -227,7 +227,9 @@ async function getRsaPublicKey(accessToken) {
   if (!res.ok || !keyMaterial) {
     throw createAirtelError(extractAirtelErrorMessage(data, 'Failed to fetch Airtel encryption key.'), {
       status: res.status,
+      code: data.status_code || data.status?.code || data?.status?.response_code,
       raw: data,
+      hint: `GET ${BASE_URL}/v1/rsa/encryption-keys failed. env=${AIRTEL_ENV} country=${COUNTRY} apiVersion=${API_VERSION}. ROUTER119 usually means Airtel rejected the call (wrong env/credentials/IP whitelist) or their key service is down.`,
     });
   }
 
