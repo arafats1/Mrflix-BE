@@ -13,7 +13,7 @@
  * Other Op-Cos default to the Africa hosts unless AIRTEL_BASE_URL is set.
  */
 
-const { formatPublicKeyPem, signJsonPayload, resolveEncryptedPin } = require('./airtel-crypto');
+const { formatPublicKeyPem, signJsonPayload, resolveEncryptedPin, isPreEncryptedPin } = require('./airtel-crypto');
 const { classifyAirtelStatus, describeAirtelResponseCode } = require('./airtel-response-codes');
 
 const AIRTEL_ENV = String(process.env.AIRTEL_ENV || 'sandbox').trim().toLowerCase();
@@ -585,8 +585,16 @@ async function invokeDisbursement({
   }
 
   const accessToken = await getAccessToken();
-  const pinKeyMaterial = await getPinKeyMaterial(accessToken);
-  const encryptedPinValue = resolveEncryptedPin(pinKeyMaterial, plainPin, encryptedPinOverride);
+
+  // Skip RSA key fetch when we already have a pre-encrypted PIN —
+  // the encryption-keys endpoint may not be live yet (ROUTER119).
+  let encryptedPinValue;
+  if (encryptedPinOverride || isPreEncryptedPin(plainPin)) {
+    encryptedPinValue = resolveEncryptedPin(null, plainPin, encryptedPinOverride);
+  } else {
+    const pinKeyMaterial = await getPinKeyMaterial(accessToken);
+    encryptedPinValue = resolveEncryptedPin(pinKeyMaterial, plainPin, encryptedPinOverride);
+  }
   const payload = buildDisbursementPayload({
     merchantReference,
     amount,
