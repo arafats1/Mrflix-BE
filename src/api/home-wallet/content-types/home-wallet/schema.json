@@ -1,0 +1,19 @@
+{
+  "kind": "collectionType",
+  "collectionName": "home_wallets",
+  "info": {
+    "singularName": "home-wallet",
+    "pluralName": "home-wallets",
+    "displayName": "Home Wallet",
+    "description": "Host earnings wallet for Homes short-stay bookings"
+  },
+  "options": { "draftAndPublish": false },
+  "pluginOptions": {},
+  "attributes": {
+    "host": { "type": "relation", "relation": "oneToOne", "target": "plugin::users-permissions.user" },
+    "unsettledUGX": { "type": "integer", "default": 0, "min": 0 },
+    "pendingPayoutUGX": { "type": "integer", "default": 0, "min": 0 },
+    "lifetimeEarnedUGX": { "type": "integer", "default": 0, "min": 0 },
+    "lifetimePaidOutUGX": { "type": "integer", "default": 0, "min": 0 }
+  }
+}

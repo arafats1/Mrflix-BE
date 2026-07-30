@@ -3,6 +3,29 @@
 const { submitPayment, checkPaymentStatus: checkGatewayPaymentStatus, gatewayNeedsPhone, buildGatewayTrackingUpdate, toStoredPaymentMethod, resolveRecordGateway } = require('../../../utils/payment-gateway');
 const { activateHomesPaymentByFilter, failHomesPaymentByFilter } = require('../../../utils/homes-payments');
 const { notifyHomesBookingConfirmed } = require('../../../utils/homes-notifications');
+const {
+  CANCELLATION_POLICIES,
+  normalizeCancellationPolicy,
+  getCancellationPolicyInfo,
+  calculateCancellationRefund,
+  payoutEligibleAtFromCheckIn,
+  isCheckInWindowOpen,
+  normalizeTimeOfDay,
+  isCheckInReminderActive,
+} = require('../../../utils/homes-policies');
+const {
+  getOrCreateHostWallet,
+  shapeWallet,
+  computeEligiblePayoutUGX,
+  creditHostWalletForBooking,
+  reverseHostWalletForBooking,
+  requestHostPayout,
+  markPayoutPaid,
+  rejectPayout,
+  reconcileMistakenTenPercentFees,
+  PAYOUT_UID,
+  WALLET_UID,
+} = require('../../../utils/homes-wallet');
 
 const LISTING_UID = 'api::home-listing.home-listing';
 const KYC_UID = 'api::home-kyc.home-kyc';
@@ -14,8 +37,16 @@ const REPORT_UID = 'api::home-report.home-report';
 
 const LISTING_KINDS = ['rent', 'sale', 'stay'];
 const OWNER_ROLES = ['landlord', 'broker', 'host'];
+const KYC_ROLES = ['guest', 'landlord', 'broker', 'host'];
 const STATUSES = ['draft', 'pending_review', 'published', 'rejected', 'archived'];
 const AVAILABILITY = ['available', 'taken'];
+const CHECK_IN_STATUSES = ['pending', 'confirmed', 'no_show'];
+/** Stay finished successfully (legacy `completed` maps to checked-out). */
+const CHECKED_OUT_STATUSES = ['checked_out', 'completed'];
+/** Paid bookings that still grant guest access until checkout date. */
+const GUEST_ACCESS_STATUSES = ['confirmed', 'checked_in', 'checked_out', 'completed'];
+/** Occupies listing nights on the calendar. */
+const DATE_BLOCK_STATUSES = ['confirmed', 'checked_in', 'pending'];
 
 function bodyData(ctx) {
   return ctx.request.body?.data || ctx.request.body || {};
@@ -89,12 +120,19 @@ function syncListingFromRoomOptions(input) {
 function normalizeKycDocuments(input) {
   const raw = input && typeof input === 'object' && !Array.isArray(input) ? input : {};
   const normalizeUrls = (value) => (Array.isArray(value) ? value.map((item) => cleanString(item, 1000)).filter(Boolean) : []);
+  const front = cleanString(raw.nationalIdFrontImage || raw.nationalIdFront, 1000);
+  const back = cleanString(raw.nationalIdBackImage || raw.nationalIdBack, 1000);
+  const nationalIdImages = normalizeUrls(raw.nationalIdImages);
+  if (front && !nationalIdImages.includes(front)) nationalIdImages.unshift(front);
+  if (back && !nationalIdImages.includes(back)) nationalIdImages.push(back);
   return {
-    nationalIdImages: normalizeUrls(raw.nationalIdImages),
+    nationalIdImages,
+    nationalIdFrontImage: front || nationalIdImages[0] || '',
+    nationalIdBackImage: back || nationalIdImages[1] || '',
     ownershipProofImages: normalizeUrls(raw.ownershipProofImages),
     tenancyAgreementImages: normalizeUrls(raw.tenancyAgreementImages),
     phoneNumber: cleanString(raw.phoneNumber, 40),
-    locationLabel: cleanString(raw.locationLabel, 160),
+    locationLabel: cleanString(raw.locationLabel || raw.address, 160),
     latitude: floatValue(raw.latitude),
     longitude: floatValue(raw.longitude),
   };
@@ -208,7 +246,7 @@ async function hasConfirmedBooking(userId, listingId) {
     filters: {
       guest: { id: userId },
       listing: { id: listingId },
-      status: { $in: ['confirmed', 'completed'] },
+      status: { $in: GUEST_ACCESS_STATUSES },
       checkOut: { $gte: new Date().toISOString().slice(0, 10) },
     },
     limit: 1,
@@ -222,6 +260,40 @@ async function getHomesContactUnlockFeeUGX() {
   return positiveInt(entry?.homesContactUnlockFeeUGX, 10000);
 }
 
+async function getHomesPlatformFeePercent() {
+  const settings = await strapi.entityService.findMany('api::site-setting.site-setting');
+  const entry = Array.isArray(settings) ? settings[0] : settings;
+  // Platform commission is 5%. Older installs defaulted to 10 — migrate that mistaken default.
+  let percent = entry?.homesPlatformFeePercent;
+  if (percent == null || Number(percent) === 10) {
+    percent = 5;
+    if (entry?.id) {
+      await strapi.entityService.update('api::site-setting.site-setting', entry.id, {
+        data: { homesPlatformFeePercent: 5 },
+      }).catch(() => null);
+    }
+  }
+  return Math.min(50, Math.max(0, positiveInt(percent, 5)));
+}
+
+/** Guest service fee on top of the stay total (not deducted from host earnings). */
+function getHomesServiceFeePercent() {
+  return 10;
+}
+
+function calculateHomesServiceFeeUGX(stayAmountUGX) {
+  return Math.round(Math.max(0, Number(stayAmountUGX || 0)) * (getHomesServiceFeePercent() / 100));
+}
+
+async function hasGuestKycOnFile(userId) {
+  if (!userId) return false;
+  const rows = await strapi.entityService.findMany(KYC_UID, {
+    filters: { user: { id: userId }, role: 'guest', status: { $in: ['pending', 'approved'] } },
+    limit: 1,
+  });
+  return rows?.length > 0;
+}
+
 function mergeKycPayload(existing, input) {
   const existingDocs = normalizeKycDocuments(existing?.documentImages);
   const inputDocs = normalizeKycDocuments(input.documentImages);
@@ -232,6 +304,8 @@ function mergeKycPayload(existing, input) {
     location: cleanString(input.location || locationLabel || existing?.location, 140),
     documentImages: {
       nationalIdImages: inputDocs.nationalIdImages.length ? inputDocs.nationalIdImages : existingDocs.nationalIdImages,
+      nationalIdFrontImage: inputDocs.nationalIdFrontImage || existingDocs.nationalIdFrontImage || '',
+      nationalIdBackImage: inputDocs.nationalIdBackImage || existingDocs.nationalIdBackImage || '',
       ownershipProofImages: inputDocs.ownershipProofImages.length ? inputDocs.ownershipProofImages : existingDocs.ownershipProofImages,
       tenancyAgreementImages: inputDocs.tenancyAgreementImages.length ? inputDocs.tenancyAgreementImages : existingDocs.tenancyAgreementImages,
       phoneNumber: cleanString(inputDocs.phoneNumber || existingDocs.phoneNumber, 40),
@@ -248,19 +322,34 @@ function getKycCompletion(role, payload) {
   const businessName = cleanString(payload.businessName, 140);
   const location = cleanString(payload.location || documents.locationLabel, 140);
   const checks = [
-    { key: 'idNumber', label: 'National ID', done: !!idNumber },
+    { key: 'idNumber', label: 'National ID number', done: !!idNumber },
   ];
-  if (role === 'broker') {
+  if (role === 'guest') {
+    checks.push(
+      { key: 'nationalIdFront', label: 'National ID front', done: !!documents.nationalIdFrontImage },
+      { key: 'nationalIdBack', label: 'National ID back', done: !!documents.nationalIdBackImage },
+      { key: 'address', label: 'Home address', done: !!location },
+      { key: 'phone', label: 'Valid phone number', done: documents.phoneNumber.replace(/\D/g, '').length >= 10 },
+    );
+  } else if (role === 'broker') {
     checks.push({ key: 'businessName', label: 'Business name', done: !!businessName });
+    checks.push(
+      { key: 'location', label: 'Location on map', done: !!location && Number.isFinite(documents.latitude) && Number.isFinite(documents.longitude) },
+      { key: 'phone', label: 'Active phone number', done: documents.phoneNumber.replace(/\D/g, '').length >= 10 },
+    );
   } else if (role === 'host') {
     checks.push({ key: 'tenancyAgreement', label: 'Tenancy agreement', done: documents.tenancyAgreementImages.length > 0 });
+    checks.push(
+      { key: 'location', label: 'Location on map', done: !!location && Number.isFinite(documents.latitude) && Number.isFinite(documents.longitude) },
+      { key: 'phone', label: 'Active phone number', done: documents.phoneNumber.replace(/\D/g, '').length >= 10 },
+    );
   } else {
     checks.push({ key: 'ownershipProof', label: 'Proof of ownership', done: documents.ownershipProofImages.length > 0 });
+    checks.push(
+      { key: 'location', label: 'Location on map', done: !!location && Number.isFinite(documents.latitude) && Number.isFinite(documents.longitude) },
+      { key: 'phone', label: 'Active phone number', done: documents.phoneNumber.replace(/\D/g, '').length >= 10 },
+    );
   }
-  checks.push(
-    { key: 'location', label: 'Location on map', done: !!location && Number.isFinite(documents.latitude) && Number.isFinite(documents.longitude) },
-    { key: 'phone', label: 'Active phone number', done: documents.phoneNumber.replace(/\D/g, '').length >= 10 },
-  );
   const doneCount = checks.filter((item) => item.done).length;
   const percent = checks.length ? Math.round((doneCount / checks.length) * 100) : 0;
   return { checks, percent, complete: percent === 100 };
@@ -274,13 +363,17 @@ function shapeKycEntry(entry) {
     location: entry.location,
     documentImages: entry.documentImages,
   });
-  const status = entry.status === 'approved' || completion.complete
-    ? 'approved'
-    : entry.status === 'rejected'
-      ? 'rejected'
-      : completion.percent > 0 || entry.idNumber || entry.location
-        ? 'draft'
-        : 'draft';
+  let status = entry.status || 'draft';
+  if (entry.status === 'rejected') {
+    status = 'rejected';
+  } else if (completion.complete || entry.status === 'approved') {
+    // Guest KYC is one-time: complete submission is enough to book (no admin wait).
+    status = 'approved';
+  } else if (completion.percent > 0 || entry.idNumber || entry.location) {
+    status = 'draft';
+  } else {
+    status = 'draft';
+  }
   return {
     id: entry.id,
     role: entry.role,
@@ -354,6 +447,10 @@ function publicListing(listing, options = {}) {
     highlights: Array.isArray(listing.highlights) ? listing.highlights : [],
     sections: Array.isArray(listing.sections) ? listing.sections : [],
     rules: Array.isArray(listing.rules) ? listing.rules : [],
+    cancellationPolicy: normalizeCancellationPolicy(listing.cancellationPolicy),
+    cancellationPolicyInfo: getCancellationPolicyInfo(listing.cancellationPolicy),
+    checkInTime: normalizeTimeOfDay(listing.checkInTime, '14:00'),
+    checkOutTime: normalizeTimeOfDay(listing.checkOutTime, '11:00'),
     rating: listing.rating ? Number(listing.rating) : null,
     reviews: Number(listing.reviews || 0),
     bookingCount: Number(listing.bookingCount || 0),
@@ -398,6 +495,9 @@ function listingInput(input, user, existing = {}) {
     highlights: normalizeList(input.highlights ?? existing.highlights),
     sections: normalizeJsonArray(input.sections ?? existing.sections),
     rules: normalizeList(input.rules ?? existing.rules),
+    cancellationPolicy: normalizeCancellationPolicy('moderate'), // Platform-enforced; hosts cannot choose
+    checkInTime: normalizeTimeOfDay(input.checkInTime ?? existing.checkInTime, '14:00'),
+    checkOutTime: normalizeTimeOfDay(input.checkOutTime ?? existing.checkOutTime, '11:00'),
     roomOptions: input.roomOptions !== undefined
       ? normalizeRoomOptions(input.roomOptions)
       : normalizeRoomOptions(existing.roomOptions),
@@ -473,14 +573,26 @@ function expandNights(checkIn, checkOut) {
 
 async function getBookedDates(listingId) {
   if (!listingId) return [];
+  const PENDING_HOLD_MS = 15 * 60 * 1000;
   const bookings = await strapi.entityService.findMany(BOOKING_UID, {
-    filters: { listing: { id: listingId }, status: { $in: ['confirmed', 'pending'] } },
-    fields: ['checkIn', 'checkOut', 'status'],
+    filters: { listing: { id: listingId }, status: { $in: DATE_BLOCK_STATUSES } },
+    fields: ['id', 'checkIn', 'checkOut', 'status', 'createdAt'],
     limit: 500,
   });
   const set = new Set();
+  const now = Date.now();
   for (const booking of (bookings || [])) {
     if (!booking.checkIn || !booking.checkOut) continue;
+    if (booking.status === 'pending') {
+      const createdAt = new Date(booking.createdAt || 0).getTime();
+      // Unpaid checkouts only soft-hold dates briefly. Abandoned payments release the calendar.
+      if (!Number.isFinite(createdAt) || now - createdAt > PENDING_HOLD_MS) {
+        await strapi.entityService.update(BOOKING_UID, booking.id, {
+          data: { status: 'failed' },
+        }).catch((error) => strapi.log.warn(`[Homes] Could not expire pending booking ${booking.id}: ${error.message}`));
+        continue;
+      }
+    }
     for (const date of expandNights(booking.checkIn, booking.checkOut)) set.add(date);
   }
   return Array.from(set).sort();
@@ -541,6 +653,88 @@ async function submitHomesPayment(ctx, record, amountUGX, prefix, description, p
     order_tracking_id: paymentResult.order_tracking_id || null,
     reference: paymentResult.reference || null,
     paymentStatus: paymentResult.status || null,
+  };
+}
+
+function shapeBooking(row) {
+  const roomOptions = getEffectiveRoomOptions(row.listing || {});
+  const roomOptionIndex = Math.max(0, Number(row.roomOptionIndex || 0));
+  const roomOption = roomOptions[roomOptionIndex] || roomOptions[0] || null;
+  const checkInTime = normalizeTimeOfDay(row.checkInTime || row.listing?.checkInTime, '14:00');
+  const checkOutTime = normalizeTimeOfDay(row.checkOutTime || row.listing?.checkOutTime, '11:00');
+  const checkInOpen = isCheckInWindowOpen(row.checkIn, checkInTime);
+  const reminderActive = isCheckInReminderActive(row.checkIn, checkInTime);
+  const bothCheckedIn = row.guestCheckInStatus === 'confirmed' && row.hostCheckInStatus === 'confirmed';
+  const rawStatus = row.status;
+  const displayStatus = rawStatus === 'completed' ? 'checked_out' : rawStatus;
+  const checkInStarted = row.guestCheckInStatus === 'confirmed'
+    || row.hostCheckInStatus === 'confirmed'
+    || bothCheckedIn
+    || displayStatus === 'checked_in'
+    || CHECKED_OUT_STATUSES.includes(rawStatus);
+  const canCheckOut = displayStatus === 'checked_in';
+  return {
+    id: row.id,
+    checkIn: row.checkIn,
+    checkOut: row.checkOut,
+    checkInTime,
+    checkOutTime,
+    guests: Number(row.guests || 1),
+    nights: Number(row.nights || 0),
+    amountUGX: Number(row.amountUGX || 0),
+    hostEarningsUGX: Number(row.hostEarningsUGX || 0),
+    platformFeeUGX: Number(row.platformFeeUGX || 0),
+    serviceFeeUGX: Number(row.serviceFeeUGX || 0),
+    totalPayableUGX: Number(row.amountUGX || 0) + Number(row.serviceFeeUGX || 0),
+    roomOptionIndex,
+    roomOption,
+    paymentMethod: row.paymentMethod || null,
+    paymentPhone: row.paymentPhone || null,
+    specialRequests: row.specialRequests || null,
+    status: displayStatus,
+    createdAt: row.createdAt,
+    cancellationPolicy: normalizeCancellationPolicy(row.cancellationPolicy),
+    cancellationPolicyInfo: getCancellationPolicyInfo(row.cancellationPolicy),
+    cancellationRefundUGX: Number(row.cancellationRefundUGX || 0),
+    cancellationReason: row.cancellationReason || null,
+    cancelledAt: row.cancelledAt || null,
+    guestCheckInStatus: row.guestCheckInStatus || 'pending',
+    hostCheckInStatus: row.hostCheckInStatus || 'pending',
+    guestCheckInAt: row.guestCheckInAt || null,
+    hostCheckInAt: row.hostCheckInAt || null,
+    checkInWindowOpen: checkInOpen,
+    bothCheckedIn,
+    checkInStarted,
+    canCheckOut,
+    checkInReminderActive: reminderActive && ['confirmed', 'checked_in'].includes(displayStatus) && row.guestCheckInStatus !== 'confirmed',
+    needsCheckInConfirm: checkInOpen && ['confirmed', 'checked_in'].includes(displayStatus) && !bothCheckedIn
+      && (row.guestCheckInStatus !== 'confirmed' || row.hostCheckInStatus !== 'confirmed'),
+    walletCredited: !!row.walletCredited,
+    payoutEligibleAt: row.payoutEligibleAt || null,
+    guest: row.guest ? {
+      id: row.guest.id,
+      username: row.guest.username,
+      fullName: row.guest.fullName,
+      phone: row.guest.phone,
+    } : null,
+    host: row.host ? {
+      id: row.host.id,
+      username: row.host.username,
+      fullName: row.host.fullName,
+      phone: row.host.phone,
+    } : null,
+    listing: row.listing ? {
+      id: row.listing.documentId || row.listing.slug || String(row.listing.id),
+      numericId: row.listing.id,
+      documentId: row.listing.documentId,
+      title: row.listing.title,
+      location: row.listing.location,
+      kind: row.listing.kind,
+      bedrooms: Number(row.listing.bedrooms || 0),
+      bathrooms: Number(row.listing.bathrooms || 0),
+      guests: Number(row.listing.guests || 1),
+      roomOptions,
+    } : null,
   };
 }
 
@@ -727,31 +921,40 @@ module.exports = {
     if (!ctx.state.user) return ctx.unauthorized('Login required');
     const input = bodyData(ctx);
     const isDraft = input.draft === true || input.saveDraft === true;
-    const role = OWNER_ROLES.includes(input.role) ? input.role : 'landlord';
+    const role = KYC_ROLES.includes(input.role) ? input.role : 'landlord';
     const rows = await strapi.entityService.findMany(KYC_UID, { filters: { user: { id: ctx.state.user.id }, role }, limit: 1 });
     const existing = rows?.[0] || null;
     const merged = mergeKycPayload(existing, input);
     const completion = getKycCompletion(role, merged);
 
     if (!isDraft && !completion.complete) {
-      return ctx.badRequest('Complete every verification requirement before submitting for the verified badge.');
+      return ctx.badRequest('Complete every verification requirement before submitting.');
     }
 
-    const status = completion.complete ? 'approved' : 'draft';
+    let status = 'draft';
+    if (completion.complete) {
+      // Guest KYC unlocks booking on submit — no admin wait.
+      status = 'approved';
+    } else if (existing?.status === 'approved' && role === 'guest') {
+      status = 'approved';
+    }
+
     const data = {
       user: ctx.state.user.id,
       role,
       status,
       idNumber: merged.idNumber,
       businessName: merged.businessName,
-      location: merged.location,
+      location: merged.location || 'Guest address',
       documentImages: merged.documentImages,
     };
     const entry = existing
       ? await strapi.entityService.update(KYC_UID, existing.id, { data })
       : await strapi.entityService.create(KYC_UID, { data });
 
-    await syncListingVerificationForUser(ctx.state.user.id, role, completion.complete ? 'verified' : 'pending');
+    if (role !== 'guest') {
+      await syncListingVerificationForUser(ctx.state.user.id, role, completion.complete ? 'verified' : 'pending');
+    }
     return { data: shapeKycEntry(entry) };
   },
 
@@ -866,6 +1069,11 @@ module.exports = {
     if (!listing || listing.status !== 'published' || listing.kind !== 'stay') return ctx.notFound('Short stay home not found');
     if (listing.availabilityStatus === 'taken') return ctx.badRequest('This property is fully occupied and not accepting bookings.');
 
+    const guestVerified = await hasGuestKycOnFile(ctx.state.user.id);
+    if (!guestVerified) {
+      return ctx.badRequest('Complete guest verification once (phone, National ID front & back, and address) before booking.');
+    }
+
     const checkIn = cleanString(input.checkIn, 20);
     const checkOut = cleanString(input.checkOut, 20);
     const inDate = new Date(`${checkIn}T00:00:00.000Z`);
@@ -892,20 +1100,49 @@ module.exports = {
     }
 
     const nightlyPrice = Number(selectedOption.priceUGX || listing.priceUGX || 0);
-    const amount = nightlyPrice * nights;
+    const amount = nightlyPrice * nights; // stay subtotal (what host listing earns before commission)
+    const feePercent = await getHomesPlatformFeePercent();
+    const platformFeeUGX = Math.round(amount * (feePercent / 100)); // host commission
+    const serviceFeeUGX = calculateHomesServiceFeeUGX(amount); // guest service fee (10%)
+    const hostEarningsUGX = Math.max(0, amount - platformFeeUGX);
+    const guestPaysUGX = amount + serviceFeeUGX;
+    const cancellationPolicy = normalizeCancellationPolicy('moderate'); // Platform-enforced
+    const checkInTime = normalizeTimeOfDay(listing.checkInTime, '14:00');
+    const checkOutTime = normalizeTimeOfDay(listing.checkOutTime, '11:00');
     const entry = await strapi.entityService.create(BOOKING_UID, {
-      data: { listing: listing.id, guest: ctx.state.user.id, host: listing.owner?.id || null, checkIn, checkOut, guests, nights, amountUGX: amount, roomOptionIndex, paymentPhone: cleanString(input.paymentPhone, 40), status: amount > 0 ? 'pending' : 'confirmed', specialRequests: cleanString(input.specialRequests, 1000) },
+      data: {
+        listing: listing.id,
+        guest: ctx.state.user.id,
+        host: listing.owner?.id || null,
+        checkIn,
+        checkOut,
+        checkInTime,
+        checkOutTime,
+        guests,
+        nights,
+        amountUGX: amount,
+        hostEarningsUGX,
+        platformFeeUGX,
+        serviceFeeUGX,
+        roomOptionIndex,
+        paymentPhone: cleanString(input.paymentPhone, 40),
+        status: guestPaysUGX > 0 ? 'pending' : 'confirmed',
+        specialRequests: cleanString(input.specialRequests, 1000),
+        cancellationPolicy,
+        payoutEligibleAt: payoutEligibleAtFromCheckIn(checkIn, checkInTime),
+      },
     });
-    if (amount <= 0) {
+    if (guestPaysUGX <= 0) {
+      await creditHostWalletForBooking(strapi, entry.id).catch(() => null);
       notifyHomesBookingConfirmed(strapi, entry.id).catch((error) => {
         strapi.log.warn(`[Homes Booking] Notification failed: ${error.message}`);
       });
       return { data: { booking: entry } };
     }
 
-    const payment = await submitHomesPayment(ctx, entry, amount, 'HBOOK', `Homes booking: ${listing.title}`, cleanString(input.paymentPhone, 40));
+    const payment = await submitHomesPayment(ctx, entry, guestPaysUGX, 'HBOOK', `Homes booking: ${listing.title}`, cleanString(input.paymentPhone, 40));
     if (payment?.data || payment?.status) return payment;
-    return { data: { bookingId: entry.id, ...payment } };
+    return { data: { bookingId: entry.id, serviceFeeUGX, totalPayableUGX: guestPaysUGX, ...payment } };
   },
 
   async reportListing(ctx) {
@@ -960,44 +1197,380 @@ module.exports = {
   async myBookings(ctx) {
     if (!ctx.state.user) return ctx.unauthorized('Login required');
     const rows = await strapi.entityService.findMany(BOOKING_UID, {
-      filters: { $or: [{ guest: { id: ctx.state.user.id } }, { host: { id: ctx.state.user.id } }] },
+      filters: {
+        $and: [
+          { $or: [{ guest: { id: ctx.state.user.id } }, { host: { id: ctx.state.user.id } }] },
+          { status: { $ne: 'failed' } },
+        ],
+      },
       populate: { listing: true, guest: { fields: ['id', 'username', 'fullName', 'phone'] }, host: { fields: ['id', 'username', 'fullName', 'phone'] } },
       sort: { createdAt: 'desc' },
       limit: 200,
     });
+    return { data: (rows || []).map((row) => shapeBooking(row)) };
+  },
+
+  async confirmCheckIn(ctx) {
+    if (!ctx.state.user) return ctx.unauthorized('Login required');
+    const booking = await strapi.entityService.findOne(BOOKING_UID, ctx.params.id, {
+      populate: { listing: true, guest: { fields: ['id', 'username', 'fullName', 'phone'] }, host: { fields: ['id', 'username', 'fullName', 'phone'] } },
+    });
+    if (!booking) return ctx.notFound('Booking not found');
+    if (!['confirmed', 'checked_in'].includes(booking.status)) {
+      return ctx.badRequest('Only confirmed bookings can be checked in');
+    }
+    const checkInTime = normalizeTimeOfDay(booking.checkInTime || booking.listing?.checkInTime, '14:00');
+    if (!isCheckInWindowOpen(booking.checkIn, checkInTime)) {
+      return ctx.badRequest('Check-in confirmation opens 1 hour before the check-in time');
+    }
+
+    const input = bodyData(ctx);
+    const status = CHECK_IN_STATUSES.includes(input.status) ? input.status : 'confirmed';
+    if (status === 'pending') return ctx.badRequest('Choose confirmed or no_show');
+
+    const isGuest = Number(booking.guest?.id || 0) === Number(ctx.state.user.id);
+    const isHost = Number(booking.host?.id || 0) === Number(ctx.state.user.id);
+    if (!isGuest && !isHost && !isAdmin(ctx.state.user)) return ctx.forbidden('Not allowed');
+
+    const now = new Date().toISOString();
+    const data = {};
+    if (isGuest || (isAdmin(ctx.state.user) && input.as === 'guest')) {
+      data.guestCheckInStatus = status;
+      data.guestCheckInAt = now;
+    } else if (isHost || (isAdmin(ctx.state.user) && input.as === 'host')) {
+      data.hostCheckInStatus = status;
+      data.hostCheckInAt = now;
+    } else if (isAdmin(ctx.state.user)) {
+      return ctx.badRequest('Pass as=guest or as=host');
+    }
+
+    const nextGuest = data.guestCheckInStatus || booking.guestCheckInStatus || 'pending';
+    // Guest check-in moves the booking into Checked-in (host confirm alone does not).
+    if (nextGuest === 'confirmed' && booking.status === 'confirmed') {
+      data.status = 'checked_in';
+    }
+
+    const updated = await strapi.entityService.update(BOOKING_UID, booking.id, {
+      data,
+      populate: { listing: true, guest: { fields: ['id', 'username', 'fullName', 'phone'] }, host: { fields: ['id', 'username', 'fullName', 'phone'] } },
+    });
+    return { data: shapeBooking(updated) };
+  },
+
+  async confirmCheckOut(ctx) {
+    if (!ctx.state.user) return ctx.unauthorized('Login required');
+    const booking = await strapi.entityService.findOne(BOOKING_UID, ctx.params.id, {
+      populate: { listing: true, guest: { fields: ['id', 'username', 'fullName', 'phone'] }, host: { fields: ['id', 'username', 'fullName', 'phone'] } },
+    });
+    if (!booking) return ctx.notFound('Booking not found');
+    if (booking.status !== 'checked_in') {
+      return ctx.badRequest('Only checked-in bookings can be checked out');
+    }
+
+    const isGuest = Number(booking.guest?.id || 0) === Number(ctx.state.user.id);
+    const isHost = Number(booking.host?.id || 0) === Number(ctx.state.user.id);
+    if (!isGuest && !isHost && !isAdmin(ctx.state.user)) return ctx.forbidden('Not allowed');
+
+    const updated = await strapi.entityService.update(BOOKING_UID, booking.id, {
+      data: { status: 'checked_out' },
+      populate: { listing: true, guest: { fields: ['id', 'username', 'fullName', 'phone'] }, host: { fields: ['id', 'username', 'fullName', 'phone'] } },
+    });
+    return { data: shapeBooking(updated) };
+  },
+
+  async cancelBooking(ctx) {
+    if (!ctx.state.user) return ctx.unauthorized('Login required');
+    const booking = await strapi.entityService.findOne(BOOKING_UID, ctx.params.id, {
+      populate: { listing: true, guest: { fields: ['id'] }, host: { fields: ['id'] } },
+    });
+    if (!booking) return ctx.notFound('Booking not found');
+    if (!['pending', 'confirmed'].includes(booking.status)) return ctx.badRequest('This booking cannot be cancelled');
+
+    const checkInStarted = booking.guestCheckInStatus === 'confirmed'
+      || booking.hostCheckInStatus === 'confirmed'
+      || booking.status === 'checked_in'
+      || CHECKED_OUT_STATUSES.includes(booking.status);
+    if (checkInStarted) return ctx.badRequest('This booking can no longer be cancelled after check-in');
+
+    const isGuest = Number(booking.guest?.id || 0) === Number(ctx.state.user.id);
+    const isHost = Number(booking.host?.id || 0) === Number(ctx.state.user.id);
+    if (!isGuest && !isHost && !isAdmin(ctx.state.user)) return ctx.forbidden('Not allowed');
+
+    const input = bodyData(ctx);
+    const reason = cleanString(input.reason, 1000);
+    if (!reason || reason.length < 3) return ctx.badRequest('Please enter a reason for cancelling');
+
+    // Unpaid holds were never charged — expire them as failed (no refund / no cancelled history).
+    if (booking.status === 'pending') {
+      const updated = await strapi.entityService.update(BOOKING_UID, booking.id, {
+        data: {
+          status: 'failed',
+          cancelledAt: new Date().toISOString(),
+          cancelledBy: ctx.state.user.id,
+          cancellationRefundUGX: 0,
+          cancellationReason: reason,
+        },
+        populate: { listing: true, guest: { fields: ['id', 'username', 'fullName', 'phone'] }, host: { fields: ['id', 'username', 'fullName', 'phone'] } },
+      });
+      return {
+        data: {
+          booking: shapeBooking(updated),
+          refundUGX: 0,
+          refundDisbursementNote: null,
+          policy: getCancellationPolicyInfo(booking.cancellationPolicy),
+        },
+      };
+    }
+
+    const checkInTime = normalizeTimeOfDay(booking.checkInTime || booking.listing?.checkInTime, '14:00');
+    const stayAmount = Number(booking.amountUGX || 0);
+    const serviceFeeUGX = Number(booking.serviceFeeUGX || 0);
+    const stayRefundUGX = calculateCancellationRefund(
+      booking.cancellationPolicy,
+      booking.checkIn,
+      stayAmount,
+      new Date(),
+      checkInTime,
+    );
+    const serviceRefundUGX = stayAmount > 0
+      ? Math.round(serviceFeeUGX * (stayRefundUGX / stayAmount))
+      : 0;
+    const refundUGX = stayRefundUGX + serviceRefundUGX;
+    const hostKeep = Math.max(0, Number(booking.hostEarningsUGX || stayAmount || 0) - Math.round(stayRefundUGX * (Number(booking.hostEarningsUGX || stayAmount || 0) / Math.max(1, stayAmount || 1))));
+
+    if (booking.walletCredited) {
+      await reverseHostWalletForBooking(strapi, booking, hostKeep).catch((error) => {
+        strapi.log.warn(`[Homes Cancel] Wallet reverse failed: ${error.message}`);
+      });
+    }
+
+    const updated = await strapi.entityService.update(BOOKING_UID, booking.id, {
+      data: {
+        status: 'cancelled',
+        cancelledAt: new Date().toISOString(),
+        cancelledBy: ctx.state.user.id,
+        cancellationRefundUGX: refundUGX,
+        cancellationReason: reason,
+        hostEarningsUGX: hostKeep,
+      },
+      populate: { listing: true, guest: { fields: ['id', 'username', 'fullName', 'phone'] }, host: { fields: ['id', 'username', 'fullName', 'phone'] } },
+    });
     return {
-      data: (rows || []).map((row) => ({
-        id: row.id,
-        checkIn: row.checkIn,
-        checkOut: row.checkOut,
-        guests: Number(row.guests || 1),
-        nights: Number(row.nights || 0),
-        amountUGX: Number(row.amountUGX || 0),
-        roomOptionIndex: Number(row.roomOptionIndex || 0),
-        status: row.status,
-        createdAt: row.createdAt,
-        guest: row.guest ? {
-          id: row.guest.id,
-          username: row.guest.username,
-          fullName: row.guest.fullName,
-          phone: row.guest.phone,
-        } : null,
-        host: row.host ? {
-          id: row.host.id,
-          username: row.host.username,
-          fullName: row.host.fullName,
-          phone: row.host.phone,
-        } : null,
-        listing: row.listing ? {
-          id: row.listing.documentId || row.listing.slug || String(row.listing.id),
-          numericId: row.listing.id,
-          documentId: row.listing.documentId,
-          title: row.listing.title,
-          location: row.listing.location,
-          kind: row.listing.kind,
-        } : null,
-      })),
+      data: {
+        booking: shapeBooking(updated),
+        refundUGX,
+        refundDisbursementNote: refundUGX > 0
+          ? 'Any refundable funds will be disbursed within 24 hours.'
+          : null,
+        policy: getCancellationPolicyInfo(booking.cancellationPolicy),
+      },
     };
+  },
+
+  async cancellationPolicies(ctx) {
+    return { data: Object.values(CANCELLATION_POLICIES) };
+  },
+
+  async myWallet(ctx) {
+    if (!ctx.state.user) return ctx.unauthorized('Login required');
+    await reconcileMistakenTenPercentFees(strapi, ctx.state.user.id).catch((error) => {
+      strapi.log.warn(`[Homes Wallet] Fee reconcile failed: ${error.message}`);
+    });
+    const wallet = await getOrCreateHostWallet(strapi, ctx.state.user.id);
+    const eligible = await computeEligiblePayoutUGX(strapi, ctx.state.user.id);
+    const payouts = await strapi.entityService.findMany(PAYOUT_UID, {
+      filters: { host: { id: ctx.state.user.id } },
+      sort: { createdAt: 'desc' },
+      limit: 50,
+    });
+    const earnings = await strapi.entityService.findMany(BOOKING_UID, {
+      filters: { host: { id: ctx.state.user.id }, walletCredited: true },
+      populate: { listing: { fields: ['id', 'title', 'location'] }, guest: { fields: ['id', 'fullName', 'username'] } },
+      sort: { createdAt: 'desc' },
+      limit: 100,
+    });
+    return {
+      data: {
+        wallet: shapeWallet(wallet, eligible),
+        payouts: (payouts || []).map((row) => ({
+          id: row.id,
+          amountUGX: Number(row.amountUGX || 0),
+          status: row.status,
+          payoutPhone: row.payoutPhone || '',
+          paymentReference: row.paymentReference || '',
+          adminNote: row.adminNote || '',
+          requestedAt: row.requestedAt,
+          paidAt: row.paidAt,
+          createdAt: row.createdAt,
+        })),
+        earnings: (earnings || []).map((row) => {
+          const amountUGX = Number(row.amountUGX || 0);
+          const hostEarningsUGX = Number(row.hostEarningsUGX || amountUGX || 0);
+          const platformFeeUGX = Number(row.platformFeeUGX || Math.max(0, amountUGX - hostEarningsUGX));
+          return {
+            id: row.id,
+            amountUGX,
+            hostEarningsUGX,
+            platformFeeUGX,
+            status: row.status,
+            checkIn: row.checkIn,
+            checkOut: row.checkOut,
+            payoutEligibleAt: row.payoutEligibleAt,
+            eligible: row.payoutEligibleAt ? new Date(row.payoutEligibleAt).getTime() <= Date.now() : false,
+            listing: row.listing ? { id: row.listing.id, title: row.listing.title, location: row.listing.location } : null,
+            guest: row.guest ? { id: row.guest.id, fullName: row.guest.fullName || row.guest.username } : null,
+          };
+        }),
+      },
+    };
+  },
+
+  async requestPayout(ctx) {
+    if (!ctx.state.user) return ctx.unauthorized('Login required');
+    const input = bodyData(ctx);
+    try {
+      const payout = await requestHostPayout(strapi, ctx.state.user.id, positiveInt(input.amountUGX, 0), cleanString(input.payoutPhone || ctx.state.user.phone, 40));
+      const wallet = await getOrCreateHostWallet(strapi, ctx.state.user.id);
+      const eligible = await computeEligiblePayoutUGX(strapi, ctx.state.user.id);
+      return { data: { payout, wallet: shapeWallet(wallet, eligible) } };
+    } catch (error) {
+      return ctx.badRequest(error.message || 'Could not request payout');
+    }
+  },
+
+  async adminHomesHub(ctx) {
+    const user = await authUser(ctx);
+    if (!user) return ctx.unauthorized('Login required');
+    if (!isAdmin(user)) return ctx.forbidden('Admin only');
+
+    const [bookings, guests, hosts, guestKyc, hostKyc, wallets, payouts, listings] = await Promise.all([
+      strapi.entityService.findMany(BOOKING_UID, {
+        populate: {
+          listing: { fields: ['id', 'title', 'location', 'kind'] },
+          guest: { fields: ['id', 'username', 'fullName', 'phone', 'email'] },
+          host: { fields: ['id', 'username', 'fullName', 'phone', 'email'] },
+        },
+        sort: { createdAt: 'desc' },
+        limit: 300,
+      }),
+      strapi.entityService.findMany('plugin::users-permissions.user', {
+        filters: { homesRole: 'guest' },
+        fields: ['id', 'username', 'fullName', 'phone', 'email', 'location', 'homesRole', 'createdAt'],
+        sort: { createdAt: 'desc' },
+        limit: 300,
+      }),
+      strapi.entityService.findMany('plugin::users-permissions.user', {
+        filters: { homesRole: { $in: OWNER_ROLES } },
+        fields: ['id', 'username', 'fullName', 'phone', 'email', 'location', 'homesRole', 'createdAt'],
+        sort: { createdAt: 'desc' },
+        limit: 300,
+      }),
+      strapi.entityService.findMany(KYC_UID, {
+        filters: { role: 'guest' },
+        populate: { user: { fields: ['id', 'username', 'fullName', 'phone', 'email'] } },
+        sort: { createdAt: 'desc' },
+        limit: 300,
+      }),
+      strapi.entityService.findMany(KYC_UID, {
+        filters: { role: { $in: OWNER_ROLES } },
+        populate: { user: { fields: ['id', 'username', 'fullName', 'phone', 'email'] } },
+        sort: { createdAt: 'desc' },
+        limit: 300,
+      }),
+      strapi.entityService.findMany(WALLET_UID, {
+        populate: { host: { fields: ['id', 'username', 'fullName', 'phone'] } },
+        limit: 300,
+      }),
+      strapi.entityService.findMany(PAYOUT_UID, {
+        populate: { host: { fields: ['id', 'username', 'fullName', 'phone'] }, reviewer: { fields: ['id', 'username', 'fullName'] } },
+        sort: { createdAt: 'desc' },
+        limit: 200,
+      }),
+      strapi.entityService.findMany(LISTING_UID, {
+        populate: { owner: { fields: ['id', 'username', 'fullName', 'phone'] } },
+        sort: { createdAt: 'desc' },
+        limit: 300,
+      }),
+    ]);
+
+    const shapedWallets = await Promise.all((wallets || []).map(async (wallet) => {
+      const eligible = wallet.host?.id ? await computeEligiblePayoutUGX(strapi, wallet.host.id) : 0;
+      return shapeWallet(wallet, eligible);
+    }));
+
+    return {
+      data: {
+        stats: {
+          bookings: (bookings || []).length,
+          confirmedBookings: (bookings || []).filter((b) => b.status === 'confirmed').length,
+          completedBookings: (bookings || []).filter((b) => ['checked_out', 'completed'].includes(b.status)).length,
+          checkedInBookings: (bookings || []).filter((b) => b.status === 'checked_in').length,
+          guests: (guests || []).length,
+          hosts: (hosts || []).length,
+          pendingGuestKyc: (guestKyc || []).filter((k) => k.status === 'pending').length,
+          pendingPayouts: (payouts || []).filter((p) => p.status === 'pending').length,
+          unsettledUGX: shapedWallets.reduce((sum, w) => sum + Number(w?.unsettledUGX || 0), 0),
+          listings: (listings || []).length,
+        },
+        bookings: (bookings || []).map((row) => shapeBooking(row)),
+        guests: (guests || []).map((g) => publicProvider(g)),
+        hosts: (hosts || []).map((h) => publicProvider(h)),
+        guestKyc: (guestKyc || []).map((entry) => shapeKycEntry({ ...entry, user: entry.user })),
+        hostKyc: (hostKyc || []).map((entry) => shapeKycEntry({ ...entry, user: entry.user })),
+        wallets: shapedWallets,
+        payouts: (payouts || []).map((row) => ({
+          id: row.id,
+          amountUGX: Number(row.amountUGX || 0),
+          status: row.status,
+          payoutPhone: row.payoutPhone || '',
+          paymentReference: row.paymentReference || '',
+          adminNote: row.adminNote || '',
+          requestedAt: row.requestedAt,
+          paidAt: row.paidAt,
+          createdAt: row.createdAt,
+          host: row.host ? publicProvider(row.host) : null,
+          reviewer: row.reviewer ? { id: row.reviewer.id, fullName: row.reviewer.fullName || row.reviewer.username } : null,
+        })),
+        listings: (listings || []).map((entry) => ({
+          id: entry.documentId || entry.slug || String(entry.id),
+          title: entry.title,
+          location: entry.location,
+          kind: entry.kind,
+          status: entry.status,
+          owner: entry.owner ? publicProvider(entry.owner) : null,
+        })),
+        cancellationPolicies: Object.values(CANCELLATION_POLICIES),
+      },
+    };
+  },
+
+  async adminMarkPayoutPaid(ctx) {
+    const user = await authUser(ctx);
+    if (!user) return ctx.unauthorized('Login required');
+    if (!isAdmin(user)) return ctx.forbidden('Admin only');
+    const input = bodyData(ctx);
+    try {
+      const payout = await markPayoutPaid(strapi, ctx.params.id, user.id, {
+        paymentReference: input.paymentReference,
+        adminNote: input.adminNote,
+      });
+      return { data: payout };
+    } catch (error) {
+      return ctx.badRequest(error.message || 'Could not mark payout paid');
+    }
+  },
+
+  async adminRejectPayout(ctx) {
+    const user = await authUser(ctx);
+    if (!user) return ctx.unauthorized('Login required');
+    if (!isAdmin(user)) return ctx.forbidden('Admin only');
+    const input = bodyData(ctx);
+    try {
+      const payout = await rejectPayout(strapi, ctx.params.id, user.id, input.adminNote);
+      return { data: payout };
+    } catch (error) {
+      return ctx.badRequest(error.message || 'Could not reject payout');
+    }
   },
 
   async toggleSave(ctx) {

@@ -5,13 +5,13 @@
     "singularName": "home-kyc",
     "pluralName": "home-kycs",
     "displayName": "Home KYC",
-    "description": "KYC submissions for Homes landlords, brokers, and hosts"
+    "description": "KYC submissions for Homes guests, landlords, brokers, and hosts"
   },
   "options": { "draftAndPublish": false },
   "pluginOptions": {},
   "attributes": {
     "user": { "type": "relation", "relation": "manyToOne", "target": "plugin::users-permissions.user" },
-    "role": { "type": "enumeration", "enum": ["landlord", "broker", "host"], "required": true },
+    "role": { "type": "enumeration", "enum": ["guest", "landlord", "broker", "host"], "required": true },
     "status": { "type": "enumeration", "enum": ["draft", "pending", "approved", "rejected"], "default": "draft", "required": true },
     "idNumber": { "type": "string", "private": true },
     "businessName": { "type": "string" },

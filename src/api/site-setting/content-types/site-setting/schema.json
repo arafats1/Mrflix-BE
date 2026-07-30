@@ -153,6 +153,12 @@
       "default": 10000,
       "min": 0
     },
+    "homesPlatformFeePercent": {
+      "type": "integer",
+      "default": 5,
+      "min": 0,
+      "max": 50
+    },
     "aboutPageContent": {
       "type": "json"
     }

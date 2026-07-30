@@ -4,6 +4,8 @@ const CONTACT_UID = 'api::home-contact-unlock.home-contact-unlock';
 const BOOKING_UID = 'api::home-booking.home-booking';
 const LISTING_UID = 'api::home-listing.home-listing';
 const { notifyHomesBookingConfirmed } = require('./homes-notifications');
+const { creditHostWalletForBooking } = require('./homes-wallet');
+const { payoutEligibleAtFromCheckIn } = require('./homes-policies');
 
 async function activateHomesPaymentByFilter(strapi, filter, paymentMethod) {
   const now = new Date().toISOString();
@@ -20,13 +22,17 @@ async function activateHomesPaymentByFilter(strapi, filter, paymentMethod) {
 
   const bookings = await strapi.entityService.findMany(BOOKING_UID, {
     filters: filter,
-    populate: { listing: { fields: ['id', 'bookingCount'] } },
+    populate: { listing: { fields: ['id', 'bookingCount'] }, host: { fields: ['id'] } },
     limit: 100,
   });
   for (const booking of (bookings || [])) {
     if (booking.status !== 'confirmed') {
       await strapi.entityService.update(BOOKING_UID, booking.id, {
-        data: { status: 'confirmed', ...(paymentMethod ? { paymentMethod } : {}) },
+        data: {
+          status: 'confirmed',
+          ...(paymentMethod ? { paymentMethod } : {}),
+          payoutEligibleAt: booking.payoutEligibleAt || payoutEligibleAtFromCheckIn(booking.checkIn),
+        },
       });
       if (booking.listing?.id) {
         await strapi.entityService.update(LISTING_UID, booking.listing.id, {
@@ -34,6 +40,9 @@ async function activateHomesPaymentByFilter(strapi, filter, paymentMethod) {
         }).catch((error) => strapi.log.warn(`[Homes Payment] Could not increment booking count: ${error.message}`));
       }
       strapi.log.info(`[Homes Payment] Booking ${booking.id} confirmed`);
+      creditHostWalletForBooking(strapi, booking.id).catch((error) => {
+        strapi.log.warn(`[Homes Payment] Wallet credit failed: ${error.message}`);
+      });
       notifyHomesBookingConfirmed(strapi, booking.id).catch((error) => {
         strapi.log.warn(`[Homes Payment] Booking notification failed: ${error.message}`);
       });

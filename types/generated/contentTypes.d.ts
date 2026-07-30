@@ -2497,8 +2497,28 @@ export interface ApiHomeBookingHomeBooking extends Struct.CollectionTypeSchema {
         },
         number
       >;
+    cancellationPolicy: Schema.Attribute.Enumeration<
+      ['flexible', 'moderate', 'strict']
+    > &
+      Schema.Attribute.DefaultTo<'moderate'>;
+    cancellationReason: Schema.Attribute.Text;
+    cancellationRefundUGX: Schema.Attribute.Integer &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0;
+        },
+        number
+      > &
+      Schema.Attribute.DefaultTo<0>;
+    cancelledAt: Schema.Attribute.DateTime;
+    cancelledBy: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
     checkIn: Schema.Attribute.Date & Schema.Attribute.Required;
+    checkInTime: Schema.Attribute.String & Schema.Attribute.DefaultTo<'14:00'>;
     checkOut: Schema.Attribute.Date & Schema.Attribute.Required;
+    checkOutTime: Schema.Attribute.String & Schema.Attribute.DefaultTo<'11:00'>;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -2507,6 +2527,11 @@ export interface ApiHomeBookingHomeBooking extends Struct.CollectionTypeSchema {
       'manyToOne',
       'plugin::users-permissions.user'
     >;
+    guestCheckInAt: Schema.Attribute.DateTime;
+    guestCheckInStatus: Schema.Attribute.Enumeration<
+      ['pending', 'confirmed', 'no_show']
+    > &
+      Schema.Attribute.DefaultTo<'pending'>;
     guests: Schema.Attribute.Integer &
       Schema.Attribute.SetMinMax<
         {
@@ -2519,6 +2544,19 @@ export interface ApiHomeBookingHomeBooking extends Struct.CollectionTypeSchema {
       'manyToOne',
       'plugin::users-permissions.user'
     >;
+    hostCheckInAt: Schema.Attribute.DateTime;
+    hostCheckInStatus: Schema.Attribute.Enumeration<
+      ['pending', 'confirmed', 'no_show']
+    > &
+      Schema.Attribute.DefaultTo<'pending'>;
+    hostEarningsUGX: Schema.Attribute.Integer &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0;
+        },
+        number
+      > &
+      Schema.Attribute.DefaultTo<0>;
     listing: Schema.Attribute.Relation<
       'manyToOne',
       'api::home-listing.home-listing'
@@ -2542,7 +2580,16 @@ export interface ApiHomeBookingHomeBooking extends Struct.CollectionTypeSchema {
     > &
       Schema.Attribute.DefaultTo<'pesapal'>;
     paymentPhone: Schema.Attribute.String;
+    payoutEligibleAt: Schema.Attribute.DateTime;
     pesapalTrackingId: Schema.Attribute.String;
+    platformFeeUGX: Schema.Attribute.Integer &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0;
+        },
+        number
+      > &
+      Schema.Attribute.DefaultTo<0>;
     publishedAt: Schema.Attribute.DateTime;
     roomOptionIndex: Schema.Attribute.Integer &
       Schema.Attribute.SetMinMax<
@@ -2552,9 +2599,26 @@ export interface ApiHomeBookingHomeBooking extends Struct.CollectionTypeSchema {
         number
       > &
       Schema.Attribute.DefaultTo<0>;
+    serviceFeeUGX: Schema.Attribute.Integer &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0;
+        },
+        number
+      > &
+      Schema.Attribute.DefaultTo<0>;
     specialRequests: Schema.Attribute.Text;
     status: Schema.Attribute.Enumeration<
-      ['pending', 'confirmed', 'cancelled', 'failed', 'completed']
+      [
+        'pending',
+        'confirmed',
+        'checked_in',
+        'checked_out',
+        'cancelled',
+        'failed',
+        'completed',
+        'suspended',
+      ]
     > &
       Schema.Attribute.Required &
       Schema.Attribute.DefaultTo<'pending'>;
@@ -2562,6 +2626,8 @@ export interface ApiHomeBookingHomeBooking extends Struct.CollectionTypeSchema {
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    walletCredited: Schema.Attribute.Boolean &
+      Schema.Attribute.DefaultTo<false>;
     yoReference: Schema.Attribute.String;
   };
 }
@@ -2634,7 +2700,7 @@ export interface ApiHomeContactUnlockHomeContactUnlock
 export interface ApiHomeKycHomeKyc extends Struct.CollectionTypeSchema {
   collectionName: 'home_kycs';
   info: {
-    description: 'KYC submissions for Homes landlords, brokers, and hosts';
+    description: 'KYC submissions for Homes guests, landlords, brokers, and hosts';
     displayName: 'Home KYC';
     pluralName: 'home-kycs';
     singularName: 'home-kyc';
@@ -2663,7 +2729,9 @@ export interface ApiHomeKycHomeKyc extends Struct.CollectionTypeSchema {
       'manyToOne',
       'plugin::users-permissions.user'
     >;
-    role: Schema.Attribute.Enumeration<['landlord', 'broker', 'host']> &
+    role: Schema.Attribute.Enumeration<
+      ['guest', 'landlord', 'broker', 'host']
+    > &
       Schema.Attribute.Required;
     status: Schema.Attribute.Enumeration<
       ['draft', 'pending', 'approved', 'rejected']
@@ -2722,6 +2790,12 @@ export interface ApiHomeListingHomeListing extends Struct.CollectionTypeSchema {
         number
       > &
       Schema.Attribute.DefaultTo<0>;
+    cancellationPolicy: Schema.Attribute.Enumeration<
+      ['flexible', 'moderate', 'strict']
+    > &
+      Schema.Attribute.DefaultTo<'moderate'>;
+    checkInTime: Schema.Attribute.String & Schema.Attribute.DefaultTo<'14:00'>;
+    checkOutTime: Schema.Attribute.String & Schema.Attribute.DefaultTo<'11:00'>;
     contactUnlockFeeUGX: Schema.Attribute.Integer &
       Schema.Attribute.SetMinMax<
         {
@@ -2806,6 +2880,62 @@ export interface ApiHomeListingHomeListing extends Struct.CollectionTypeSchema {
         number
       > &
       Schema.Attribute.DefaultTo<5000>;
+  };
+}
+
+export interface ApiHomePayoutHomePayout extends Struct.CollectionTypeSchema {
+  collectionName: 'home_payouts';
+  info: {
+    description: 'Host payout requests from Homes wallet unsettled balances';
+    displayName: 'Home Payout';
+    pluralName: 'home-payouts';
+    singularName: 'home-payout';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    adminNote: Schema.Attribute.Text;
+    amountUGX: Schema.Attribute.Integer &
+      Schema.Attribute.Required &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 1;
+        },
+        number
+      >;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    host: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::home-payout.home-payout'
+    > &
+      Schema.Attribute.Private;
+    paidAt: Schema.Attribute.DateTime;
+    paymentReference: Schema.Attribute.String;
+    payoutPhone: Schema.Attribute.String;
+    publishedAt: Schema.Attribute.DateTime;
+    requestedAt: Schema.Attribute.DateTime;
+    reviewer: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+    status: Schema.Attribute.Enumeration<['pending', 'paid', 'rejected']> &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<'pending'>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    wallet: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::home-wallet.home-wallet'
+    >;
   };
 }
 
@@ -2938,6 +3068,70 @@ export interface ApiHomeSaveHomeSave extends Struct.CollectionTypeSchema {
       'manyToOne',
       'plugin::users-permissions.user'
     >;
+  };
+}
+
+export interface ApiHomeWalletHomeWallet extends Struct.CollectionTypeSchema {
+  collectionName: 'home_wallets';
+  info: {
+    description: 'Host earnings wallet for Homes short-stay bookings';
+    displayName: 'Home Wallet';
+    pluralName: 'home-wallets';
+    singularName: 'home-wallet';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    host: Schema.Attribute.Relation<
+      'oneToOne',
+      'plugin::users-permissions.user'
+    >;
+    lifetimeEarnedUGX: Schema.Attribute.Integer &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0;
+        },
+        number
+      > &
+      Schema.Attribute.DefaultTo<0>;
+    lifetimePaidOutUGX: Schema.Attribute.Integer &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0;
+        },
+        number
+      > &
+      Schema.Attribute.DefaultTo<0>;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::home-wallet.home-wallet'
+    > &
+      Schema.Attribute.Private;
+    pendingPayoutUGX: Schema.Attribute.Integer &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0;
+        },
+        number
+      > &
+      Schema.Attribute.DefaultTo<0>;
+    publishedAt: Schema.Attribute.DateTime;
+    unsettledUGX: Schema.Attribute.Integer &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0;
+        },
+        number
+      > &
+      Schema.Attribute.DefaultTo<0>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
   };
 }
 
@@ -4083,6 +4277,15 @@ export interface ApiSiteSettingSiteSetting extends Struct.SingleTypeSchema {
         number
       > &
       Schema.Attribute.DefaultTo<10000>;
+    homesPlatformFeePercent: Schema.Attribute.Integer &
+      Schema.Attribute.SetMinMax<
+        {
+          max: 50;
+          min: 0;
+        },
+        number
+      > &
+      Schema.Attribute.DefaultTo<5>;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
       'oneToMany',
@@ -5112,9 +5315,11 @@ declare module '@strapi/strapi' {
       'api::home-contact-unlock.home-contact-unlock': ApiHomeContactUnlockHomeContactUnlock;
       'api::home-kyc.home-kyc': ApiHomeKycHomeKyc;
       'api::home-listing.home-listing': ApiHomeListingHomeListing;
+      'api::home-payout.home-payout': ApiHomePayoutHomePayout;
       'api::home-report.home-report': ApiHomeReportHomeReport;
       'api::home-review.home-review': ApiHomeReviewHomeReview;
       'api::home-save.home-save': ApiHomeSaveHomeSave;
+      'api::home-wallet.home-wallet': ApiHomeWalletHomeWallet;
       'api::marketplace-ad.marketplace-ad': ApiMarketplaceAdMarketplaceAd;
       'api::marketplace-model.marketplace-model': ApiMarketplaceModelMarketplaceModel;
       'api::marketplace-promotion.marketplace-promotion': ApiMarketplacePromotionMarketplacePromotion;

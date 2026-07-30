@@ -1,0 +1,24 @@
+{
+  "kind": "collectionType",
+  "collectionName": "home_payouts",
+  "info": {
+    "singularName": "home-payout",
+    "pluralName": "home-payouts",
+    "displayName": "Home Payout",
+    "description": "Host payout requests from Homes wallet unsettled balances"
+  },
+  "options": { "draftAndPublish": false },
+  "pluginOptions": {},
+  "attributes": {
+    "host": { "type": "relation", "relation": "manyToOne", "target": "plugin::users-permissions.user" },
+    "wallet": { "type": "relation", "relation": "manyToOne", "target": "api::home-wallet.home-wallet" },
+    "amountUGX": { "type": "integer", "required": true, "min": 1 },
+    "status": { "type": "enumeration", "enum": ["pending", "paid", "rejected"], "default": "pending", "required": true },
+    "payoutPhone": { "type": "string" },
+    "paymentReference": { "type": "string" },
+    "adminNote": { "type": "text" },
+    "requestedAt": { "type": "datetime" },
+    "paidAt": { "type": "datetime" },
+    "reviewer": { "type": "relation", "relation": "manyToOne", "target": "plugin::users-permissions.user" }
+  }
+}

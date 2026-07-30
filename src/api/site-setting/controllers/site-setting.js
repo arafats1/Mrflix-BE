@@ -130,6 +130,7 @@ module.exports = createCoreController('api::site-setting.site-setting', ({ strap
           marketplacePromotionDailyPrice: 5000,
           marketplacePromotionMonthlyPrice: 100000,
           homesContactUnlockFeeUGX: 10000,
+          homesPlatformFeePercent: 5,
           paymentGateway: 'pesapal',
         },
       };
@@ -139,6 +140,9 @@ module.exports = createCoreController('api::site-setting.site-setting', ({ strap
         ...entry,
         bookSubscriptionPrice: entry.bookSubscriptionPrice ?? 10000,
         homesContactUnlockFeeUGX: entry.homesContactUnlockFeeUGX ?? 10000,
+        homesPlatformFeePercent: entry.homesPlatformFeePercent == null || Number(entry.homesPlatformFeePercent) === 10
+          ? 5
+          : entry.homesPlatformFeePercent,
       },
     };
   },
