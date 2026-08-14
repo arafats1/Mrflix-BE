@@ -1,0 +1,72 @@
+{
+  "kind": "collectionType",
+  "collectionName": "car_inspection_bookings",
+  "info": {
+    "singularName": "car-inspection-booking",
+    "pluralName": "car-inspection-bookings",
+    "displayName": "Car Inspection Booking",
+    "description": "MOVO Cars sell-side inspection appointments"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "status": {
+      "type": "enumeration",
+      "enum": ["new", "confirmed", "in_progress", "completed", "cancelled"],
+      "default": "new",
+      "required": true
+    },
+    "name": {
+      "type": "string",
+      "required": true
+    },
+    "phone": {
+      "type": "string",
+      "required": true
+    },
+    "email": {
+      "type": "email",
+      "required": true
+    },
+    "make": {
+      "type": "string",
+      "required": true
+    },
+    "model": {
+      "type": "string",
+      "required": true
+    },
+    "year": {
+      "type": "string",
+      "required": true
+    },
+    "address": {
+      "type": "string",
+      "required": true
+    },
+    "district": {
+      "type": "string"
+    },
+    "city": {
+      "type": "string"
+    },
+    "preferredDate": {
+      "type": "date",
+      "required": true
+    },
+    "preferredTime": {
+      "type": "string",
+      "required": true
+    },
+    "adminNotes": {
+      "type": "text"
+    },
+    "user": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user"
+    }
+  }
+}

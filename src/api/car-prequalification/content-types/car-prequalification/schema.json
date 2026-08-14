@@ -1,0 +1,41 @@
+{
+  "kind": "collectionType",
+  "collectionName": "car_prequalifications",
+  "info": {
+    "singularName": "car-prequalification",
+    "pluralName": "car-prequalifications",
+    "displayName": "Car Prequalification",
+    "description": "MOVO Cars affordability checks"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "firstName": { "type": "string", "required": true },
+    "lastName": { "type": "string", "required": true },
+    "phone": { "type": "string", "required": true },
+    "email": { "type": "email", "required": true },
+    "employmentType": {
+      "type": "enumeration",
+      "enum": ["salary", "business"],
+      "required": true
+    },
+    "monthlyIncomeUGX": { "type": "integer", "required": true, "min": 0 },
+    "loanTermMonths": { "type": "integer", "required": true, "min": 1 },
+    "maxFinanceUGX": { "type": "integer" },
+    "minEquityUGX": { "type": "integer" },
+    "maxMonthlyUGX": { "type": "integer" },
+    "followUpStatus": {
+      "type": "enumeration",
+      "enum": ["new", "contacted", "closed"],
+      "default": "new",
+      "required": true
+    },
+    "user": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user"
+    }
+  }
+}

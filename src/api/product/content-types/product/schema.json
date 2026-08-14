@@ -210,6 +210,15 @@
       "type": "boolean",
       "default": false
     },
+    "hirePurchaseMonthlyUGX": {
+      "type": "integer",
+      "min": 0
+    },
+    "hirePurchaseDepositPercent": {
+      "type": "integer",
+      "min": 0,
+      "max": 100
+    },
     "ageRange": {
       "type": "string"
     },

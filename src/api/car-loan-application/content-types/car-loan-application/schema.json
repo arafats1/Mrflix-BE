@@ -1,0 +1,177 @@
+{
+  "kind": "collectionType",
+  "collectionName": "car_loan_applications",
+  "info": {
+    "singularName": "car-loan-application",
+    "pluralName": "car-loan-applications",
+    "displayName": "Car Loan Application",
+    "description": "MOVO Cars hire-purchase / loan applications"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "status": {
+      "type": "enumeration",
+      "enum": ["new", "reviewing", "approved", "declined", "archived"],
+      "default": "new",
+      "required": true
+    },
+    "carDocumentId": {
+      "type": "string"
+    },
+    "carTitle": {
+      "type": "string"
+    },
+    "hirePurchaseMonthlyUGX": {
+      "type": "integer"
+    },
+    "hirePurchaseDepositPercent": {
+      "type": "integer"
+    },
+    "product": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::product.product"
+    },
+    "user": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user"
+    },
+    "firstName": {
+      "type": "string",
+      "required": true
+    },
+    "lastName": {
+      "type": "string",
+      "required": true
+    },
+    "phoneCountryCode": {
+      "type": "string",
+      "default": "256"
+    },
+    "phoneNumber": {
+      "type": "string",
+      "required": true
+    },
+    "email": {
+      "type": "email",
+      "required": true
+    },
+    "employmentStatus": {
+      "type": "enumeration",
+      "enum": ["salary_earner", "business_owner", "self_employed"],
+      "required": true
+    },
+    "dateOfBirth": {
+      "type": "date",
+      "required": true
+    },
+    "nationalId": {
+      "type": "string",
+      "required": true
+    },
+    "heardAboutUs": {
+      "type": "string",
+      "required": true
+    },
+    "gender": {
+      "type": "enumeration",
+      "enum": ["male", "female"],
+      "required": true
+    },
+    "nationality": {
+      "type": "string",
+      "required": true
+    },
+    "nationalityStatus": {
+      "type": "enumeration",
+      "enum": ["citizen", "resident", "non_resident"],
+      "required": true
+    },
+    "occupation": {
+      "type": "string",
+      "required": true
+    },
+    "industry": {
+      "type": "string",
+      "required": true
+    },
+    "employerOrBusinessName": {
+      "type": "string",
+      "required": true
+    },
+    "workEmail": {
+      "type": "email"
+    },
+    "monthlyIncomeUGX": {
+      "type": "integer",
+      "required": true,
+      "min": 0
+    },
+    "employmentDuration": {
+      "type": "string",
+      "required": true
+    },
+    "wantsTradeIn": {
+      "type": "boolean",
+      "required": true
+    },
+    "desiredEquityUGX": {
+      "type": "integer",
+      "min": 0
+    },
+    "desiredMonthlyPaymentUGX": {
+      "type": "integer",
+      "min": 0
+    },
+    "interestRateType": {
+      "type": "enumeration",
+      "enum": ["floating", "fixed"]
+    },
+    "desiredInterestRatePercent": {
+      "type": "decimal"
+    },
+    "desiredResidualPercent": {
+      "type": "integer",
+      "min": 0,
+      "max": 100
+    },
+    "desiredLoanTermMonths": {
+      "type": "integer",
+      "min": 1
+    },
+    "desiredRepaymentDate": {
+      "type": "string"
+    },
+    "continueInsuranceAfterYearOne": {
+      "type": "boolean"
+    },
+    "feePaymentTiming": {
+      "type": "enumeration",
+      "enum": ["upfront", "monthly"]
+    },
+    "upfrontItems": {
+      "type": "json",
+      "default": []
+    },
+    "consentDataSharing": {
+      "type": "boolean",
+      "required": true
+    },
+    "consentCreditEnquiry": {
+      "type": "boolean",
+      "required": true
+    },
+    "consentApprovalDisclaimer": {
+      "type": "boolean",
+      "required": true
+    },
+    "consentTermsPrivacy": {
+      "type": "boolean",
+      "required": true
+    }
+  }
+}

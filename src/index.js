@@ -93,6 +93,15 @@ const AUTHENTICATED_ACTIONS = [
   'api::marketplace-promotion.marketplace-promotion.mine',
   'api::marketplace-promotion.marketplace-promotion.create',
   'api::marketplace-promotion.marketplace-promotion.checkStatus',
+  'api::car-loan-application.car-loan-application.mine',
+  'api::car-loan-application.car-loan-application.adminOverview',
+  'api::car-loan-application.car-loan-application.updateStatus',
+  'api::car-inspection-booking.car-inspection-booking.mine',
+  'api::car-inspection-booking.car-inspection-booking.updateStatus',
+  'api::car-prequalification.car-prequalification.updateStatus',
+  'api::car-save.car-save.toggle',
+  'api::car-save.car-save.mine',
+  'api::car-save.car-save.updateProfile',
 ];
 
 async function ensureRolePermissions(strapi, roleType, actions) {

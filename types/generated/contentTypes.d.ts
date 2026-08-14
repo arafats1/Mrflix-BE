@@ -631,6 +631,269 @@ export interface ApiBookBook extends Struct.CollectionTypeSchema {
   };
 }
 
+export interface ApiCarInspectionBookingCarInspectionBooking
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'car_inspection_bookings';
+  info: {
+    description: 'MOVO Cars sell-side inspection appointments';
+    displayName: 'Car Inspection Booking';
+    pluralName: 'car-inspection-bookings';
+    singularName: 'car-inspection-booking';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    address: Schema.Attribute.String & Schema.Attribute.Required;
+    adminNotes: Schema.Attribute.Text;
+    city: Schema.Attribute.String;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    district: Schema.Attribute.String;
+    email: Schema.Attribute.Email & Schema.Attribute.Required;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::car-inspection-booking.car-inspection-booking'
+    > &
+      Schema.Attribute.Private;
+    make: Schema.Attribute.String & Schema.Attribute.Required;
+    model: Schema.Attribute.String & Schema.Attribute.Required;
+    name: Schema.Attribute.String & Schema.Attribute.Required;
+    phone: Schema.Attribute.String & Schema.Attribute.Required;
+    preferredDate: Schema.Attribute.Date & Schema.Attribute.Required;
+    preferredTime: Schema.Attribute.String & Schema.Attribute.Required;
+    publishedAt: Schema.Attribute.DateTime;
+    status: Schema.Attribute.Enumeration<
+      ['new', 'confirmed', 'in_progress', 'completed', 'cancelled']
+    > &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<'new'>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    user: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+    year: Schema.Attribute.String & Schema.Attribute.Required;
+  };
+}
+
+export interface ApiCarLoanApplicationCarLoanApplication
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'car_loan_applications';
+  info: {
+    description: 'MOVO Cars hire-purchase / loan applications';
+    displayName: 'Car Loan Application';
+    pluralName: 'car-loan-applications';
+    singularName: 'car-loan-application';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    carDocumentId: Schema.Attribute.String;
+    carTitle: Schema.Attribute.String;
+    consentApprovalDisclaimer: Schema.Attribute.Boolean &
+      Schema.Attribute.Required;
+    consentCreditEnquiry: Schema.Attribute.Boolean & Schema.Attribute.Required;
+    consentDataSharing: Schema.Attribute.Boolean & Schema.Attribute.Required;
+    consentTermsPrivacy: Schema.Attribute.Boolean & Schema.Attribute.Required;
+    continueInsuranceAfterYearOne: Schema.Attribute.Boolean;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    dateOfBirth: Schema.Attribute.Date & Schema.Attribute.Required;
+    desiredEquityUGX: Schema.Attribute.Integer &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0;
+        },
+        number
+      >;
+    desiredInterestRatePercent: Schema.Attribute.Decimal;
+    desiredLoanTermMonths: Schema.Attribute.Integer &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 1;
+        },
+        number
+      >;
+    desiredMonthlyPaymentUGX: Schema.Attribute.Integer &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0;
+        },
+        number
+      >;
+    desiredRepaymentDate: Schema.Attribute.String;
+    desiredResidualPercent: Schema.Attribute.Integer &
+      Schema.Attribute.SetMinMax<
+        {
+          max: 100;
+          min: 0;
+        },
+        number
+      >;
+    email: Schema.Attribute.Email & Schema.Attribute.Required;
+    employerOrBusinessName: Schema.Attribute.String & Schema.Attribute.Required;
+    employmentDuration: Schema.Attribute.String & Schema.Attribute.Required;
+    employmentStatus: Schema.Attribute.Enumeration<
+      ['salary_earner', 'business_owner', 'self_employed']
+    > &
+      Schema.Attribute.Required;
+    feePaymentTiming: Schema.Attribute.Enumeration<['upfront', 'monthly']>;
+    firstName: Schema.Attribute.String & Schema.Attribute.Required;
+    gender: Schema.Attribute.Enumeration<['male', 'female']> &
+      Schema.Attribute.Required;
+    heardAboutUs: Schema.Attribute.String & Schema.Attribute.Required;
+    hirePurchaseDepositPercent: Schema.Attribute.Integer;
+    hirePurchaseMonthlyUGX: Schema.Attribute.Integer;
+    industry: Schema.Attribute.String & Schema.Attribute.Required;
+    interestRateType: Schema.Attribute.Enumeration<['floating', 'fixed']>;
+    lastName: Schema.Attribute.String & Schema.Attribute.Required;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::car-loan-application.car-loan-application'
+    > &
+      Schema.Attribute.Private;
+    monthlyIncomeUGX: Schema.Attribute.Integer &
+      Schema.Attribute.Required &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0;
+        },
+        number
+      >;
+    nationalId: Schema.Attribute.String & Schema.Attribute.Required;
+    nationality: Schema.Attribute.String & Schema.Attribute.Required;
+    nationalityStatus: Schema.Attribute.Enumeration<
+      ['citizen', 'resident', 'non_resident']
+    > &
+      Schema.Attribute.Required;
+    occupation: Schema.Attribute.String & Schema.Attribute.Required;
+    phoneCountryCode: Schema.Attribute.String &
+      Schema.Attribute.DefaultTo<'256'>;
+    phoneNumber: Schema.Attribute.String & Schema.Attribute.Required;
+    product: Schema.Attribute.Relation<'manyToOne', 'api::product.product'>;
+    publishedAt: Schema.Attribute.DateTime;
+    status: Schema.Attribute.Enumeration<
+      ['new', 'reviewing', 'approved', 'declined', 'archived']
+    > &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<'new'>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    upfrontItems: Schema.Attribute.JSON & Schema.Attribute.DefaultTo<[]>;
+    user: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+    wantsTradeIn: Schema.Attribute.Boolean & Schema.Attribute.Required;
+    workEmail: Schema.Attribute.Email;
+  };
+}
+
+export interface ApiCarPrequalificationCarPrequalification
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'car_prequalifications';
+  info: {
+    description: 'MOVO Cars affordability checks';
+    displayName: 'Car Prequalification';
+    pluralName: 'car-prequalifications';
+    singularName: 'car-prequalification';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    email: Schema.Attribute.Email & Schema.Attribute.Required;
+    employmentType: Schema.Attribute.Enumeration<['salary', 'business']> &
+      Schema.Attribute.Required;
+    firstName: Schema.Attribute.String & Schema.Attribute.Required;
+    followUpStatus: Schema.Attribute.Enumeration<
+      ['new', 'contacted', 'closed']
+    > &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<'new'>;
+    lastName: Schema.Attribute.String & Schema.Attribute.Required;
+    loanTermMonths: Schema.Attribute.Integer &
+      Schema.Attribute.Required &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 1;
+        },
+        number
+      >;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::car-prequalification.car-prequalification'
+    > &
+      Schema.Attribute.Private;
+    maxFinanceUGX: Schema.Attribute.Integer;
+    maxMonthlyUGX: Schema.Attribute.Integer;
+    minEquityUGX: Schema.Attribute.Integer;
+    monthlyIncomeUGX: Schema.Attribute.Integer &
+      Schema.Attribute.Required &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0;
+        },
+        number
+      >;
+    phone: Schema.Attribute.String & Schema.Attribute.Required;
+    publishedAt: Schema.Attribute.DateTime;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    user: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+  };
+}
+
+export interface ApiCarSaveCarSave extends Struct.CollectionTypeSchema {
+  collectionName: 'car_saves';
+  info: {
+    description: 'MOVO Cars favourites';
+    displayName: 'Car Save';
+    pluralName: 'car-saves';
+    singularName: 'car-save';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::car-save.car-save'
+    > &
+      Schema.Attribute.Private;
+    product: Schema.Attribute.Relation<'manyToOne', 'api::product.product'>;
+    publishedAt: Schema.Attribute.DateTime;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    user: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+  };
+}
+
 export interface ApiChatLogChatLog extends Struct.CollectionTypeSchema {
   collectionName: 'chat_logs';
   info: {
@@ -3719,6 +3982,21 @@ export interface ApiProductProduct extends Struct.CollectionTypeSchema {
         'CNG',
       ]
     >;
+    hirePurchaseDepositPercent: Schema.Attribute.Integer &
+      Schema.Attribute.SetMinMax<
+        {
+          max: 100;
+          min: 0;
+        },
+        number
+      >;
+    hirePurchaseMonthlyUGX: Schema.Attribute.Integer &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0;
+        },
+        number
+      >;
     images: Schema.Attribute.JSON & Schema.Attribute.DefaultTo<[]>;
     itemCondition: Schema.Attribute.Enumeration<['Brand New', 'Second Hand']>;
     itemType: Schema.Attribute.Enumeration<['product', 'service']> &
@@ -5276,6 +5554,10 @@ declare module '@strapi/strapi' {
       'api::account-invitation.account-invitation': ApiAccountInvitationAccountInvitation;
       'api::active-stream.active-stream': ApiActiveStreamActiveStream;
       'api::book.book': ApiBookBook;
+      'api::car-inspection-booking.car-inspection-booking': ApiCarInspectionBookingCarInspectionBooking;
+      'api::car-loan-application.car-loan-application': ApiCarLoanApplicationCarLoanApplication;
+      'api::car-prequalification.car-prequalification': ApiCarPrequalificationCarPrequalification;
+      'api::car-save.car-save': ApiCarSaveCarSave;
       'api::chat-log.chat-log': ApiChatLogChatLog;
       'api::child-profile.child-profile': ApiChildProfileChildProfile;
       'api::contact-message.contact-message': ApiContactMessageContactMessage;

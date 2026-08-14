@@ -1,0 +1,26 @@
+{
+  "kind": "collectionType",
+  "collectionName": "car_saves",
+  "info": {
+    "singularName": "car-save",
+    "pluralName": "car-saves",
+    "displayName": "Car Save",
+    "description": "MOVO Cars favourites"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "product": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::product.product"
+    },
+    "user": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user"
+    }
+  }
+}

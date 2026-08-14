@@ -598,6 +598,16 @@ function buildProductPayload(input = {}, existingProduct = null) {
     ...(Object.prototype.hasOwnProperty.call(input, 'transmission') ? { transmission: input.transmission } : {}),
     ...(Object.prototype.hasOwnProperty.call(input, 'bodyType') ? { bodyType: input.bodyType } : {}),
     ...(Object.prototype.hasOwnProperty.call(input, 'negotiable') ? { negotiable: Boolean(input.negotiable) } : {}),
+    ...(Object.prototype.hasOwnProperty.call(input, 'hirePurchaseMonthlyUGX') ? {
+      hirePurchaseMonthlyUGX: input.hirePurchaseMonthlyUGX === null || input.hirePurchaseMonthlyUGX === ''
+        ? null
+        : Math.max(0, Number(input.hirePurchaseMonthlyUGX || 0)),
+    } : {}),
+    ...(Object.prototype.hasOwnProperty.call(input, 'hirePurchaseDepositPercent') ? {
+      hirePurchaseDepositPercent: input.hirePurchaseDepositPercent === null || input.hirePurchaseDepositPercent === ''
+        ? null
+        : Math.min(100, Math.max(0, Number(input.hirePurchaseDepositPercent || 0))),
+    } : {}),
     ...(Object.prototype.hasOwnProperty.call(input, 'secondHandCondition') ? { secondHandCondition: input.secondHandCondition } : {}),
     ...(Object.prototype.hasOwnProperty.call(input, 'engineSize') ? { engineSize: input.engineSize } : {}),
     ...(Object.prototype.hasOwnProperty.call(input, 'fuelType') ? { fuelType: input.fuelType } : {}),
