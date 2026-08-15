@@ -8,7 +8,7 @@ const { createCoreController } = require('@strapi/strapi').factories;
 const { scheduleProductImageProcessing, processProductImages } = require('../../../utils/marketplace-image-processing');
 const { assertAdmin } = require('../../../utils/admin-auth');
 const { resolveAuthUser } = require('../../../utils/resolve-auth-user');
-const { isCarCategory, carProductFilters } = require('../../../utils/cars');
+const { isCarCategory, carProductFilters, calculateHirePurchaseMonthly } = require('../../../utils/cars');
 
 async function requireAuthUser(strapi, ctx) {
   const user = await resolveAuthUser(strapi, ctx);
@@ -77,6 +77,17 @@ function withSellerPaymentFallback(product) {
     paymentPhone: product.paymentPhone || product.seller?.paymentPhone || null,
     paymentCode: product.paymentCode || product.seller?.paymentCode || null,
     hirePurchaseTerms: product.hirePurchaseTerms || product.seller?.hirePurchaseTerms || null,
+    hirePurchaseDepositPercent: product.hirePurchaseDepositPercent || product.seller?.hirePurchaseDepositPercent || null,
+    showCarMonthlyPayment: Boolean(
+      product.showCarMonthlyPayment
+      ?? product.seller?.showCarMonthlyPayment
+    ),
+    hirePurchaseMonthlyUGX: Boolean(product.showCarMonthlyPayment ?? product.seller?.showCarMonthlyPayment)
+      ? calculateHirePurchaseMonthly(
+        product.priceUGX,
+        product.hirePurchaseDepositPercent || product.seller?.hirePurchaseDepositPercent,
+      )
+      : null,
     itemType: product.itemType === 'service' ? 'service' : 'product',
     marketplaceSource: product.marketplaceSource || 'core',
     promotedUntil: product.promotedUntil || null,
@@ -89,6 +100,13 @@ function withSellerPaymentFallback(product) {
 
 function normalizeHirePurchaseTerms(value) {
   return String(value || '').trim().slice(0, 5000) || null;
+}
+
+function normalizeDepositPercent(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  return Math.min(100, Math.max(0, Math.round(n)));
 }
 
 async function getSellerHirePurchaseTerms(strapi, user) {
@@ -108,63 +126,157 @@ async function getSellerHirePurchaseTerms(strapi, user) {
   return normalizeHirePurchaseTerms(existing?.hirePurchaseTerms);
 }
 
-async function syncSellerHirePurchaseTerms(strapi, userId, terms) {
-  const normalized = normalizeHirePurchaseTerms(terms);
-  const currentUser = await strapi.db.query('plugin::users-permissions.user').findOne({
-    where: { id: userId },
-    select: ['hirePurchaseTerms'],
+async function getSellerHirePurchaseDeposit(strapi, user) {
+  const fromUser = normalizeDepositPercent(user?.hirePurchaseDepositPercent);
+  if (fromUser) return fromUser;
+
+  const existing = await strapi.db.query('api::product.product').findOne({
+    where: {
+      seller: { id: user.id },
+      ...carProductFilters(),
+      hirePurchaseDepositPercent: { $gt: 0 },
+    },
+    select: ['hirePurchaseDepositPercent'],
+    orderBy: { updatedAt: 'desc' },
   }).catch(() => null);
 
-  if (normalizeHirePurchaseTerms(currentUser?.hirePurchaseTerms) === normalized) {
-    return normalized;
-  }
-
-  await strapi.db.query('plugin::users-permissions.user').update({
-    where: { id: userId },
-    data: { hirePurchaseTerms: normalized },
-  });
-
-  const cars = await strapi.documents('api::product.product').findMany({
-    filters: {
-      seller: { id: userId },
-      ...carProductFilters(),
-    },
-    fields: ['documentId'],
-    status: 'published',
-    limit: 500,
-  }).catch(() => []);
-
-  await Promise.all((cars || []).map((car) => (
-    strapi.documents('api::product.product').update({
-      documentId: car.documentId,
-      data: { hirePurchaseTerms: normalized },
-      status: 'published',
-    }).catch(() => null)
-  )));
-
-  return normalized;
+  return normalizeDepositPercent(existing?.hirePurchaseDepositPercent);
 }
 
-async function applySellerHirePurchaseTerms(strapi, user, product, input = {}) {
+function normalizeBool(value) {
+  if (value === true || value === 'yes' || value === 'true' || value === 1 || value === '1') return true;
+  if (value === false || value === 'no' || value === 'false' || value === 0 || value === '0') return false;
+  return null;
+}
+
+async function getSellerShowCarMonthly(strapi, user) {
+  if (typeof user?.showCarMonthlyPayment === 'boolean') return user.showCarMonthlyPayment;
+  const existing = await strapi.db.query('api::product.product').findOne({
+    where: {
+      seller: { id: user.id },
+      ...carProductFilters(),
+      showCarMonthlyPayment: true,
+    },
+    select: ['showCarMonthlyPayment'],
+  }).catch(() => null);
+  return Boolean(existing?.showCarMonthlyPayment);
+}
+
+async function syncSellerHirePurchaseDefaults(strapi, userId, patch = {}) {
+  const currentUser = await strapi.db.query('plugin::users-permissions.user').findOne({
+    where: { id: userId },
+    select: ['hirePurchaseTerms', 'hirePurchaseDepositPercent', 'showCarMonthlyPayment'],
+  }).catch(() => null);
+
+  const nextTerms = Object.prototype.hasOwnProperty.call(patch, 'terms')
+    ? normalizeHirePurchaseTerms(patch.terms)
+    : normalizeHirePurchaseTerms(currentUser?.hirePurchaseTerms);
+  const nextDeposit = Object.prototype.hasOwnProperty.call(patch, 'depositPercent')
+    ? normalizeDepositPercent(patch.depositPercent)
+    : normalizeDepositPercent(currentUser?.hirePurchaseDepositPercent);
+  const nextShowMonthly = Object.prototype.hasOwnProperty.call(patch, 'showMonthly')
+    ? Boolean(patch.showMonthly)
+    : Boolean(currentUser?.showCarMonthlyPayment);
+
+  const termsChanged = nextTerms !== normalizeHirePurchaseTerms(currentUser?.hirePurchaseTerms);
+  const depositChanged = nextDeposit !== normalizeDepositPercent(currentUser?.hirePurchaseDepositPercent);
+  const showChanged = nextShowMonthly !== Boolean(currentUser?.showCarMonthlyPayment);
+
+  if (termsChanged || depositChanged || showChanged) {
+    await strapi.db.query('plugin::users-permissions.user').update({
+      where: { id: userId },
+      data: {
+        ...(termsChanged ? { hirePurchaseTerms: nextTerms } : {}),
+        ...(depositChanged ? { hirePurchaseDepositPercent: nextDeposit } : {}),
+        ...(showChanged ? { showCarMonthlyPayment: nextShowMonthly } : {}),
+      },
+    });
+  }
+
+  if (termsChanged || depositChanged || showChanged) {
+    const cars = await strapi.documents('api::product.product').findMany({
+      filters: {
+        seller: { id: userId },
+        ...carProductFilters(),
+      },
+      fields: ['documentId', 'priceUGX'],
+      status: 'published',
+      limit: 500,
+    }).catch(() => []);
+
+    await Promise.all((cars || []).map((car) => (
+      strapi.documents('api::product.product').update({
+        documentId: car.documentId,
+        data: {
+          hirePurchaseTerms: nextTerms,
+          hirePurchaseDepositPercent: nextDeposit,
+          showCarMonthlyPayment: nextShowMonthly,
+          hirePurchaseMonthlyUGX: nextShowMonthly ? calculateHirePurchaseMonthly(car.priceUGX, nextDeposit) : null,
+        },
+        status: 'published',
+      }).catch(() => null)
+    )));
+  }
+
+  return { terms: nextTerms, depositPercent: nextDeposit, showMonthly: nextShowMonthly };
+}
+
+async function applySellerHirePurchaseSettings(strapi, user, product, input = {}) {
   if (!product || !user) return product;
   const category = input.category || product.category;
   if (!isCarCategory(category)) return product;
 
-  if (Object.prototype.hasOwnProperty.call(input, 'hirePurchaseTerms')) {
-    const normalized = await syncSellerHirePurchaseTerms(strapi, user.id, input.hirePurchaseTerms);
-    return { ...product, hirePurchaseTerms: normalized };
+  const hasTerms = Object.prototype.hasOwnProperty.call(input, 'hirePurchaseTerms');
+  const hasDeposit = Object.prototype.hasOwnProperty.call(input, 'hirePurchaseDepositPercent');
+  const hasShowMonthly = Object.prototype.hasOwnProperty.call(input, 'showCarMonthlyPayment');
+
+  if (hasTerms || hasDeposit || hasShowMonthly) {
+    const synced = await syncSellerHirePurchaseDefaults(strapi, user.id, {
+      ...(hasTerms ? { terms: input.hirePurchaseTerms } : {}),
+      ...(hasDeposit ? { depositPercent: input.hirePurchaseDepositPercent } : {}),
+      ...(hasShowMonthly ? { showMonthly: normalizeBool(input.showCarMonthlyPayment) } : {}),
+    });
+    const monthly = synced.showMonthly ? calculateHirePurchaseMonthly(product.priceUGX, synced.depositPercent) : null;
+    await strapi.db.query('api::product.product').update({
+      where: { id: product.id },
+      data: {
+        hirePurchaseDepositPercent: synced.depositPercent,
+        hirePurchaseMonthlyUGX: monthly,
+        hirePurchaseTerms: synced.terms,
+        showCarMonthlyPayment: synced.showMonthly,
+      },
+    }).catch(() => null);
+    return {
+      ...product,
+      hirePurchaseTerms: synced.terms,
+      hirePurchaseDepositPercent: synced.depositPercent,
+      hirePurchaseMonthlyUGX: monthly,
+      showCarMonthlyPayment: synced.showMonthly,
+    };
   }
 
   const sellerTerms = await getSellerHirePurchaseTerms(strapi, user);
-  if (!sellerTerms) return product;
-  if (product.hirePurchaseTerms === sellerTerms) return product;
+  const sellerDeposit = await getSellerHirePurchaseDeposit(strapi, user);
+  const showMonthly = await getSellerShowCarMonthly(strapi, user);
+  const monthly = showMonthly ? calculateHirePurchaseMonthly(product.priceUGX, sellerDeposit) : null;
 
   await strapi.db.query('api::product.product').update({
     where: { id: product.id },
-    data: { hirePurchaseTerms: sellerTerms },
+    data: {
+      ...(sellerTerms ? { hirePurchaseTerms: sellerTerms } : {}),
+      ...(sellerDeposit != null ? { hirePurchaseDepositPercent: sellerDeposit } : {}),
+      showCarMonthlyPayment: showMonthly,
+      hirePurchaseMonthlyUGX: monthly,
+    },
   }).catch(() => null);
 
-  return { ...product, hirePurchaseTerms: sellerTerms };
+  return {
+    ...product,
+    hirePurchaseTerms: sellerTerms || product.hirePurchaseTerms,
+    hirePurchaseDepositPercent: sellerDeposit ?? product.hirePurchaseDepositPercent,
+    hirePurchaseMonthlyUGX: monthly,
+    showCarMonthlyPayment: showMonthly,
+  };
 }
 
 function normalizeMarketplaceSource(value) {
@@ -693,6 +805,9 @@ function buildProductPayload(input = {}, existingProduct = null) {
     ...(Object.prototype.hasOwnProperty.call(input, 'hirePurchaseTerms') ? {
       hirePurchaseTerms: String(input.hirePurchaseTerms || '').trim().slice(0, 5000) || null,
     } : {}),
+    ...(Object.prototype.hasOwnProperty.call(input, 'showCarMonthlyPayment') ? {
+      showCarMonthlyPayment: Boolean(input.showCarMonthlyPayment),
+    } : {}),
     ...(Object.prototype.hasOwnProperty.call(input, 'secondHandCondition') ? { secondHandCondition: input.secondHandCondition } : {}),
     ...(Object.prototype.hasOwnProperty.call(input, 'engineSize') ? { engineSize: input.engineSize } : {}),
     ...(Object.prototype.hasOwnProperty.call(input, 'fuelType') ? { fuelType: input.fuelType } : {}),
@@ -776,7 +891,7 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
       scheduleProductImageProcessing(strapi, { documentId: created.documentId, id: created.id });
     }
 
-    const withTerms = await applySellerHirePurchaseTerms(strapi, user, created, input);
+    const withTerms = await applySellerHirePurchaseSettings(strapi, user, created, input);
     return { data: await attachReviewSummary(strapi, await withSoldCount(strapi, withTerms)) };
   },
 
@@ -949,7 +1064,7 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
       scheduleProductImageProcessing(strapi, { documentId: updated.documentId, id: updated.id });
     }
 
-    const withTerms = await applySellerHirePurchaseTerms(strapi, user, updated, input);
+    const withTerms = await applySellerHirePurchaseSettings(strapi, user, updated, input);
     return { data: await attachReviewSummary(strapi, await withSoldCount(strapi, withTerms)) };
   },
 

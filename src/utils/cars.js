@@ -17,6 +17,23 @@ function carProductFilters() {
   return { category: { $in: CAR_CATEGORIES } };
 }
 
+const HIRE_PURCHASE_TERM_MONTHS = 12;
+const HIRE_PURCHASE_MARKUP = 0.1;
+const HIRE_PURCHASE_DEFAULT_DEPOSIT = 50;
+
+function calculateHirePurchaseMonthly(priceUGX, depositPercent) {
+  const price = Math.max(0, Number(priceUGX) || 0);
+  if (!price) return null;
+  const deposit = Math.min(
+    100,
+    Math.max(0, Number(depositPercent) > 0 ? Number(depositPercent) : HIRE_PURCHASE_DEFAULT_DEPOSIT),
+  );
+  const hirePurchasePrice = price * (1 + HIRE_PURCHASE_MARKUP);
+  const financed = hirePurchasePrice * (1 - deposit / 100);
+  if (financed <= 0) return null;
+  return Math.round(financed / HIRE_PURCHASE_TERM_MONTHS);
+}
+
 async function findByIdOrDocumentId(strapi, uid, id) {
   const raw = String(id || '').trim();
   if (!raw) return null;
@@ -33,4 +50,6 @@ module.exports = {
   isCarCategory,
   carProductFilters,
   findByIdOrDocumentId,
+  HIRE_PURCHASE_TERM_MONTHS,
+  calculateHirePurchaseMonthly,
 };

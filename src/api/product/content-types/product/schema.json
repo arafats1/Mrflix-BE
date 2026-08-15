@@ -222,6 +222,10 @@
     "hirePurchaseTerms": {
       "type": "text"
     },
+    "showCarMonthlyPayment": {
+      "type": "boolean",
+      "default": false
+    },
     "ageRange": {
       "type": "string"
     },

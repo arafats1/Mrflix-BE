@@ -4072,6 +4072,8 @@ export interface ApiProductProduct extends Struct.CollectionTypeSchema {
     >;
     serviceAvailabilityDates: Schema.Attribute.JSON;
     serviceBookedDates: Schema.Attribute.JSON;
+    showCarMonthlyPayment: Schema.Attribute.Boolean &
+      Schema.Attribute.DefaultTo<false>;
     size: Schema.Attribute.String;
     specifications: Schema.Attribute.Text;
     status: Schema.Attribute.Enumeration<
@@ -5472,6 +5474,14 @@ export interface PluginUsersPermissionsUser
     fullName: Schema.Attribute.String;
     hasBookLibraryAccess: Schema.Attribute.Boolean &
       Schema.Attribute.DefaultTo<false>;
+    hirePurchaseDepositPercent: Schema.Attribute.Integer &
+      Schema.Attribute.SetMinMax<
+        {
+          max: 100;
+          min: 0;
+        },
+        number
+      >;
     hirePurchaseTerms: Schema.Attribute.Text;
     homesRole: Schema.Attribute.Enumeration<
       ['guest', 'landlord', 'broker', 'host']
@@ -5536,6 +5546,8 @@ export interface PluginUsersPermissionsUser
       'plugin::users-permissions.role'
     >;
     schoolName: Schema.Attribute.String;
+    showCarMonthlyPayment: Schema.Attribute.Boolean &
+      Schema.Attribute.DefaultTo<false>;
     subjectsTaught: Schema.Attribute.JSON;
     subscribedTeacherIds: Schema.Attribute.JSON;
     teacherBackground: Schema.Attribute.Text;

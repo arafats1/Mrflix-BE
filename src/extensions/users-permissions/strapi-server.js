@@ -141,6 +141,17 @@ module.exports = (plugin) => {
     type: 'text',
   };
 
+  plugin.contentTypes.user.schema.attributes.hirePurchaseDepositPercent = {
+    type: 'integer',
+    min: 0,
+    max: 100,
+  };
+
+  plugin.contentTypes.user.schema.attributes.showCarMonthlyPayment = {
+    type: 'boolean',
+    default: false,
+  };
+
   plugin.contentTypes.user.schema.attributes.whatsappNumber = {
     type: 'string',
   };
