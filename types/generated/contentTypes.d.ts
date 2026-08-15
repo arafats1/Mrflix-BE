@@ -5472,6 +5472,7 @@ export interface PluginUsersPermissionsUser
     fullName: Schema.Attribute.String;
     hasBookLibraryAccess: Schema.Attribute.Boolean &
       Schema.Attribute.DefaultTo<false>;
+    hirePurchaseTerms: Schema.Attribute.Text;
     homesRole: Schema.Attribute.Enumeration<
       ['guest', 'landlord', 'broker', 'host']
     >;

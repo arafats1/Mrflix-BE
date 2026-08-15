@@ -8,6 +8,7 @@ const { createCoreController } = require('@strapi/strapi').factories;
 const { scheduleProductImageProcessing, processProductImages } = require('../../../utils/marketplace-image-processing');
 const { assertAdmin } = require('../../../utils/admin-auth');
 const { resolveAuthUser } = require('../../../utils/resolve-auth-user');
+const { isCarCategory, carProductFilters } = require('../../../utils/cars');
 
 async function requireAuthUser(strapi, ctx) {
   const user = await resolveAuthUser(strapi, ctx);
@@ -75,6 +76,7 @@ function withSellerPaymentFallback(product) {
       : [],
     paymentPhone: product.paymentPhone || product.seller?.paymentPhone || null,
     paymentCode: product.paymentCode || product.seller?.paymentCode || null,
+    hirePurchaseTerms: product.hirePurchaseTerms || product.seller?.hirePurchaseTerms || null,
     itemType: product.itemType === 'service' ? 'service' : 'product',
     marketplaceSource: product.marketplaceSource || 'core',
     promotedUntil: product.promotedUntil || null,
@@ -83,6 +85,86 @@ function withSellerPaymentFallback(product) {
     productVideoLikes: Math.max(0, Number(product.productVideoLikes || 0)),
     productVideoComments: normalizeProductVideoComments(product.productVideoComments),
   };
+}
+
+function normalizeHirePurchaseTerms(value) {
+  return String(value || '').trim().slice(0, 5000) || null;
+}
+
+async function getSellerHirePurchaseTerms(strapi, user) {
+  const fromUser = normalizeHirePurchaseTerms(user?.hirePurchaseTerms);
+  if (fromUser) return fromUser;
+
+  const existing = await strapi.db.query('api::product.product').findOne({
+    where: {
+      seller: { id: user.id },
+      ...carProductFilters(),
+      hirePurchaseTerms: { $notNull: true },
+    },
+    select: ['hirePurchaseTerms'],
+    orderBy: { updatedAt: 'desc' },
+  }).catch(() => null);
+
+  return normalizeHirePurchaseTerms(existing?.hirePurchaseTerms);
+}
+
+async function syncSellerHirePurchaseTerms(strapi, userId, terms) {
+  const normalized = normalizeHirePurchaseTerms(terms);
+  const currentUser = await strapi.db.query('plugin::users-permissions.user').findOne({
+    where: { id: userId },
+    select: ['hirePurchaseTerms'],
+  }).catch(() => null);
+
+  if (normalizeHirePurchaseTerms(currentUser?.hirePurchaseTerms) === normalized) {
+    return normalized;
+  }
+
+  await strapi.db.query('plugin::users-permissions.user').update({
+    where: { id: userId },
+    data: { hirePurchaseTerms: normalized },
+  });
+
+  const cars = await strapi.documents('api::product.product').findMany({
+    filters: {
+      seller: { id: userId },
+      ...carProductFilters(),
+    },
+    fields: ['documentId'],
+    status: 'published',
+    limit: 500,
+  }).catch(() => []);
+
+  await Promise.all((cars || []).map((car) => (
+    strapi.documents('api::product.product').update({
+      documentId: car.documentId,
+      data: { hirePurchaseTerms: normalized },
+      status: 'published',
+    }).catch(() => null)
+  )));
+
+  return normalized;
+}
+
+async function applySellerHirePurchaseTerms(strapi, user, product, input = {}) {
+  if (!product || !user) return product;
+  const category = input.category || product.category;
+  if (!isCarCategory(category)) return product;
+
+  if (Object.prototype.hasOwnProperty.call(input, 'hirePurchaseTerms')) {
+    const normalized = await syncSellerHirePurchaseTerms(strapi, user.id, input.hirePurchaseTerms);
+    return { ...product, hirePurchaseTerms: normalized };
+  }
+
+  const sellerTerms = await getSellerHirePurchaseTerms(strapi, user);
+  if (!sellerTerms) return product;
+  if (product.hirePurchaseTerms === sellerTerms) return product;
+
+  await strapi.db.query('api::product.product').update({
+    where: { id: product.id },
+    data: { hirePurchaseTerms: sellerTerms },
+  }).catch(() => null);
+
+  return { ...product, hirePurchaseTerms: sellerTerms };
 }
 
 function normalizeMarketplaceSource(value) {
@@ -694,7 +776,8 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
       scheduleProductImageProcessing(strapi, { documentId: created.documentId, id: created.id });
     }
 
-    return { data: await attachReviewSummary(strapi, await withSoldCount(strapi, created)) };
+    const withTerms = await applySellerHirePurchaseTerms(strapi, user, created, input);
+    return { data: await attachReviewSummary(strapi, await withSoldCount(strapi, withTerms)) };
   },
 
   /**
@@ -866,7 +949,8 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
       scheduleProductImageProcessing(strapi, { documentId: updated.documentId, id: updated.id });
     }
 
-    return { data: await attachReviewSummary(strapi, await withSoldCount(strapi, updated)) };
+    const withTerms = await applySellerHirePurchaseTerms(strapi, user, updated, input);
+    return { data: await attachReviewSummary(strapi, await withSoldCount(strapi, withTerms)) };
   },
 
   async delete(ctx) {

@@ -137,6 +137,10 @@ module.exports = (plugin) => {
     type: 'string',
   };
 
+  plugin.contentTypes.user.schema.attributes.hirePurchaseTerms = {
+    type: 'text',
+  };
+
   plugin.contentTypes.user.schema.attributes.whatsappNumber = {
     type: 'string',
   };
