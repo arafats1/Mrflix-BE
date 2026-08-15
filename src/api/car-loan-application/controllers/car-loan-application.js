@@ -163,6 +163,10 @@ module.exports = createCoreController('api::car-loan-application.car-loan-applic
       consentCreditEnquiry,
       consentApprovalDisclaimer,
       consentTermsPrivacy,
+      loanType: trim(body.loanType) === 'bank' ? 'bank' : 'hire_purchase',
+      bankName: trim(body.bankName) || null,
+      creditScore: toInt(body.creditScore),
+      maxBankLoanUGX: toInt(body.maxBankLoanUGX),
     };
 
     if (product?.id) data.product = product.id;

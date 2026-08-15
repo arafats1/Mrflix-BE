@@ -694,6 +694,7 @@ export interface ApiCarLoanApplicationCarLoanApplication
     draftAndPublish: false;
   };
   attributes: {
+    bankName: Schema.Attribute.String;
     carDocumentId: Schema.Attribute.String;
     carTitle: Schema.Attribute.String;
     consentApprovalDisclaimer: Schema.Attribute.Boolean &
@@ -705,6 +706,7 @@ export interface ApiCarLoanApplicationCarLoanApplication
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    creditScore: Schema.Attribute.Integer;
     dateOfBirth: Schema.Attribute.Date & Schema.Attribute.Required;
     desiredEquityUGX: Schema.Attribute.Integer &
       Schema.Attribute.SetMinMax<
@@ -754,12 +756,21 @@ export interface ApiCarLoanApplicationCarLoanApplication
     industry: Schema.Attribute.String & Schema.Attribute.Required;
     interestRateType: Schema.Attribute.Enumeration<['floating', 'fixed']>;
     lastName: Schema.Attribute.String & Schema.Attribute.Required;
+    loanType: Schema.Attribute.Enumeration<['hire_purchase', 'bank']> &
+      Schema.Attribute.DefaultTo<'hire_purchase'>;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
       'oneToMany',
       'api::car-loan-application.car-loan-application'
     > &
       Schema.Attribute.Private;
+    maxBankLoanUGX: Schema.Attribute.Integer &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0;
+        },
+        number
+      >;
     monthlyIncomeUGX: Schema.Attribute.Integer &
       Schema.Attribute.Required &
       Schema.Attribute.SetMinMax<
@@ -3997,6 +4008,7 @@ export interface ApiProductProduct extends Struct.CollectionTypeSchema {
         },
         number
       >;
+    hirePurchaseTerms: Schema.Attribute.Text;
     images: Schema.Attribute.JSON & Schema.Attribute.DefaultTo<[]>;
     itemCondition: Schema.Attribute.Enumeration<['Brand New', 'Second Hand']>;
     itemType: Schema.Attribute.Enumeration<['product', 'service']> &

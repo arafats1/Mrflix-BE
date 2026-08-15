@@ -608,6 +608,9 @@ function buildProductPayload(input = {}, existingProduct = null) {
         ? null
         : Math.min(100, Math.max(0, Number(input.hirePurchaseDepositPercent || 0))),
     } : {}),
+    ...(Object.prototype.hasOwnProperty.call(input, 'hirePurchaseTerms') ? {
+      hirePurchaseTerms: String(input.hirePurchaseTerms || '').trim().slice(0, 5000) || null,
+    } : {}),
     ...(Object.prototype.hasOwnProperty.call(input, 'secondHandCondition') ? { secondHandCondition: input.secondHandCondition } : {}),
     ...(Object.prototype.hasOwnProperty.call(input, 'engineSize') ? { engineSize: input.engineSize } : {}),
     ...(Object.prototype.hasOwnProperty.call(input, 'fuelType') ? { fuelType: input.fuelType } : {}),

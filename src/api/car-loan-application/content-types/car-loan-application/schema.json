@@ -172,6 +172,21 @@
     "consentTermsPrivacy": {
       "type": "boolean",
       "required": true
+    },
+    "loanType": {
+      "type": "enumeration",
+      "enum": ["hire_purchase", "bank"],
+      "default": "hire_purchase"
+    },
+    "bankName": {
+      "type": "string"
+    },
+    "creditScore": {
+      "type": "integer"
+    },
+    "maxBankLoanUGX": {
+      "type": "integer",
+      "min": 0
     }
   }
 }
