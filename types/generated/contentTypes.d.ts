@@ -681,6 +681,64 @@ export interface ApiCarInspectionBookingCarInspectionBooking
   };
 }
 
+export interface ApiCarKycCarKyc extends Struct.CollectionTypeSchema {
+  collectionName: 'car_kycs';
+  info: {
+    description: 'KYC / KYB for MOVO car financing applicants';
+    displayName: 'Car KYC';
+    pluralName: 'car-kycs';
+    singularName: 'car-kyc';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    address: Schema.Attribute.String;
+    applicantType: Schema.Attribute.Enumeration<['individual', 'business']> &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<'individual'>;
+    businessCertificateUrl: Schema.Attribute.String;
+    businessName: Schema.Attribute.String;
+    contactEmail: Schema.Attribute.Email;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    dateOfBirth: Schema.Attribute.Date;
+    fullName: Schema.Attribute.String;
+    idBackUrl: Schema.Attribute.String;
+    idFrontUrl: Schema.Attribute.String;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::car-kyc.car-kyc'
+    > &
+      Schema.Attribute.Private;
+    nationalId: Schema.Attribute.String;
+    nationality: Schema.Attribute.String;
+    notes: Schema.Attribute.Text;
+    phone: Schema.Attribute.String;
+    publishedAt: Schema.Attribute.DateTime;
+    registrationNumber: Schema.Attribute.String;
+    reviewedAt: Schema.Attribute.DateTime;
+    reviewerName: Schema.Attribute.String;
+    selfieUrl: Schema.Attribute.String;
+    status: Schema.Attribute.Enumeration<
+      ['draft', 'pending', 'approved', 'rejected']
+    > &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<'draft'>;
+    tin: Schema.Attribute.String;
+    tinCertificateUrl: Schema.Attribute.String;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    user: Schema.Attribute.Relation<
+      'oneToOne',
+      'plugin::users-permissions.user'
+    >;
+  };
+}
+
 export interface ApiCarLoanApplicationCarLoanApplication
   extends Struct.CollectionTypeSchema {
   collectionName: 'car_loan_applications';
@@ -703,11 +761,22 @@ export interface ApiCarLoanApplicationCarLoanApplication
     consentDataSharing: Schema.Attribute.Boolean & Schema.Attribute.Required;
     consentTermsPrivacy: Schema.Attribute.Boolean & Schema.Attribute.Required;
     continueInsuranceAfterYearOne: Schema.Attribute.Boolean;
+    crbFeePaidAt: Schema.Attribute.DateTime;
+    crbFeeUGX: Schema.Attribute.Integer &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0;
+        },
+        number
+      >;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    creditCheckedAt: Schema.Attribute.DateTime;
     creditScore: Schema.Attribute.Integer;
     dateOfBirth: Schema.Attribute.Date & Schema.Attribute.Required;
+    dealerName: Schema.Attribute.String;
+    dealerPhone: Schema.Attribute.String;
     desiredEquityUGX: Schema.Attribute.Integer &
       Schema.Attribute.SetMinMax<
         {
@@ -786,16 +855,71 @@ export interface ApiCarLoanApplicationCarLoanApplication
     > &
       Schema.Attribute.Required;
     occupation: Schema.Attribute.String & Schema.Attribute.Required;
+    offerAcceptedAt: Schema.Attribute.DateTime;
+    offerDeclinedAt: Schema.Attribute.DateTime;
+    offerDepositUGX: Schema.Attribute.Integer &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0;
+        },
+        number
+      >;
+    offerHirePurchasePriceUGX: Schema.Attribute.Integer &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0;
+        },
+        number
+      >;
+    offerLoanAmountUGX: Schema.Attribute.Integer &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0;
+        },
+        number
+      >;
+    offerMonthlyUGX: Schema.Attribute.Integer &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0;
+        },
+        number
+      >;
+    offerTermMonths: Schema.Attribute.Integer &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 1;
+        },
+        number
+      >;
     phoneCountryCode: Schema.Attribute.String &
       Schema.Attribute.DefaultTo<'256'>;
     phoneNumber: Schema.Attribute.String & Schema.Attribute.Required;
     product: Schema.Attribute.Relation<'manyToOne', 'api::product.product'>;
     publishedAt: Schema.Attribute.DateTime;
+    scoreBand: Schema.Attribute.String;
+    signedAgreementUrl: Schema.Attribute.String;
     status: Schema.Attribute.Enumeration<
-      ['new', 'reviewing', 'approved', 'declined', 'archived']
+      [
+        'new',
+        'reviewing',
+        'crb_fee_due',
+        'credit_checked',
+        'offer_ready',
+        'offer_accepted',
+        'offer_declined',
+        'awaiting_bank_inspection',
+        'documents_required',
+        'documents_uploaded',
+        'with_partners',
+        'approved',
+        'declined',
+        'archived',
+      ]
     > &
       Schema.Attribute.Required &
       Schema.Attribute.DefaultTo<'new'>;
+    supportingDocuments: Schema.Attribute.JSON & Schema.Attribute.DefaultTo<[]>;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -4544,6 +4668,16 @@ export interface ApiSiteSettingSiteSetting extends Struct.SingleTypeSchema {
     bookReadPrice: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<500>;
     bookSubscriptionPrice: Schema.Attribute.Integer &
       Schema.Attribute.DefaultTo<10000>;
+    carBankTermsDocuments: Schema.Attribute.JSON;
+    carCrbFeeUGX: Schema.Attribute.Integer &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0;
+        },
+        number
+      > &
+      Schema.Attribute.DefaultTo<25000>;
+    carRequiredDocuments: Schema.Attribute.JSON;
     contentMode: Schema.Attribute.Enumeration<['english', 'luganda', 'both']> &
       Schema.Attribute.DefaultTo<'both'>;
     createdAt: Schema.Attribute.DateTime;
@@ -5580,6 +5714,7 @@ declare module '@strapi/strapi' {
       'api::active-stream.active-stream': ApiActiveStreamActiveStream;
       'api::book.book': ApiBookBook;
       'api::car-inspection-booking.car-inspection-booking': ApiCarInspectionBookingCarInspectionBooking;
+      'api::car-kyc.car-kyc': ApiCarKycCarKyc;
       'api::car-loan-application.car-loan-application': ApiCarLoanApplicationCarLoanApplication;
       'api::car-prequalification.car-prequalification': ApiCarPrequalificationCarPrequalification;
       'api::car-save.car-save': ApiCarSaveCarSave;

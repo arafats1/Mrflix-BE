@@ -14,7 +14,22 @@
   "attributes": {
     "status": {
       "type": "enumeration",
-      "enum": ["new", "reviewing", "approved", "declined", "archived"],
+      "enum": [
+        "new",
+        "reviewing",
+        "crb_fee_due",
+        "credit_checked",
+        "offer_ready",
+        "offer_accepted",
+        "offer_declined",
+        "awaiting_bank_inspection",
+        "documents_required",
+        "documents_uploaded",
+        "with_partners",
+        "approved",
+        "declined",
+        "archived"
+      ],
       "default": "new",
       "required": true
     },
@@ -187,6 +202,58 @@
     "maxBankLoanUGX": {
       "type": "integer",
       "min": 0
+    },
+    "scoreBand": {
+      "type": "string"
+    },
+    "crbFeeUGX": {
+      "type": "integer",
+      "min": 0
+    },
+    "crbFeePaidAt": {
+      "type": "datetime"
+    },
+    "creditCheckedAt": {
+      "type": "datetime"
+    },
+    "offerLoanAmountUGX": {
+      "type": "integer",
+      "min": 0
+    },
+    "offerDepositUGX": {
+      "type": "integer",
+      "min": 0
+    },
+    "offerMonthlyUGX": {
+      "type": "integer",
+      "min": 0
+    },
+    "offerTermMonths": {
+      "type": "integer",
+      "min": 1
+    },
+    "offerHirePurchasePriceUGX": {
+      "type": "integer",
+      "min": 0
+    },
+    "offerAcceptedAt": {
+      "type": "datetime"
+    },
+    "offerDeclinedAt": {
+      "type": "datetime"
+    },
+    "dealerName": {
+      "type": "string"
+    },
+    "dealerPhone": {
+      "type": "string"
+    },
+    "signedAgreementUrl": {
+      "type": "string"
+    },
+    "supportingDocuments": {
+      "type": "json",
+      "default": []
     }
   }
 }

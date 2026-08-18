@@ -1,0 +1,87 @@
+{
+  "kind": "collectionType",
+  "collectionName": "car_kycs",
+  "info": {
+    "singularName": "car-kyc",
+    "pluralName": "car-kycs",
+    "displayName": "Car KYC",
+    "description": "KYC / KYB for MOVO car financing applicants"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "user": {
+      "type": "relation",
+      "relation": "oneToOne",
+      "target": "plugin::users-permissions.user"
+    },
+    "applicantType": {
+      "type": "enumeration",
+      "enum": ["individual", "business"],
+      "default": "individual",
+      "required": true
+    },
+    "status": {
+      "type": "enumeration",
+      "enum": ["draft", "pending", "approved", "rejected"],
+      "default": "draft",
+      "required": true
+    },
+    "fullName": {
+      "type": "string"
+    },
+    "nationalId": {
+      "type": "string"
+    },
+    "dateOfBirth": {
+      "type": "date"
+    },
+    "nationality": {
+      "type": "string"
+    },
+    "phone": {
+      "type": "string"
+    },
+    "contactEmail": {
+      "type": "email"
+    },
+    "address": {
+      "type": "string"
+    },
+    "idFrontUrl": {
+      "type": "string"
+    },
+    "idBackUrl": {
+      "type": "string"
+    },
+    "selfieUrl": {
+      "type": "string"
+    },
+    "businessName": {
+      "type": "string"
+    },
+    "registrationNumber": {
+      "type": "string"
+    },
+    "tin": {
+      "type": "string"
+    },
+    "businessCertificateUrl": {
+      "type": "string"
+    },
+    "tinCertificateUrl": {
+      "type": "string"
+    },
+    "notes": {
+      "type": "text"
+    },
+    "reviewedAt": {
+      "type": "datetime"
+    },
+    "reviewerName": {
+      "type": "string"
+    }
+  }
+}

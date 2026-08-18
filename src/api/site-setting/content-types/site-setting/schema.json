@@ -161,6 +161,17 @@
     },
     "aboutPageContent": {
       "type": "json"
+    },
+    "carCrbFeeUGX": {
+      "type": "integer",
+      "default": 25000,
+      "min": 0
+    },
+    "carRequiredDocuments": {
+      "type": "json"
+    },
+    "carBankTermsDocuments": {
+      "type": "json"
     }
   }
 }

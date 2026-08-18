@@ -38,6 +38,7 @@ async function requireUploadUser(ctx) {
 const OPEN_UPLOAD_FOLDERS = ['stories', 'entrep-documents', 'entrep-course-media', 'entrep-community-media', 'entrep-profile-media', 'entrep-assignments', 'entrep-lesson-question-responses', 'marketplace-chat', 'profile-pictures', 'foundation-images'];
 const PROVIDER_UPLOAD_FOLDERS = ['provider-materials', 'product-images', 'product-videos'];
 const HOMES_UPLOAD_FOLDERS = ['homes-kyc', 'homes-listings'];
+const CARS_UPLOAD_FOLDERS = ['cars-kyc', 'cars-loan-docs'];
 
 function folderMatchesPrefix(folder, prefix) {
   return folder === prefix || folder.startsWith(`${prefix}/`);
@@ -48,6 +49,7 @@ function resolveUploadFolderType(folder) {
   if (OPEN_UPLOAD_FOLDERS.some((prefix) => folderMatchesPrefix(folder, prefix))) return 'open';
   if (PROVIDER_UPLOAD_FOLDERS.some((prefix) => folderMatchesPrefix(folder, prefix))) return 'provider';
   if (HOMES_UPLOAD_FOLDERS.some((prefix) => folderMatchesPrefix(folder, prefix))) return 'homes';
+  if (CARS_UPLOAD_FOLDERS.some((prefix) => folderMatchesPrefix(folder, prefix))) return 'cars';
   return 'other';
 }
 
@@ -97,6 +99,10 @@ async function ensureFolderAccess(ctx, authUser, folder) {
     if (await isAdminUploadUser(authUser)) return true;
     ctx.forbidden('Homes provider access required for this folder');
     return false;
+  }
+
+  if (folderType === 'cars') {
+    return true;
   }
 
   if (await isAdminUploadUser(authUser)) return true;
