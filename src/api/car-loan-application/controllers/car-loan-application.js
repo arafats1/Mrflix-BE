@@ -210,11 +210,45 @@ function dealerFromProduct(product) {
   return {
     dealerName: trim(seller.fullName) || trim(seller.username) || trim(product?.sellerName) || '',
     dealerPhone: trim(seller.phone) || trim(product?.paymentPhone) || '',
+    sellerId: seller.id || null,
   };
+}
+
+function flattenEntry(entry) {
+  if (!entry || typeof entry !== 'object') return entry;
+  const attrs = entry.attributes && typeof entry.attributes === 'object' ? entry.attributes : {};
+  return { ...attrs, ...entry, attributes: undefined };
+}
+
+function shapeSellerLoan(entry) {
+  return shapeLoan(entry);
+}
+
+async function listSellerLoans(strapi, user) {
+  const products = await strapi.db.query(PRODUCT_UID).findMany({
+    where: { seller: { id: user.id } },
+    select: ['id', 'documentId', 'name'],
+    limit: 500,
+  });
+  const ids = (products || []).map((row) => row.id).filter(Boolean);
+  const documentIds = (products || []).map((row) => row.documentId).filter(Boolean);
+  if (!ids.length && !documentIds.length) return [];
+
+  const orFilters = [];
+  if (ids.length) orFilters.push({ product: { id: { $in: ids } } });
+  if (documentIds.length) orFilters.push({ carDocumentId: { $in: documentIds } });
+
+  return strapi.db.query(LOAN_UID).findMany({
+    where: { $or: orFilters },
+    populate: { product: true, user: true },
+    orderBy: { createdAt: 'desc' },
+    limit: 500,
+  });
 }
 
 function shapeLoan(entry, extras = {}) {
   if (!entry) return null;
+  entry = flattenEntry(entry);
   const bank = bankContact(entry.bankName);
   return {
     id: entry.documentId || entry.id,
@@ -232,6 +266,33 @@ function shapeLoan(entry, extras = {}) {
     phoneCountryCode: entry.phoneCountryCode,
     phoneNumber: entry.phoneNumber,
     nationalId: entry.nationalId,
+    dateOfBirth: entry.dateOfBirth,
+    heardAboutUs: entry.heardAboutUs,
+    gender: entry.gender,
+    nationality: entry.nationality,
+    nationalityStatus: entry.nationalityStatus,
+    employmentStatus: entry.employmentStatus,
+    occupation: entry.occupation,
+    industry: entry.industry,
+    employerOrBusinessName: entry.employerOrBusinessName,
+    workEmail: entry.workEmail,
+    monthlyIncomeUGX: entry.monthlyIncomeUGX,
+    employmentDuration: entry.employmentDuration,
+    wantsTradeIn: entry.wantsTradeIn,
+    desiredEquityUGX: entry.desiredEquityUGX,
+    desiredMonthlyPaymentUGX: entry.desiredMonthlyPaymentUGX,
+    interestRateType: entry.interestRateType,
+    desiredInterestRatePercent: entry.desiredInterestRatePercent,
+    desiredResidualPercent: entry.desiredResidualPercent,
+    desiredLoanTermMonths: entry.desiredLoanTermMonths,
+    desiredRepaymentDate: entry.desiredRepaymentDate,
+    continueInsuranceAfterYearOne: entry.continueInsuranceAfterYearOne,
+    feePaymentTiming: entry.feePaymentTiming,
+    upfrontItems: Array.isArray(entry.upfrontItems) ? entry.upfrontItems : [],
+    consentDataSharing: entry.consentDataSharing,
+    consentCreditEnquiry: entry.consentCreditEnquiry,
+    consentApprovalDisclaimer: entry.consentApprovalDisclaimer,
+    consentTermsPrivacy: entry.consentTermsPrivacy,
     hirePurchaseMonthlyUGX: entry.hirePurchaseMonthlyUGX,
     hirePurchaseDepositPercent: entry.hirePurchaseDepositPercent,
     crbFeeUGX: entry.crbFeeUGX,
@@ -289,8 +350,8 @@ function agreementHtml(entry) {
   <h2>3. Indicative offer</h2>
   <table>
     <tr><th>Hire purchase price</th><td>${formatUGX(entry.offerHirePurchasePriceUGX)}</td></tr>
-    <tr><th>Down payment (paid to the bank, not MOVO)</th><td>${formatUGX(entry.offerDepositUGX)}</td></tr>
-    <tr><th>Financed amount</th><td>${formatUGX(entry.offerLoanAmountUGX)}</td></tr>
+    <tr><th>Down payment (paid to the bank, not MOVO)</th><td>${formatUGX(entry.offerLoanAmountUGX)}</td></tr>
+    <tr><th>Financed amount</th><td>${formatUGX(entry.offerDepositUGX)}</td></tr>
     <tr><th>Monthly instalment</th><td>${formatUGX(entry.offerMonthlyUGX)}</td></tr>
     <tr><th>Term</th><td>${entry.offerTermMonths || 12} months</td></tr>
   </table>
@@ -381,10 +442,12 @@ module.exports = createCoreController('api::car-loan-application.car-loan-applic
     const finance = await getFinanceSettings(strapi);
     const dealer = dealerFromProduct(product);
     const loanType = trim(body.loanType) === 'bank' ? 'bank' : 'hire_purchase';
-    const bankName = trim(body.bankName) || (loanType === 'bank' ? BANK_CONTACTS.dfcu.name : null);
+    const bankName = loanType === 'bank'
+      ? (trim(body.bankName) || BANK_CONTACTS.dfcu.name)
+      : null;
 
     const data = {
-      status: 'crb_fee_due',
+      status: loanType === 'bank' ? 'crb_fee_due' : 'new',
       carDocumentId: trim(body.carDocumentId) || product?.documentId || null,
       carTitle: trim(body.carTitle) || product?.name || null,
       hirePurchaseMonthlyUGX: hirePurchaseMonthlyUGX ?? product?.hirePurchaseMonthlyUGX ?? null,
@@ -442,7 +505,9 @@ module.exports = createCoreController('api::car-loan-application.car-loan-applic
         id: entry.documentId || entry.id,
         documentId: entry.documentId,
         status: entry.status,
-        message: 'Application received. Pay the CRB fee to run the credit check.',
+        message: loanType === 'bank'
+          ? 'Application received. Pay the CRB fee to run the credit check.'
+          : 'Application received. Choose a bank loan or continue on hire purchase with the seller.',
       },
     };
   },
@@ -461,7 +526,65 @@ module.exports = createCoreController('api::car-loan-application.car-loan-applic
       sort: { createdAt: 'desc' },
     });
 
-    return { data: (entries || []).map((entry) => shapeLoan(entry)) };
+    ctx.body = { data: (entries || []).map((entry) => shapeLoan(entry)) };
+  },
+
+  async sellerMine(ctx) {
+    const user = await resolveAuthUser(strapi, ctx);
+    if (!user) return ctx.unauthorized('You must be logged in');
+    const rows = await listSellerLoans(strapi, user);
+    ctx.body = { data: (rows || []).map((row) => shapeSellerLoan(row)) };
+  },
+
+  async choosePath(ctx) {
+    const user = await resolveAuthUser(strapi, ctx);
+    if (!user) return ctx.unauthorized('You must be logged in');
+
+    const existing = await findByIdOrDocumentId(strapi, LOAN_UID, ctx.params.id, {
+      populate: ['user'],
+    });
+    if (!existing || !ownsLoan(existing, user)) return ctx.notFound('Loan application not found');
+    if (existing.crbFeePaidAt || !['new', 'crb_fee_due'].includes(existing.status)) {
+      return ctx.badRequest('This application has already started a finance path');
+    }
+
+    const path = trim(ctx.request.body?.data?.path || ctx.request.body?.path || ctx.request.body?.data?.loanType);
+    if (path !== 'bank' && path !== 'hire_purchase') {
+      return ctx.badRequest('Choose bank or hire purchase');
+    }
+
+    if (path === 'bank') {
+      const bank = selectedBank(ctx.request.body?.data || ctx.request.body || {}, existing.bankName);
+      const updated = await strapi.entityService.update(LOAN_UID, existing.id, {
+        data: {
+          loanType: 'bank',
+          bankName: bank?.name || existing.bankName || BANK_CONTACTS.dfcu.name,
+          status: 'crb_fee_due',
+        },
+      });
+      return {
+        data: shapeLoan(updated, {
+          message: 'Continue with a bank loan. Pay the CRB fee next.',
+        }),
+      };
+    }
+
+    const updated = await strapi.entityService.update(LOAN_UID, existing.id, {
+      data: {
+        loanType: 'hire_purchase',
+        bankName: null,
+        status: 'documents_required',
+      },
+    });
+    return {
+      data: shapeLoan(updated, {
+        requiredDocuments: requiredDocumentsFor(
+          (await findKycForUser(strapi, user))?.applicantType === 'business' ? 'business' : 'individual',
+          (await getFinanceSettings(strapi)).carRequiredDocuments,
+        ),
+        message: 'Continue with the seller on hire purchase. Upload the required documents next.',
+      }),
+    };
   },
 
   async findMine(ctx) {
@@ -477,7 +600,7 @@ module.exports = createCoreController('api::car-loan-application.car-loan-applic
     const finance = await getFinanceSettings(strapi);
     const applicantType = kyc?.applicantType === 'business' ? 'business' : 'individual';
 
-    return {
+    ctx.body = {
       data: shapeLoan(existing, {
         requiredDocuments: requiredDocumentsFor(applicantType, finance.carRequiredDocuments),
         applicantType,
@@ -495,6 +618,9 @@ module.exports = createCoreController('api::car-loan-application.car-loan-applic
       populate: ['user'],
     });
     if (!existing || !ownsLoan(existing, user)) return ctx.notFound('Loan application not found');
+    if (existing.loanType !== 'bank') {
+      return ctx.badRequest('Choose the bank loan path before paying the CRB fee');
+    }
     if (!['new', 'crb_fee_due', 'reviewing'].includes(existing.status)) {
       return ctx.badRequest('CRB fee is not due on this application');
     }
@@ -524,6 +650,9 @@ module.exports = createCoreController('api::car-loan-application.car-loan-applic
       populate: ['user', 'product'],
     });
     if (!existing || !ownsLoan(existing, user)) return ctx.notFound('Loan application not found');
+    if (existing.loanType !== 'bank') {
+      return ctx.badRequest('CRB check is only for bank loans');
+    }
     if (!existing.crbFeePaidAt) {
       return ctx.badRequest('Pay the CRB fee before running the credit check');
     }
@@ -816,7 +945,7 @@ module.exports = createCoreController('api::car-loan-application.car-loan-applic
     return {
       data: {
         listings: shapedListings,
-        loans: loans || [],
+        loans: (loans || []).map((entry) => shapeLoan(entry)),
         inspections: inspections || [],
         prequalifications: prequalifications || [],
         kycs: kycs || [],

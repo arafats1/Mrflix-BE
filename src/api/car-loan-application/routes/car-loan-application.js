@@ -16,8 +16,20 @@ module.exports = {
     },
     {
       method: 'GET',
+      path: '/car-loan-applications/seller',
+      handler: 'car-loan-application.sellerMine',
+      config: { auth: false },
+    },
+    {
+      method: 'GET',
       path: '/car-loan-applications/:id/mine',
       handler: 'car-loan-application.findMine',
+      config: { auth: false },
+    },
+    {
+      method: 'POST',
+      path: '/car-loan-applications/:id/path',
+      handler: 'car-loan-application.choosePath',
       config: { auth: false },
     },
     {
