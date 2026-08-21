@@ -18,6 +18,8 @@ const AUTHENTICATED_ACTIONS = [
   'api::product.product.commentVideo',
   'api::push-subscription.push-subscription.upsert',
   'api::push-subscription.push-subscription.remove',
+  'api::active-stream.active-stream.continueWatching',
+  'api::active-stream.active-stream.dismiss',
   // Homes — all authenticated routes
   'api::home-listing.home-listing.myListings',
   'api::home-listing.home-listing.homesAccount',
@@ -36,6 +38,7 @@ const AUTHENTICATED_ACTIONS = [
   'api::home-listing.home-listing.myReports',
   'api::home-listing.home-listing.myBookings',
   'api::home-listing.home-listing.confirmCheckIn',
+  'api::home-listing.home-listing.confirmCheckOut',
   'api::home-listing.home-listing.cancelBooking',
   'api::home-listing.home-listing.cancellationPolicies',
   'api::home-listing.home-listing.myWallet',
@@ -123,29 +126,34 @@ async function ensureRolePermissions(strapi, roleType, actions) {
   if (!role) return;
 
   for (const action of actions) {
-    let permission = await knex('up_permissions').where({ action }).first();
-    if (!permission) {
-      const timestamp = new Date();
-      const inserted = await knex('up_permissions').insert({
-        action,
-        created_at: timestamp,
-        updated_at: timestamp,
-        published_at: timestamp,
-      });
-      const permissionId = Array.isArray(inserted) ? inserted[0] : inserted;
-      permission = await knex('up_permissions').where({ id: permissionId }).first();
-    }
+    try {
+      let permission = await knex('up_permissions').where({ action }).first();
+      if (!permission) {
+        const timestamp = new Date();
+        const inserted = await knex('up_permissions').insert({
+          action,
+          created_at: timestamp,
+          updated_at: timestamp,
+          published_at: timestamp,
+        });
+        const permissionId = Array.isArray(inserted) ? inserted[0] : inserted;
+        permission = await knex('up_permissions').where({ id: permissionId }).first();
+      }
+      if (!permission?.id) continue;
 
-    const link = await knex('up_permissions_role_lnk')
-      .where({ permission_id: permission.id, role_id: role.id })
-      .first();
+      const link = await knex('up_permissions_role_lnk')
+        .where({ permission_id: permission.id, role_id: role.id })
+        .first();
 
-    if (!link) {
-      await knex('up_permissions_role_lnk').insert({
-        permission_id: permission.id,
-        role_id: role.id,
-        permission_ord: 1,
-      });
+      if (!link) {
+        await knex('up_permissions_role_lnk').insert({
+          permission_id: permission.id,
+          role_id: role.id,
+          permission_ord: 1,
+        });
+      }
+    } catch (error) {
+      strapi.log.warn(`Could not grant ${action} to ${roleType}: ${error.message}`);
     }
   }
 }
@@ -156,5 +164,6 @@ module.exports = {
   async bootstrap({ strapi }) {
     await ensureRolePermissions(strapi, 'admin', ADMIN_ACADEMY_ACTIONS);
     await ensureRolePermissions(strapi, 'authenticated', AUTHENTICATED_ACTIONS);
+    await ensureRolePermissions(strapi, 'admin', AUTHENTICATED_ACTIONS);
   },
 };
