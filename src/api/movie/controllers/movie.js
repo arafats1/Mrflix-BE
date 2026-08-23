@@ -545,7 +545,8 @@ module.exports = createCoreController('api::movie.movie', ({ strapi }) => ({
   // Override find to add custom filtering and apply site-setting prices
   async find(ctx) {
     // Allow filtering by type, featured, available
-    const { type, featured, available, q, luganda, translatedLanguage, includeXXX, includePreviews, includeUnavailable, kidsCatalog } = ctx.query;
+    const { type, featured, available, q, luganda, translatedLanguage, includeXXX, includePreviews, includeUnavailable } = ctx.query;
+    const kidsCatalog = String(ctx.query.kidsCatalog ?? ctx.request?.query?.kidsCatalog ?? '') === 'true';
 
     const filters = {};
     if (type) filters.type = type;
@@ -646,22 +647,14 @@ module.exports = createCoreController('api::movie.movie', ({ strapi }) => ({
     }
     void includeXXX;
 
-    // Exclusive Animation titles are flagged isXXX. Kids General Content must
-    // still list them. kidsCatalog skips Exclusive hiding entirely; otherwise
-    // Animation-tagged Exclusive titles stay visible to everyone.
-    if (!allowXXX && kidsCatalog !== 'true') {
+    const filterBlob = JSON.stringify(ctx.query.filters || {});
+    const wantsAnimation = /animation|animated|anime|cartoon/i.test(filterBlob);
+    // Exclusive Animation is stored as isXXX. Never hide those titles from
+    // kids/animation listings — Exclusive page already shows them.
+    if (!allowXXX && !kidsCatalog && !wantsAnimation) {
       filters.$and = [
         ...(filters.$and || []),
-        {
-          $or: [
-            { isXXX: false },
-            { isXXX: { $null: true } },
-            { genres: { $containsi: 'animation' } },
-            { genres: { $containsi: 'animated' } },
-            { genres: { $containsi: 'anime' } },
-            { genres: { $containsi: 'cartoon' } },
-          ],
-        },
+        { $or: [{ isXXX: false }, { isXXX: { $null: true } }] },
       ];
     }
 
