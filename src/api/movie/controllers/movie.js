@@ -5,6 +5,25 @@ const http = require('node:http');
 const https = require('node:https');
 
 const ADULT_SEARCH_TERMS = /(^|\b)(adult|18\+|18\s*plus|mature|sex|erotic|explicit)(\b|$)/i;
+const ANIMATION_GENRE_RE = /animation|animated|anime|cartoon/i;
+
+function collectGenreContainsTerms(node, acc = []) {
+  if (!node || typeof node !== 'object') return acc;
+  const genreContains = node.genres && typeof node.genres === 'object' ? node.genres.$containsi : null;
+  if (genreContains) acc.push(String(genreContains));
+  if (Array.isArray(node.$or)) node.$or.forEach((clause) => collectGenreContainsTerms(clause, acc));
+  if (Array.isArray(node.$and)) node.$and.forEach((clause) => collectGenreContainsTerms(clause, acc));
+  return acc;
+}
+
+function isAnimationGenreQuery(query = {}) {
+  return collectGenreContainsTerms(query.filters || {}).some((term) => ANIMATION_GENRE_RE.test(term));
+}
+
+function hasDocumentIdFilter(query = {}) {
+  const filters = query.filters || {};
+  return Boolean(filters.documentId || filters.id);
+}
 const TMDB_BASE = 'https://api.themoviedb.org/3';
 const DEFAULT_MOVIE_SERVER_BASE_URL = 'https://41.191.79.53:8085/MOVIES/';
 const DEFAULT_MOVIE_SERVER_TIMEOUT_MS = 45000;
@@ -526,7 +545,7 @@ module.exports = createCoreController('api::movie.movie', ({ strapi }) => ({
   // Override find to add custom filtering and apply site-setting prices
   async find(ctx) {
     // Allow filtering by type, featured, available
-    const { type, featured, available, q, luganda, translatedLanguage, includeXXX, includePreviews, includeUnavailable } = ctx.query;
+    const { type, featured, available, q, luganda, translatedLanguage, includeXXX, includePreviews, includeUnavailable, kidsCatalog } = ctx.query;
 
     const filters = {};
     if (type) filters.type = type;
@@ -625,9 +644,11 @@ module.exports = createCoreController('api::movie.movie', ({ strapi }) => ({
       }
       strapi.log.debug(`[movies.find] user=${requester.id} role=${roleType} allowXXX=${allowXXX}`);
     }
-    void includeXXX; // accepted for backward-compat but no longer enforced
+    void includeXXX;
 
-    if (!allowXXX) {
+    // Kids General Content lists every Animation title, including Exclusive.
+    // kidsCatalog requests already constrain by animation/kids genres on the client.
+    if (!allowXXX && kidsCatalog !== 'true') {
       filters.$and = [
         ...(filters.$and || []),
         { $or: [{ isXXX: false }, { isXXX: { $null: true } }] },
