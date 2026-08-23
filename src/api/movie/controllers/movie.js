@@ -646,12 +646,22 @@ module.exports = createCoreController('api::movie.movie', ({ strapi }) => ({
     }
     void includeXXX;
 
-    // Kids General Content lists every Animation title, including Exclusive.
-    // kidsCatalog requests already constrain by animation/kids genres on the client.
+    // Exclusive Animation titles are flagged isXXX. Kids General Content must
+    // still list them. kidsCatalog skips Exclusive hiding entirely; otherwise
+    // Animation-tagged Exclusive titles stay visible to everyone.
     if (!allowXXX && kidsCatalog !== 'true') {
       filters.$and = [
         ...(filters.$and || []),
-        { $or: [{ isXXX: false }, { isXXX: { $null: true } }] },
+        {
+          $or: [
+            { isXXX: false },
+            { isXXX: { $null: true } },
+            { genres: { $containsi: 'animation' } },
+            { genres: { $containsi: 'animated' } },
+            { genres: { $containsi: 'anime' } },
+            { genres: { $containsi: 'cartoon' } },
+          ],
+        },
       ];
     }
 
