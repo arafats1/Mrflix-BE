@@ -5,7 +5,7 @@ const { resolveAuthUser } = require('../../../utils/resolve-auth-user');
 const { assertAdmin } = require('../../../utils/admin-auth');
 const { findByIdOrDocumentId } = require('../../../utils/cars');
 
-const STATUSES = new Set(['new', 'verifying', 'verified', 'contacted', 'rejected', 'cancelled']);
+const STATUSES = new Set(['new', 'verifying', 'verified', 'contacted', 'available', 'sold', 'rejected', 'cancelled']);
 const ACTIVE_STATUSES = ['new', 'verifying', 'verified', 'contacted'];
 const UID = 'api::car-reservation-booking.car-reservation-booking';
 const PRODUCT_UID = 'api::product.product';
@@ -31,6 +31,28 @@ async function findActiveBooking(strapi, productIds) {
     limit: 1,
   });
   return rows?.[0] || null;
+}
+
+async function syncListingForReservationStatus(strapi, reservation, status) {
+  const productId = trim(reservation?.productId);
+  if (!productId || !status) return null;
+
+  const product = await findByIdOrDocumentId(strapi, PRODUCT_UID, productId).catch(() => null);
+  if (!product) return null;
+
+  if (status === 'sold' && product.status !== 'discontinued') {
+    return strapi.entityService.update(PRODUCT_UID, product.id, {
+      data: { status: 'discontinued' },
+    });
+  }
+
+  if (status === 'available' && product.status !== 'active') {
+    return strapi.entityService.update(PRODUCT_UID, product.id, {
+      data: { status: 'active' },
+    });
+  }
+
+  return product;
 }
 
 module.exports = createCoreController(UID, ({ strapi }) => ({
@@ -109,6 +131,10 @@ module.exports = createCoreController(UID, ({ strapi }) => ({
           : {}),
       },
     });
+
+    if (status === 'available' || status === 'sold') {
+      await syncListingForReservationStatus(strapi, existing, status);
+    }
 
     return { data: updated };
   },

@@ -14,7 +14,7 @@
   "attributes": {
     "status": {
       "type": "enumeration",
-      "enum": ["new", "verifying", "verified", "contacted", "rejected", "cancelled"],
+      "enum": ["new", "verifying", "verified", "contacted", "available", "sold", "rejected", "cancelled"],
       "default": "new",
       "required": true
     },

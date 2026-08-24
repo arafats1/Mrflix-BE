@@ -1032,7 +1032,16 @@ export interface ApiCarReservationBookingCarReservationBooking
     proofUrl: Schema.Attribute.Text & Schema.Attribute.Required;
     publishedAt: Schema.Attribute.DateTime;
     status: Schema.Attribute.Enumeration<
-      ['new', 'verifying', 'verified', 'contacted', 'rejected', 'cancelled']
+      [
+        'new',
+        'verifying',
+        'verified',
+        'contacted',
+        'available',
+        'sold',
+        'rejected',
+        'cancelled',
+      ]
     > &
       Schema.Attribute.Required &
       Schema.Attribute.DefaultTo<'new'>;
