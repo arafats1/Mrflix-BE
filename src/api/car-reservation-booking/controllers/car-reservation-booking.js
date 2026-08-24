@@ -38,17 +38,24 @@ async function syncListingForReservationStatus(strapi, reservation, status) {
   if (!productId || !status) return null;
 
   const product = await findByIdOrDocumentId(strapi, PRODUCT_UID, productId).catch(() => null);
-  if (!product) return null;
+  if (!product?.documentId) {
+    strapi.log.warn(`[car-reservation] Could not resolve product for reservation ${reservation?.id || ''} productId=${productId}`);
+    return null;
+  }
 
   if (status === 'sold' && product.status !== 'discontinued') {
-    return strapi.entityService.update(PRODUCT_UID, product.id, {
+    return strapi.documents(PRODUCT_UID).update({
+      documentId: product.documentId,
       data: { status: 'discontinued' },
+      status: 'published',
     });
   }
 
   if (status === 'available' && product.status !== 'active') {
-    return strapi.entityService.update(PRODUCT_UID, product.id, {
+    return strapi.documents(PRODUCT_UID).update({
+      documentId: product.documentId,
       data: { status: 'active' },
+      status: 'published',
     });
   }
 
@@ -133,7 +140,14 @@ module.exports = createCoreController(UID, ({ strapi }) => ({
     });
 
     if (status === 'available' || status === 'sold') {
-      await syncListingForReservationStatus(strapi, existing, status);
+      try {
+        await syncListingForReservationStatus(strapi, existing, status);
+      } catch (error) {
+        strapi.log.error(`[car-reservation] Failed to sync listing for status=${status}: ${error.message}`);
+        return ctx.badRequest(status === 'sold'
+          ? 'Reservation updated, but the car could not be hidden from the list'
+          : 'Reservation updated, but the car could not be marked available');
+      }
     }
 
     return { data: updated };
