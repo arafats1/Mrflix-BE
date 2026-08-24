@@ -996,6 +996,56 @@ export interface ApiCarPrequalificationCarPrequalification
   };
 }
 
+export interface ApiCarReservationBookingCarReservationBooking
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'car_reservation_bookings';
+  info: {
+    description: 'Dealer car reservation bookings with payment proof';
+    displayName: 'Car Reservation Booking';
+    pluralName: 'car-reservation-bookings';
+    singularName: 'car-reservation-booking';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    address: Schema.Attribute.Text & Schema.Attribute.Required;
+    adminNotes: Schema.Attribute.Text;
+    bookingFeeUGX: Schema.Attribute.Integer &
+      Schema.Attribute.DefaultTo<1000000>;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    dealerName: Schema.Attribute.String;
+    dealerSlug: Schema.Attribute.String;
+    fullName: Schema.Attribute.String & Schema.Attribute.Required;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::car-reservation-booking.car-reservation-booking'
+    > &
+      Schema.Attribute.Private;
+    phone: Schema.Attribute.String & Schema.Attribute.Required;
+    productId: Schema.Attribute.String & Schema.Attribute.Required;
+    productName: Schema.Attribute.String & Schema.Attribute.Required;
+    proofFileName: Schema.Attribute.String;
+    proofUrl: Schema.Attribute.Text & Schema.Attribute.Required;
+    publishedAt: Schema.Attribute.DateTime;
+    status: Schema.Attribute.Enumeration<
+      ['new', 'verifying', 'verified', 'contacted', 'rejected', 'cancelled']
+    > &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<'new'>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    user: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+  };
+}
+
 export interface ApiCarSaveCarSave extends Struct.CollectionTypeSchema {
   collectionName: 'car_saves';
   info: {
@@ -5717,6 +5767,7 @@ declare module '@strapi/strapi' {
       'api::car-kyc.car-kyc': ApiCarKycCarKyc;
       'api::car-loan-application.car-loan-application': ApiCarLoanApplicationCarLoanApplication;
       'api::car-prequalification.car-prequalification': ApiCarPrequalificationCarPrequalification;
+      'api::car-reservation-booking.car-reservation-booking': ApiCarReservationBookingCarReservationBooking;
       'api::car-save.car-save': ApiCarSaveCarSave;
       'api::chat-log.chat-log': ApiChatLogChatLog;
       'api::child-profile.child-profile': ApiChildProfileChildProfile;

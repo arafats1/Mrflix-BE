@@ -114,6 +114,7 @@ const AUTHENTICATED_ACTIONS = [
   'api::car-kyc.car-kyc.review',
   'api::car-inspection-booking.car-inspection-booking.mine',
   'api::car-inspection-booking.car-inspection-booking.updateStatus',
+  'api::car-reservation-booking.car-reservation-booking.updateStatus',
   'api::car-prequalification.car-prequalification.updateStatus',
   'api::car-save.car-save.toggle',
   'api::car-save.car-save.mine',

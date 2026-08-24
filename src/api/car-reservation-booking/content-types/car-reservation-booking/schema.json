@@ -1,0 +1,67 @@
+{
+  "kind": "collectionType",
+  "collectionName": "car_reservation_bookings",
+  "info": {
+    "singularName": "car-reservation-booking",
+    "pluralName": "car-reservation-bookings",
+    "displayName": "Car Reservation Booking",
+    "description": "Dealer car reservation bookings with payment proof"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "status": {
+      "type": "enumeration",
+      "enum": ["new", "verifying", "verified", "contacted", "rejected", "cancelled"],
+      "default": "new",
+      "required": true
+    },
+    "fullName": {
+      "type": "string",
+      "required": true
+    },
+    "phone": {
+      "type": "string",
+      "required": true
+    },
+    "address": {
+      "type": "text",
+      "required": true
+    },
+    "productId": {
+      "type": "string",
+      "required": true
+    },
+    "productName": {
+      "type": "string",
+      "required": true
+    },
+    "dealerSlug": {
+      "type": "string"
+    },
+    "dealerName": {
+      "type": "string"
+    },
+    "bookingFeeUGX": {
+      "type": "integer",
+      "default": 1000000
+    },
+    "proofUrl": {
+      "type": "text",
+      "required": true
+    },
+    "proofFileName": {
+      "type": "string"
+    },
+    "adminNotes": {
+      "type": "text"
+    },
+    "user": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user"
+    }
+  }
+}

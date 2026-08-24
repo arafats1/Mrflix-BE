@@ -13,6 +13,7 @@ const { findCarKycForUser } = require('../../../utils/car-kyc');
 const LOAN_UID = 'api::car-loan-application.car-loan-application';
 const KYC_UID = 'api::car-kyc.car-kyc';
 const INSPECTION_UID = 'api::car-inspection-booking.car-inspection-booking';
+const RESERVATION_UID = 'api::car-reservation-booking.car-reservation-booking';
 const PREQUAL_UID = 'api::car-prequalification.car-prequalification';
 const PRODUCT_UID = 'api::product.product';
 const SETTINGS_UID = 'api::site-setting.site-setting';
@@ -893,7 +894,7 @@ module.exports = createCoreController('api::car-loan-application.car-loan-applic
     if (!admin) return;
 
     const finance = await getFinanceSettings(strapi);
-    const [listings, loans, inspections, prequalifications, kycs] = await Promise.all([
+    const [listings, loans, inspections, reservations, prequalifications, kycs] = await Promise.all([
       strapi.entityService.findMany(PRODUCT_UID, {
         filters: carProductFilters(),
         populate: { seller: { fields: ['id', 'username', 'fullName', 'email', 'phone', 'location'] } },
@@ -913,6 +914,11 @@ module.exports = createCoreController('api::car-loan-application.car-loan-applic
         sort: { createdAt: 'desc' },
         limit: 500,
       }),
+      strapi.entityService.findMany(RESERVATION_UID, {
+        populate: { user: { fields: ['id', 'username', 'fullName', 'email', 'phone'] } },
+        sort: { createdAt: 'desc' },
+        limit: 500,
+      }).catch(() => []),
       strapi.entityService.findMany(PREQUAL_UID, {
         sort: { createdAt: 'desc' },
         limit: 500,
@@ -947,6 +953,7 @@ module.exports = createCoreController('api::car-loan-application.car-loan-applic
         listings: shapedListings,
         loans: (loans || []).map((entry) => shapeLoan(entry)),
         inspections: inspections || [],
+        reservations: reservations || [],
         prequalifications: prequalifications || [],
         kycs: kycs || [],
         finance,
@@ -957,6 +964,8 @@ module.exports = createCoreController('api::car-loan-application.car-loan-applic
           newLoans: (loans || []).filter((row) => ['new', 'crb_fee_due'].includes(row.status)).length,
           inspections: (inspections || []).length,
           newInspections: (inspections || []).filter((row) => row.status === 'new').length,
+          reservations: (reservations || []).length,
+          newReservations: (reservations || []).filter((row) => row.status === 'new').length,
           prequalifications: (prequalifications || []).length,
           newPrequalifications: (prequalifications || []).filter((row) => (row.followUpStatus || 'new') === 'new').length,
           pendingKyc: (kycs || []).filter((row) => row.status === 'pending').length,
