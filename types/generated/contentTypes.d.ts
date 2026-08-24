@@ -4206,6 +4206,7 @@ export interface ApiProductProduct extends Struct.CollectionTypeSchema {
       Schema.Attribute.DefaultTo<'core'>;
     name: Schema.Attribute.String & Schema.Attribute.Required;
     negotiable: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
+    numberPlate: Schema.Attribute.String;
     paymentCode: Schema.Attribute.String;
     paymentPhone: Schema.Attribute.String;
     priceUGX: Schema.Attribute.Integer &

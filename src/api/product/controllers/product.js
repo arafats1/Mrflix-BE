@@ -732,6 +732,16 @@ function finalizeProductWritePayload(input = {}, existingProduct = null) {
   };
 }
 
+function optionalEnum(value) {
+  const trimmed = String(value ?? '').trim();
+  return trimmed || null;
+}
+
+function optionalString(value) {
+  const trimmed = String(value ?? '').trim();
+  return trimmed || null;
+}
+
 function buildProductPayload(input = {}, existingProduct = null) {
   const nextItemType = Object.prototype.hasOwnProperty.call(input, 'itemType')
     ? normalizeItemType(input.itemType)
@@ -768,7 +778,7 @@ function buildProductPayload(input = {}, existingProduct = null) {
     ...(Object.prototype.hasOwnProperty.call(input, 'currency') ? { currency: input.currency } : {}),
     ...(Object.prototype.hasOwnProperty.call(input, 'category') ? { category: input.category } : {}),
     ...(Object.prototype.hasOwnProperty.call(input, 'subcategory') ? { subcategory: String(input.subcategory || '').trim() } : {}),
-    ...(Object.prototype.hasOwnProperty.call(input, 'itemCondition') ? { itemCondition: input.itemCondition || null } : {}),
+    ...(Object.prototype.hasOwnProperty.call(input, 'itemCondition') ? { itemCondition: optionalEnum(input.itemCondition) } : {}),
     ...(Object.prototype.hasOwnProperty.call(input, 'images') ? { images: Array.isArray(input.images) ? input.images : [] } : {}),
     ...(
       Object.prototype.hasOwnProperty.call(input, 'featuredImage')
@@ -787,10 +797,10 @@ function buildProductPayload(input = {}, existingProduct = null) {
     ...(Object.prototype.hasOwnProperty.call(input, 'color') ? { color: input.color } : {}),
     ...(Object.prototype.hasOwnProperty.call(input, 'productType') ? { productType: input.productType } : {}),
     ...(Object.prototype.hasOwnProperty.call(input, 'brand') ? { brand: input.brand } : {}),
-    ...(Object.prototype.hasOwnProperty.call(input, 'yearOfManufacture') ? { yearOfManufacture: input.yearOfManufacture } : {}),
-    ...(Object.prototype.hasOwnProperty.call(input, 'condition') ? { condition: input.condition } : {}),
-    ...(Object.prototype.hasOwnProperty.call(input, 'transmission') ? { transmission: input.transmission } : {}),
-    ...(Object.prototype.hasOwnProperty.call(input, 'bodyType') ? { bodyType: input.bodyType } : {}),
+    ...(Object.prototype.hasOwnProperty.call(input, 'yearOfManufacture') ? { yearOfManufacture: optionalString(input.yearOfManufacture) } : {}),
+    ...(Object.prototype.hasOwnProperty.call(input, 'condition') ? { condition: optionalEnum(input.condition) } : {}),
+    ...(Object.prototype.hasOwnProperty.call(input, 'transmission') ? { transmission: optionalEnum(input.transmission) } : {}),
+    ...(Object.prototype.hasOwnProperty.call(input, 'bodyType') ? { bodyType: optionalEnum(input.bodyType) } : {}),
     ...(Object.prototype.hasOwnProperty.call(input, 'negotiable') ? { negotiable: Boolean(input.negotiable) } : {}),
     ...(Object.prototype.hasOwnProperty.call(input, 'hirePurchaseMonthlyUGX') ? {
       hirePurchaseMonthlyUGX: input.hirePurchaseMonthlyUGX === null || input.hirePurchaseMonthlyUGX === ''
@@ -808,12 +818,17 @@ function buildProductPayload(input = {}, existingProduct = null) {
     ...(Object.prototype.hasOwnProperty.call(input, 'showCarMonthlyPayment') ? {
       showCarMonthlyPayment: Boolean(input.showCarMonthlyPayment),
     } : {}),
-    ...(Object.prototype.hasOwnProperty.call(input, 'secondHandCondition') ? { secondHandCondition: input.secondHandCondition } : {}),
-    ...(Object.prototype.hasOwnProperty.call(input, 'engineSize') ? { engineSize: input.engineSize } : {}),
-    ...(Object.prototype.hasOwnProperty.call(input, 'fuelType') ? { fuelType: input.fuelType } : {}),
+    ...(Object.prototype.hasOwnProperty.call(input, 'secondHandCondition') ? { secondHandCondition: optionalEnum(input.secondHandCondition) } : {}),
+    ...(Object.prototype.hasOwnProperty.call(input, 'engineSize') ? { engineSize: optionalEnum(input.engineSize) } : {}),
+    ...(Object.prototype.hasOwnProperty.call(input, 'fuelType') ? { fuelType: optionalEnum(input.fuelType) } : {}),
+    ...(Object.prototype.hasOwnProperty.call(input, 'numberPlate') ? { numberPlate: optionalString(input.numberPlate) } : {}),
     ...(Object.prototype.hasOwnProperty.call(input, 'ageRange') ? { ageRange: input.ageRange } : {}),
     ...(Object.prototype.hasOwnProperty.call(input, 'audience') ? { audience: nextItemType === 'service' ? 'adults' : (input.audience || 'children') } : {}),
-    ...(Object.prototype.hasOwnProperty.call(input, 'discountPercent') ? { discountPercent: input.discountPercent } : {}),
+    ...(Object.prototype.hasOwnProperty.call(input, 'discountPercent') ? {
+      discountPercent: input.discountPercent === null || input.discountPercent === ''
+        ? null
+        : Math.max(0, Number(input.discountPercent || 0)),
+    } : {}),
     ...(Object.prototype.hasOwnProperty.call(input, 'stockQuantity') ? { stockQuantity: nextItemType === 'service' ? 1 : input.stockQuantity } : {}),
     ...(Object.prototype.hasOwnProperty.call(input, 'deliveryAreas') ? { deliveryAreas: normalizeDeliveryAreas(input.deliveryAreas) } : {}),
     ...(Object.prototype.hasOwnProperty.call(input, 'paymentPhone') ? { paymentPhone: input.paymentPhone } : {}),
@@ -863,6 +878,7 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
 
     const input = ctx.request.body?.data || {};
     let payload;
+    let created;
 
     try {
       payload = finalizeProductWritePayload({
@@ -871,21 +887,26 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
         stockQuantity: input.itemType === 'service' ? 1 : input.stockQuantity,
         serviceBookedDates: [],
       });
+
+      created = await strapi.documents('api::product.product').create({
+        data: {
+          ...payload,
+          seller: user.id,
+        },
+        populate: {
+          seller: true,
+        },
+        status: 'published',
+      });
     } catch (err) {
       if (err.name === 'ValidationError') return ctx.badRequest(err.message);
-      throw err;
+      strapi.log.error(`[product.create] ${err.message}`);
+      const message = String(err.message || '');
+      if (message.includes('must be one of') || message.toLowerCase().includes('invalid')) {
+        return ctx.badRequest('One or more car fields have an invalid value. Please re-check condition, transmission, body type, engine size, and fuel.');
+      }
+      return ctx.badRequest(message || 'Could not create product');
     }
-
-    const created = await strapi.documents('api::product.product').create({
-      data: {
-        ...payload,
-        seller: user.id,
-      },
-      populate: {
-        seller: true,
-      },
-      status: 'published',
-    });
 
     if (Array.isArray(payload.images) && payload.images.length > 0) {
       scheduleProductImageProcessing(strapi, { documentId: created.documentId, id: created.id });
@@ -1043,22 +1064,27 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
 
     const input = ctx.request.body?.data || {};
     let payload;
+    let updated;
 
     try {
       payload = finalizeProductWritePayload(input, existingProduct);
+      updated = await strapi.documents('api::product.product').update({
+        documentId: existingProduct.documentId,
+        data: payload,
+        populate: {
+          seller: true,
+        },
+        status: 'published',
+      });
     } catch (err) {
       if (err.name === 'ValidationError') return ctx.badRequest(err.message);
-      throw err;
+      strapi.log.error(`[product.update] ${err.message}`);
+      const message = String(err.message || '');
+      if (message.includes('must be one of') || message.toLowerCase().includes('invalid')) {
+        return ctx.badRequest('One or more car fields have an invalid value. Please re-check condition, transmission, body type, engine size, and fuel.');
+      }
+      return ctx.badRequest(message || 'Could not update product');
     }
-
-    const updated = await strapi.documents('api::product.product').update({
-      documentId: existingProduct.documentId,
-      data: payload,
-      populate: {
-        seller: true,
-      },
-      status: 'published',
-    });
 
     if (Object.prototype.hasOwnProperty.call(input, 'images') && Array.isArray(payload.images) && payload.images.length > 0) {
       scheduleProductImageProcessing(strapi, { documentId: updated.documentId, id: updated.id });

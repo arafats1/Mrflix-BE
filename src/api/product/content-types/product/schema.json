@@ -206,6 +206,9 @@
         "CNG"
       ]
     },
+    "numberPlate": {
+      "type": "string"
+    },
     "negotiable": {
       "type": "boolean",
       "default": false
