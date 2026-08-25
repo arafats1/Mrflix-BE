@@ -12,6 +12,7 @@ function getAllowedOrigins() {
     'https://www.mymovokids.com',
     'https://mymovokids.com',
     'https://movo-kids.vercel.app',
+    'https://movo-academy.vercel.app',
   ]
     .filter(Boolean)
     .map((value) => {
