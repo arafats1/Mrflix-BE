@@ -13,7 +13,7 @@
  *   credentials from .env, then PUTs image variants via the admin endpoint.
  *
  * Usage:
- *   MARKETPLACE_IMAGES_URL=https://mrflix-be-production.up.railway.app \
+ *   MARKETPLACE_IMAGES_URL=https://movo.ara44.com \
  *   MARKETPLACE_IMAGES_TOKEN=<full-access-api-token> \
  *   npm run optimize:marketplace-images:remote -- --force --documentId=p6r56w317b0v101clh0wh6vm
  *

@@ -12,7 +12,7 @@ const crypto = require('crypto');
  * SETUP: Add the callback URL to your Google Cloud Console as an authorized
  * redirect URI:
  *   <PUBLIC_URL>/api/google-mobile-auth/callback
- *   e.g. https://mrflix-be-production.up.railway.app/api/google-mobile-auth/callback
+ *   e.g. https://movo.ara44.com/api/google-mobile-auth/callback
  */
 module.exports = {
   /**

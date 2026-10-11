@@ -15,7 +15,7 @@
  * even before the compressing upload endpoint is deployed.
  *
  * Usage:
- *   MARKETPLACE_ADS_URL=https://mrflix-be-production.up.railway.app \
+ *   MARKETPLACE_ADS_URL=https://movo.ara44.com \
  *   MARKETPLACE_ADS_TOKEN=<full-access-api-token> \
  *   node scripts/optimize-marketplace-ads.js [--dry-run] [--threshold-kb=400]
  */

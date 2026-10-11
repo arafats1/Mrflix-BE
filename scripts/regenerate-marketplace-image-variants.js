@@ -80,7 +80,7 @@ function printHelp() {
     '  npm run regenerate:marketplace-images -- --product=12',
     '  npm run regenerate:marketplace-images -- --documentId=abc123',
     '  npm run regenerate:marketplace-images -- --force --source=entrepreneur',
-    '  MARKETPLACE_IMAGE_REMOTE_URL=https://mrflix-be-production.up.railway.app MARKETPLACE_IMAGE_API_TOKEN=*** npm run regenerate:marketplace-images -- --dry-run --limit=5',
+    '  MARKETPLACE_IMAGE_REMOTE_URL=https://movo.ara44.com MARKETPLACE_IMAGE_API_TOKEN=*** npm run regenerate:marketplace-images -- --dry-run --limit=5',
     '',
     'Options:',
     '  --dry-run        List and process candidates without uploading or updating DB',

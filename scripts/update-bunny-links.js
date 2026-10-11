@@ -2,7 +2,7 @@
 const axios = require('axios');
 
 // CONFIGURATION
-const STRAPI_URL = 'https://mrflix-be-production.up.railway.app';
+const STRAPI_URL = 'https://movo.ara44.com';
 const API_TOKEN = '81a175ff9e9424143e77740a34a21fbcc7256f3a8779eb618cf88b7dc0e92678060f1b61cee57d2d50b6fc38950b80a0f8e3148186bb2cb2641f4f6e247e37e675b66cb3a0ce0a8a7eb1212ffb6dc305ed49a2e205290af46baea9d5c9d176cd29d308aa131af5923c4e50c1dd99e6ab225f7b409a7c4442251881231956a839'; // Get this from Strapi Settings > API Tokens (Full Access)
 
 const OLD_HOST = 'f005.backblazeb2.com/file/Mrflix';

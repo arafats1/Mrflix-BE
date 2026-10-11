@@ -6,7 +6,7 @@ const https = require('https');
 const path = require('path');
 const { pipeline } = require('stream/promises');
 
-const DEFAULT_STRAPI_URL = 'https://mrflix-be-production.up.railway.app';
+const DEFAULT_STRAPI_URL = 'https://movo.ara44.com';
 const DEFAULT_PAGE_SIZE = 100;
 const DEFAULT_POLL_INTERVAL_MS = 30000;
 const DEFAULT_READY_TIMEOUT_MS = 30 * 60 * 1000;
