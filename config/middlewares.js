@@ -11,6 +11,8 @@ const corsOrigins = [
   'https://movo-foundation.vercel.app',
   'https://mrflix.app',
   'https://www.mrflix.app',
+  'https://movo.ara44.com',
+  'https://movobrands.b-cdn.net',
   ...(process.env.CORS_ORIGINS || '').split(',').map((origin) => origin.trim()).filter(Boolean),
 ].filter(Boolean);
 
@@ -24,6 +26,7 @@ module.exports = [
   'strapi::logger',
   'strapi::errors',
   'global::airtel-callback-head',
+  'global::public-host',
   {
     name: 'strapi::security',
     config: {
