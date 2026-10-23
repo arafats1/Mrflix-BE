@@ -4,7 +4,24 @@ const { sendTemplateMessage } = require('./whatsapp');
 const { createNotification } = require('./entrep-notifications');
 
 const SELLER_ORDER_TEMPLATE = 'movo_seller_new_order';
+const SELLER_MESSAGE_TEMPLATE = 'movo_seller_new_message';
 const HOMES_BOOKING_TEMPLATE = 'movo_homes_new_booking';
+
+function sanitizeTemplateParam(value, fallback = '-') {
+  const text = String(value ?? '')
+    .replace(/[\r\n\t]+/g, ' ')
+    .replace(/ {5,}/g, '    ')
+    .trim();
+  return text || fallback;
+}
+
+function previewChatMessage(message) {
+  const raw = (message?.text || '').trim()
+    || (Array.isArray(message?.images) && message.images.length > 0 ? 'Sent a photo' : 'Sent a message');
+  const clean = sanitizeTemplateParam(raw, 'Sent a message');
+  if (clean.length <= 120) return clean;
+  return `${clean.slice(0, 117)}...`;
+}
 
 function formatAmountUGX(amount) {
   const value = Number(amount || 0);
@@ -53,7 +70,8 @@ async function notifySellerWhatsApp(strapi, {
     return;
   }
 
-  const result = await sendTemplateMessage(targetNumber, templateName, 'en', params);
+  const safeParams = (Array.isArray(params) ? params : []).map((value) => sanitizeTemplateParam(value));
+  const result = await sendTemplateMessage(targetNumber, templateName, 'en', safeParams);
   if (!result) return;
   if (result.ok) return;
 
@@ -64,18 +82,46 @@ async function notifySellerWhatsApp(strapi, {
   }
 }
 
+async function resolveSellerContact(strapi, seller, sellerId) {
+  const hasWhatsAppField = seller && Object.prototype.hasOwnProperty.call(seller, 'whatsappNumber');
+  if (seller?.id && hasWhatsAppField) return seller;
+  return strapi.db.query('plugin::users-permissions.user').findOne({
+    where: { id: sellerId },
+    select: ['id', 'fullName', 'username', 'phone', 'paymentPhone', 'whatsappNumber'],
+  });
+}
+
+async function notifySellerMarketplaceMessage(strapi, { thread, message, sender, seller }) {
+  const sellerId = Number(seller?.id || thread?.seller?.id || 0);
+  if (!sellerId) return;
+  if (Number(sender?.id || 0) === sellerId) return;
+
+  const resolvedSeller = await resolveSellerContact(strapi, seller || thread?.seller, sellerId);
+  if (!resolvedSeller) return;
+
+  const senderName = sender?.fullName || sender?.username || 'A buyer';
+  const productName = thread?.product?.name || 'your listing';
+  const threadId = thread?.documentId || '';
+
+  await notifySellerWhatsApp(strapi, {
+    seller: resolvedSeller,
+    templateName: SELLER_MESSAGE_TEMPLATE,
+    params: [
+      resolvedSeller.fullName || resolvedSeller.username || 'Seller',
+      senderName,
+      productName,
+      previewChatMessage(message),
+    ],
+    dashboardUrl: threadId ? `/marketplace/chat/${threadId}` : '/providers/dashboard',
+  });
+}
+
 async function notifySellerMarketplaceOrder(strapi, purchase) {
   const seller = purchase?.product?.seller;
   const sellerId = Number(seller?.id || purchase?.product?.seller || 0);
   if (!sellerId) return;
 
-  let resolvedSeller = seller;
-  if (!resolvedSeller?.phone && !resolvedSeller?.whatsappNumber) {
-    resolvedSeller = await strapi.db.query('plugin::users-permissions.user').findOne({
-      where: { id: sellerId },
-      select: ['id', 'fullName', 'username', 'phone', 'paymentPhone', 'whatsappNumber'],
-    });
-  }
+  const resolvedSeller = await resolveSellerContact(strapi, seller, sellerId);
   if (!resolvedSeller) return;
 
   const productName = purchase.product?.name || 'your product';
@@ -135,7 +181,9 @@ async function notifySellerHomesBooking(strapi, booking) {
 module.exports = {
   notifySellerWhatsApp,
   notifySellerMarketplaceOrder,
+  notifySellerMarketplaceMessage,
   notifySellerHomesBooking,
   SELLER_ORDER_TEMPLATE,
+  SELLER_MESSAGE_TEMPLATE,
   HOMES_BOOKING_TEMPLATE,
 };
