@@ -98,5 +98,13 @@ module.exports = {
         auth: false,
       },
     },
+    {
+      method: 'POST',
+      path: '/products/admin/clear-video-image-fields',
+      handler: 'product.adminClearVideoImageFields',
+      config: {
+        auth: false,
+      },
+    },
   ],
 };

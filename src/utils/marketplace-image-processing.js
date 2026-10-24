@@ -27,6 +27,24 @@ const ORIGINAL_COMPRESSION_STEPS = [
   { maxDimension: 640, quality: 40 },
 ];
 
+const VIDEO_URL_PATTERN = /\.(mp4|mov|webm|m4v|mkv|avi|m3u8|mpd|ts)$/;
+
+/**
+ * True when a stored URL points at a video file. Image fields must never hold
+ * one: clients that trust them download the whole upload to draw a thumbnail.
+ */
+function isVideoUrl(url) {
+  const value = String(url || '').toLowerCase().split(/[?#]/)[0];
+  return VIDEO_URL_PATTERN.test(value);
+}
+
+/** True for a non-empty URL that is not a video file. */
+function isImageUrl(url) {
+  const value = String(url || '').trim();
+  if (!value) return false;
+  return !isVideoUrl(value);
+}
+
 function getStorage() {
   const provider = (process.env.STORAGE_PROVIDER || 'backblaze').toLowerCase();
   const isBackblaze = provider === 'backblaze';
@@ -348,6 +366,8 @@ module.exports = {
   fetchBuffer,
   makeAbsoluteUrl,
   inferFeaturedIndex,
+  isVideoUrl,
+  isImageUrl,
   TARGET_ORIGINAL_BYTES,
   VARIANT_SPECS,
   OPTIMIZED_ORIGINAL_SPEC,

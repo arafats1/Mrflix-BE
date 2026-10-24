@@ -443,6 +443,7 @@ module.exports = (plugin) => {
         ? userWithRole.sellerVerificationStatus
         : (userWithRole.sellerNin && userWithRole.sellerIdFrontUrl && userWithRole.sellerIdBackUrl ? 'pending' : 'not_submitted'),
       sellerVerified: userWithRole.sellerVerificationStatus === 'approved' && userWithRole.sellerVerified === true,
+      sellerNin: userWithRole.sellerNin || '',
       hasSellerNin: !!userWithRole.sellerNin,
       hasNationalIdFront: !!userWithRole.sellerIdFrontUrl,
       hasNationalIdBack: !!userWithRole.sellerIdBackUrl,

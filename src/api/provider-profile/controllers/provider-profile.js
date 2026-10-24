@@ -199,14 +199,22 @@ module.exports = {
     if (!userIsSeller(currentUser)) return ctx.forbidden('Only seller accounts can submit verification');
 
     const body = ctx.request.body?.data || ctx.request.body || {};
-    const nin = normalizeNin(body.nin);
+    const incomingNinRaw = typeof body.nin === 'string' ? body.nin.trim() : '';
+    const incomingNin = normalizeNin(body.nin);
+    const storedNin = normalizeNin(currentUser.sellerNin);
     const nationalIdFrontUrl = typeof body.nationalIdFrontUrl === 'string' ? body.nationalIdFrontUrl.trim() : '';
     const nationalIdBackUrl = typeof body.nationalIdBackUrl === 'string' ? body.nationalIdBackUrl.trim() : '';
 
+    let nin = storedNin;
+    if (incomingNinRaw) {
+      if (!isValidNin(incomingNin)) return ctx.badRequest('Enter a valid NIN using 8 to 20 letters or numbers');
+      nin = incomingNin;
+    }
     if (!isValidNin(nin)) return ctx.badRequest('Enter a valid NIN using 8 to 20 letters or numbers');
     if (!isHttpUrl(nationalIdFrontUrl)) return ctx.badRequest('Upload the front of your National ID');
     if (!isHttpUrl(nationalIdBackUrl)) return ctx.badRequest('Upload the back of your National ID');
 
+    // A replacement always drops the badge until an admin approves the new photos.
     await strapi.db.query('plugin::users-permissions.user').update({
       where: { id: currentUser.id },
       data: {

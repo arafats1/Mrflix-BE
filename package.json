@@ -15,6 +15,7 @@
     "optimize:marketplace-images:remote": "node scripts/optimize-marketplace-images-remote.js",
     "optimize:marketplace-ads": "node scripts/optimize-marketplace-ads.js",
     "migrate:bunny-stream": "node scripts/migrate-bunny-stream.js",
+    "backfill:video-image-fields": "node scripts/backfill-video-image-fields.js",
     "push:vapid": "web-push generate-vapid-keys",
     "start": "strapi start",
     "strapi": "strapi",

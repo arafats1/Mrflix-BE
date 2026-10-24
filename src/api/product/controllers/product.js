@@ -5,7 +5,7 @@
  */
 
 const { createCoreController } = require('@strapi/strapi').factories;
-const { scheduleProductImageProcessing, processProductImages } = require('../../../utils/marketplace-image-processing');
+const { scheduleProductImageProcessing, processProductImages, isVideoUrl, isImageUrl } = require('../../../utils/marketplace-image-processing');
 const { assertAdmin } = require('../../../utils/admin-auth');
 const { resolveAuthUser } = require('../../../utils/resolve-auth-user');
 const { notifySellerMissingShopLocation } = require('../../../utils/marketplace-notifications');
@@ -1533,5 +1533,103 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
     }
 
     return { data: { success: true, documentId } };
+  },
+
+  /**
+   * Admin-only: clear video URLs that were stored in image fields.
+   *
+   * Video-only listings used to fall back to the video's own URL for
+   * `featuredImage` and `productVideoThumbnailUrl`, so clients downloaded the
+   * whole upload (one was a 36MB .mov) trying to draw a thumbnail. The seller
+   * editor no longer writes these; this clears the rows that already have them.
+   *
+   * Where the product has a real image rendition in `images[]` we promote it;
+   * otherwise the field is emptied, which makes clients draw their placeholder.
+   * Pass `dryRun: true` to get the plan without writing.
+   */
+  async adminClearVideoImageFields(ctx) {
+    if (!(await assertAdmin(ctx, strapi))) return;
+
+    const body = ctx.request.body || {};
+    const query = ctx.query || {};
+    const dryRun = body.dryRun === true || query.dryRun === 'true';
+    const documentId = String(body.documentId || query.documentId || '').trim() || null;
+
+    const where = documentId ? { documentId } : {};
+    // The only stored image-url columns; `featuredImageCard` / `...Thumbnail`
+    // are derived from these by the clients, not persisted.
+    const fields = ['featuredImage', 'productVideoThumbnailUrl'];
+    const batchSize = 200;
+
+    const changes = [];
+    let scanned = 0;
+    let offset = 0;
+
+    // Page explicitly rather than asking for every row at once: the catalog is
+    // over a thousand products and the query engine has no "all" sentinel.
+    for (;;) {
+      const products = await strapi.db.query('api::product.product').findMany({
+        where,
+        select: ['id', 'documentId', 'name', ...fields, 'images'],
+        orderBy: { id: 'asc' },
+        limit: documentId ? 1 : batchSize,
+        offset,
+      });
+
+      if (!products.length) break;
+      scanned += products.length;
+
+      for (const product of products) {
+        const variants = Array.isArray(product.images) ? product.images : [];
+        const firstImage = variants
+          .map((variant) => (typeof variant === 'string' ? variant : variant?.card || variant?.original || variant?.thumbnail))
+          .find((url) => isImageUrl(url)) || '';
+
+        const data = {};
+        for (const field of fields) {
+          if (isVideoUrl(product[field])) {
+            data[field] = firstImage || null;
+          }
+        }
+
+        if (!Object.keys(data).length) continue;
+
+        changes.push({
+          id: product.id,
+          documentId: product.documentId,
+          name: product.name,
+          replacement: firstImage || null,
+          fields: Object.keys(data),
+          before: Object.fromEntries(Object.keys(data).map((field) => [field, product[field]])),
+        });
+
+        if (dryRun) continue;
+
+        for (const status of ['published', 'draft']) {
+          try {
+            await strapi.documents('api::product.product').update({
+              documentId: product.documentId,
+              data,
+              status,
+            });
+          } catch (_) {
+            // A draft row may not exist; the published write is what the API serves.
+          }
+        }
+      }
+
+      if (documentId || products.length < batchSize) break;
+      offset += batchSize;
+    }
+
+    return {
+      data: {
+        dryRun,
+        scanned,
+        affected: changes.length,
+        updated: dryRun ? 0 : changes.length,
+        changes,
+      },
+    };
   },
 }));
