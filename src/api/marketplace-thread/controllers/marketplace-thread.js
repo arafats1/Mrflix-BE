@@ -329,6 +329,10 @@ module.exports = createCoreController('api::marketplace-thread.marketplace-threa
         name: seller.fullName || seller.username || 'Seller',
         lastSeenAt: seller.lastSeenAt || null,
         isOnline: isOnline(seller.lastSeenAt),
+        sellerVerified: seller.sellerVerified === true && seller.sellerVerificationStatus === 'approved',
+        businessLatitude: seller.businessLatitude == null || seller.businessLatitude === '' || !Number.isFinite(Number(seller.businessLatitude)) ? null : Number(seller.businessLatitude),
+        businessLongitude: seller.businessLongitude == null || seller.businessLongitude === '' || !Number.isFinite(Number(seller.businessLongitude)) ? null : Number(seller.businessLongitude),
+        businessLocationName: String(seller.businessLocationName || '').trim(),
       },
     };
   },
@@ -368,6 +372,11 @@ const THREAD_USER_SELECT = [
   'avatarUrl',
   'phone',
   'paymentPhone',
+  'sellerVerified',
+  'sellerVerificationStatus',
+  'businessLatitude',
+  'businessLongitude',
+  'businessLocationName',
 ];
 
 function participantPhone(user) {

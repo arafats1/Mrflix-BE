@@ -1,0 +1,29 @@
+{
+  "kind": "collectionType",
+  "collectionName": "sales_agents",
+  "info": {
+    "singularName": "sales-agent",
+    "pluralName": "sales-agents",
+    "displayName": "Sales Agent",
+    "description": "Field sales agents who sign up marketplace sellers"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "agentName": {
+      "type": "string",
+      "required": true
+    },
+    "code": {
+      "type": "string",
+      "required": true,
+      "unique": true
+    },
+    "active": {
+      "type": "boolean",
+      "default": true
+    }
+  }
+}

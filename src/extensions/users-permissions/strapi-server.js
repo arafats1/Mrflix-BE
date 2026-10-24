@@ -7,6 +7,21 @@ const { sendSms } = require('../../utils/sms');
 const { canAccessParentDashboard } = require('../../utils/parent-access');
 
 const { ValidationError } = utils.errors;
+
+async function resolveSellerSalesCode(strapi, rawCode) {
+  const code = String(rawCode || '').replace(/\D/g, '');
+  if (!code) return '';
+  if (!/^\d{4}$/.test(code)) {
+    throw new ValidationError('Sales agent code must be 4 digits');
+  }
+
+  const agent = await strapi.db.query('api::sales-agent.sales-agent').findOne({
+    where: { code, active: true },
+    select: ['id', 'code'],
+  });
+  if (!agent) throw new ValidationError('That sales agent code was not found');
+  return agent.code;
+}
 const {
   looksLikePhone,
   normalizePhone,
@@ -236,6 +251,51 @@ module.exports = (plugin) => {
     type: 'string',
   };
 
+  // Seller identity. NIN and ID photos stay private. The public shop only
+  // receives sellerVerified plus the business coordinates.
+  plugin.contentTypes.user.schema.attributes.sellerNin = {
+    type: 'string',
+    private: true,
+  };
+
+  plugin.contentTypes.user.schema.attributes.sellerIdFrontUrl = {
+    type: 'text',
+    private: true,
+  };
+
+  plugin.contentTypes.user.schema.attributes.sellerIdBackUrl = {
+    type: 'text',
+    private: true,
+  };
+
+  plugin.contentTypes.user.schema.attributes.sellerVerified = {
+    type: 'boolean',
+    default: false,
+  };
+
+  plugin.contentTypes.user.schema.attributes.sellerVerificationStatus = {
+    type: 'enumeration',
+    enum: ['not_submitted', 'pending', 'approved', 'rejected'],
+    default: 'not_submitted',
+  };
+
+  plugin.contentTypes.user.schema.attributes.sellerSalesCode = {
+    type: 'string',
+    private: true,
+  };
+
+  plugin.contentTypes.user.schema.attributes.businessLatitude = {
+    type: 'float',
+  };
+
+  plugin.contentTypes.user.schema.attributes.businessLongitude = {
+    type: 'float',
+  };
+
+  plugin.contentTypes.user.schema.attributes.businessLocationName = {
+    type: 'string',
+  };
+
   // Override the me controller to populate role.
   // `plugin.controllers.user` is a plain object (not a factory), so direct
   // property assignment is the correct override pattern here.
@@ -379,6 +439,16 @@ module.exports = (plugin) => {
           }))
         : [],
       avatarUrl: userWithRole.avatarUrl || null,
+      sellerVerificationStatus: ['pending', 'approved', 'rejected'].includes(userWithRole.sellerVerificationStatus)
+        ? userWithRole.sellerVerificationStatus
+        : (userWithRole.sellerNin && userWithRole.sellerIdFrontUrl && userWithRole.sellerIdBackUrl ? 'pending' : 'not_submitted'),
+      sellerVerified: userWithRole.sellerVerificationStatus === 'approved' && userWithRole.sellerVerified === true,
+      hasSellerNin: !!userWithRole.sellerNin,
+      hasNationalIdFront: !!userWithRole.sellerIdFrontUrl,
+      hasNationalIdBack: !!userWithRole.sellerIdBackUrl,
+      businessLatitude: userWithRole.businessLatitude == null || userWithRole.businessLatitude === '' || !Number.isFinite(Number(userWithRole.businessLatitude)) ? null : Number(userWithRole.businessLatitude),
+      businessLongitude: userWithRole.businessLongitude == null || userWithRole.businessLongitude === '' || !Number.isFinite(Number(userWithRole.businessLongitude)) ? null : Number(userWithRole.businessLongitude),
+      businessLocationName: String(userWithRole.businessLocationName || '').trim(),
       isKeypUser: !!userWithRole.isKeypUser,
       keypActivatedAt: userWithRole.keypActivatedAt,
       lastSeenAt: userWithRole.lastSeenAt || null,
@@ -511,6 +581,8 @@ module.exports = (plugin) => {
           throw new ValidationError('Country is required for seller accounts');
         }
 
+        const sellerSalesCode = await resolveSellerSalesCode(strapi, body.salesAgentCode);
+
         if (!normalizedPhone) {
           throw new ValidationError('Phone number is required');
         }
@@ -521,14 +593,14 @@ module.exports = (plugin) => {
           if (submittedEmail) {
             const byEmail = await strapi.db.query('plugin::users-permissions.user').findOne({
               where: { email: submittedEmail },
-              select: ['id', 'email', 'username', 'password', 'phone', 'accountType', 'providerType', 'providerTypes', 'isParent'],
+              select: ['id', 'email', 'username', 'password', 'phone', 'accountType', 'providerType', 'providerTypes', 'isParent', 'sellerSalesCode'],
             });
             if (byEmail) return byEmail;
           }
 
           const users = await strapi.db.query('plugin::users-permissions.user').findMany({
             where: { phone: { $notNull: true } },
-            select: ['id', 'email', 'username', 'password', 'phone', 'accountType', 'providerType', 'providerTypes', 'isParent'],
+            select: ['id', 'email', 'username', 'password', 'phone', 'accountType', 'providerType', 'providerTypes', 'isParent', 'sellerSalesCode'],
             limit: 20000,
           });
 
@@ -567,6 +639,7 @@ module.exports = (plugin) => {
           if (educationLevels.includes('Other')) updateData.educationLevelOther = educationLevelOther;
           if (homesRole) updateData.homesRole = homesRole;
           if (foundationRole) updateData.foundationRole = foundationRole;
+          if (sellerSalesCode && !existingUser.sellerSalesCode) updateData.sellerSalesCode = sellerSalesCode;
 
           await strapi.db.query('plugin::users-permissions.user').update({
             where: { id: existingUser.id },
@@ -599,6 +672,7 @@ module.exports = (plugin) => {
           educationLevelOther: educationLevels.includes('Other') ? educationLevelOther : undefined,
           homesRole,
           foundationRole,
+          sellerSalesCode: sellerSalesCode || undefined,
         };
 
         // Email is optional on phone-first signup. Strapi's core register
@@ -641,6 +715,7 @@ module.exports = (plugin) => {
         if (extras.educationLevelOther) updateData.educationLevelOther = extras.educationLevelOther;
         if (extras.homesRole) updateData.homesRole = extras.homesRole;
         if (extras.foundationRole) updateData.foundationRole = extras.foundationRole;
+        if (extras.sellerSalesCode) updateData.sellerSalesCode = extras.sellerSalesCode;
         if (extras.accountType === 'provider') updateData.isParent = false;
 
         if (Object.keys(updateData).length > 0) {

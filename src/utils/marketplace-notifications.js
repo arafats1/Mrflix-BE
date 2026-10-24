@@ -142,8 +142,45 @@ async function notifyBuyerOrderStatus(strapi, purchase, sellerId, nextStatus) {
   }
 }
 
+function sellerHasShopCoordinates(seller) {
+  const latitude = seller?.businessLatitude;
+  const longitude = seller?.businessLongitude;
+  if (latitude == null || latitude === '' || longitude == null || longitude === '') return false;
+  return Number.isFinite(Number(latitude)) && Number.isFinite(Number(longitude));
+}
+
+async function notifySellerMissingShopLocation(strapi, seller) {
+  const sellerId = Number(seller?.id || seller);
+  if (!sellerId || sellerHasShopCoordinates(seller)) return;
+
+  try {
+    const existing = await strapi.db.query('api::entrep-notification.entrep-notification').findMany({
+      where: {
+        recipient: sellerId,
+        title: 'Add your shop location',
+        readAt: { $null: true },
+      },
+      limit: 1,
+    });
+    if (existing?.length) return;
+
+    await createNotification(strapi, {
+      recipientId: sellerId,
+      type: 'system',
+      title: 'Add your shop location',
+      message: 'Buyers cannot see a shop location on your products until you save your business coordinates.',
+      actionUrl: '/providers/dashboard',
+      metadata: { category: 'seller_shop_location' },
+    });
+  } catch (err) {
+    strapi.log.warn(`Shop location notification failed: ${err.message}`);
+  }
+}
+
 module.exports = {
   notifyMarketplaceMessage,
   notifyProductOrderPlaced,
   notifyBuyerOrderStatus,
+  notifySellerMissingShopLocation,
+  sellerHasShopCoordinates,
 };

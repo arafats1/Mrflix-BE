@@ -8,6 +8,8 @@ const { createCoreController } = require('@strapi/strapi').factories;
 const { scheduleProductImageProcessing, processProductImages } = require('../../../utils/marketplace-image-processing');
 const { assertAdmin } = require('../../../utils/admin-auth');
 const { resolveAuthUser } = require('../../../utils/resolve-auth-user');
+const { notifySellerMissingShopLocation } = require('../../../utils/marketplace-notifications');
+const { reverseGeocodePlaceName } = require('../../../utils/reverse-geocode');
 const { isCarCategory, carProductFilters, calculateHirePurchaseMonthly } = require('../../../utils/cars');
 
 async function requireAuthUser(strapi, ctx) {
@@ -339,8 +341,83 @@ async function getEntrepreneurProfileForUser(strapi, userId) {
   return profiles?.[0] || null;
 }
 
+function finiteCoordinate(value) {
+  if (value == null || value === '') return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function publicSellerTrust(seller) {
+  return {
+    sellerVerified: seller?.sellerVerified === true && seller?.sellerVerificationStatus === 'approved',
+    sellerLatitude: finiteCoordinate(seller?.businessLatitude),
+    sellerLongitude: finiteCoordinate(seller?.businessLongitude),
+    sellerLocationName: String(seller?.businessLocationName || '').trim(),
+  };
+}
+
+const pendingPlaceNames = new Map();
+
+async function ensureSellerPlaceName(strapi, seller) {
+  if (!seller?.id) return seller;
+  const latitude = finiteCoordinate(seller.businessLatitude);
+  const longitude = finiteCoordinate(seller.businessLongitude);
+  if (latitude == null || longitude == null) return seller;
+  if (String(seller.businessLocationName || '').trim()) return seller;
+
+  const key = String(seller.id);
+  if (!pendingPlaceNames.has(key)) {
+    const lookup = reverseGeocodePlaceName(latitude, longitude)
+      .then(async (name) => {
+        if (!name) return '';
+        await strapi.db.query('plugin::users-permissions.user').update({
+          where: { id: seller.id },
+          data: { businessLocationName: name },
+        }).catch((error) => {
+          strapi.log.warn(`Could not store shop place name: ${error.message}`);
+        });
+        return name;
+      })
+      .catch((error) => {
+        strapi.log.warn(`Shop place name lookup failed: ${error.message}`);
+        return '';
+      })
+      .finally(() => {
+        pendingPlaceNames.delete(key);
+      });
+    pendingPlaceNames.set(key, lookup);
+  }
+
+  const name = await pendingPlaceNames.get(key);
+  if (name) seller.businessLocationName = name;
+  return seller;
+}
+
+async function ensureSellerPlaceNames(strapi, sellers) {
+  const seen = new Set();
+  for (const seller of sellers) {
+    if (!seller?.id || seen.has(seller.id)) continue;
+    seen.add(seller.id);
+    await ensureSellerPlaceName(strapi, seller);
+  }
+}
+
+function presentPublicSeller(seller) {
+  if (!seller || typeof seller !== 'object') return seller;
+  const next = { ...seller };
+  delete next.sellerNin;
+  delete next.sellerIdFrontUrl;
+  delete next.sellerIdBackUrl;
+  delete next.sellerSalesCode;
+  delete next.password;
+  delete next.resetPasswordToken;
+  delete next.phoneOtpToken;
+  return next;
+}
+
 async function enrichSellerIdentity(strapi, product) {
   if (!product?.seller?.id) return product;
+  await ensureSellerPlaceName(strapi, product.seller);
 
   const entrepreneurProfile = await getEntrepreneurProfileForUser(strapi, product.seller.id);
   const sellerDisplayName = entrepreneurProfile?.fullName || product.seller?.fullName || product.seller?.shopName || product.seller?.username || product.seller?.email || null;
@@ -351,11 +428,13 @@ async function enrichSellerIdentity(strapi, product) {
 
   return {
     ...product,
+    seller: presentPublicSeller(product.seller),
     sellerDisplayName,
     sellerLocation,
     sellerPhone,
     sellerAge,
     sellerProfilePhotoUrl,
+    ...publicSellerTrust(product.seller),
   };
 }
 
@@ -403,17 +482,21 @@ async function enrichSellerIdentities(strapi, products) {
     }
   }
 
+  await ensureSellerPlaceNames(strapi, list.map((product) => product.seller));
+
   const enriched = list.map((product) => {
     if (!product?.seller?.id) return product;
     const entrepreneurProfile = profileByUserId.get(product.seller.id) || null;
 
     return {
       ...product,
+      seller: presentPublicSeller(product.seller),
       sellerDisplayName: entrepreneurProfile?.fullName || product.seller?.fullName || product.seller?.shopName || product.seller?.username || product.seller?.email || null,
       sellerLocation: entrepreneurProfile?.location || product.seller?.location || null,
       sellerPhone: entrepreneurProfile?.phone || product.paymentPhone || product.seller?.phone || product.seller?.paymentPhone || null,
       sellerAge: entrepreneurProfile?.age || null,
       sellerProfilePhotoUrl: entrepreneurProfile?.profilePhotoUrl || product.seller?.avatarUrl || null,
+      ...publicSellerTrust(product.seller),
     };
   });
 
@@ -912,6 +995,10 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
       scheduleProductImageProcessing(strapi, { documentId: created.documentId, id: created.id });
     }
 
+    notifySellerMissingShopLocation(strapi, user).catch((err) => {
+      strapi.log.warn(`Shop location notification failed: ${err.message}`);
+    });
+
     const withTerms = await applySellerHirePurchaseSettings(strapi, user, created, input);
     return { data: await attachReviewSummary(strapi, await withSoldCount(strapi, withTerms)) };
   },
@@ -1133,6 +1220,9 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
 
     const soldProduct = await withSoldCount(strapi, product);
     const promotedProduct = await attachActivePromotionState(strapi, soldProduct);
+    notifySellerMissingShopLocation(strapi, product.seller).catch((err) => {
+      strapi.log.warn(`Shop location notification failed: ${err.message}`);
+    });
     return { data: await attachReviewSummary(strapi, promotedProduct) };
   },
 

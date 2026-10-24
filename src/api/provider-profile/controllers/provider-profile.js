@@ -1,6 +1,7 @@
 'use strict';
 
 const { resolveAuthUser } = require('../../../utils/resolve-auth-user');
+const { reverseGeocodePlaceName } = require('../../../utils/reverse-geocode');
 
 const EDUCATION_LEVEL_OPTIONS = ['Kindergarten', 'Primary', 'Secondary', 'Technical college', 'University', 'Other'];
 const RELIGION_OPTIONS = ['Catholic', 'Protestant', 'Pentecostal', 'Adventist', 'Orthodox', 'Muslim', 'Hindu', 'Bahai', 'Traditional', 'Other'];
@@ -51,6 +52,49 @@ function normalizePhone(phone) {
   let normalized = raw.replace(/[\s()+-]/g, '');
   if (normalized.startsWith('0')) normalized = `256${normalized.slice(1)}`;
   return normalized;
+}
+
+async function requireAdminUser(strapi, ctx) {
+  const currentUser = await resolveAuthUser(strapi, ctx);
+  if (!currentUser) {
+    ctx.unauthorized();
+    return null;
+  }
+
+  const withRole = await strapi.db.query('plugin::users-permissions.user').findOne({
+    where: { id: currentUser.id },
+    populate: ['role'],
+  });
+  const isAdmin = withRole?.role?.type === 'admin' || withRole?.role?.name === 'Admin';
+  if (!isAdmin) {
+    ctx.forbidden('Admin only');
+    return null;
+  }
+  return withRole;
+}
+
+function userIsSeller(user) {
+  const listedTypes = normalizeProviderTypes(user?.providerTypes);
+  if (listedTypes.includes('seller')) return true;
+  return normalizeProviderTypes(user?.providerType).includes('seller');
+}
+
+function normalizeNin(value) {
+  return String(value || '').trim().toUpperCase().replace(/\s+/g, '');
+}
+
+function isValidNin(value) {
+  return /^[A-Z0-9]{8,20}$/.test(normalizeNin(value));
+}
+
+function isHttpUrl(value) {
+  return /^https?:\/\//i.test(String(value || '').trim());
+}
+
+function finiteCoordinate(value) {
+  if (value == null || value === '') return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
 }
 
 function resolveRequestedProviderType(currentUser, body) {
@@ -147,6 +191,174 @@ module.exports = {
     });
 
     ctx.body = { data: updateData };
+  },
+
+  async submitSellerVerification(ctx) {
+    const currentUser = await resolveAuthUser(strapi, ctx);
+    if (!currentUser) return ctx.unauthorized();
+    if (!userIsSeller(currentUser)) return ctx.forbidden('Only seller accounts can submit verification');
+
+    const body = ctx.request.body?.data || ctx.request.body || {};
+    const nin = normalizeNin(body.nin);
+    const nationalIdFrontUrl = typeof body.nationalIdFrontUrl === 'string' ? body.nationalIdFrontUrl.trim() : '';
+    const nationalIdBackUrl = typeof body.nationalIdBackUrl === 'string' ? body.nationalIdBackUrl.trim() : '';
+
+    if (!isValidNin(nin)) return ctx.badRequest('Enter a valid NIN using 8 to 20 letters or numbers');
+    if (!isHttpUrl(nationalIdFrontUrl)) return ctx.badRequest('Upload the front of your National ID');
+    if (!isHttpUrl(nationalIdBackUrl)) return ctx.badRequest('Upload the back of your National ID');
+
+    await strapi.db.query('plugin::users-permissions.user').update({
+      where: { id: currentUser.id },
+      data: {
+        sellerNin: nin,
+        sellerIdFrontUrl: nationalIdFrontUrl,
+        sellerIdBackUrl: nationalIdBackUrl,
+        sellerVerificationStatus: 'pending',
+        sellerVerified: false,
+      },
+    });
+
+    ctx.body = {
+      data: {
+        sellerVerified: false,
+        sellerVerificationStatus: 'pending',
+        hasSellerNin: true,
+        hasNationalIdFront: true,
+        hasNationalIdBack: true,
+      },
+    };
+  },
+
+  async listSellerVerifications(ctx) {
+    const admin = await requireAdminUser(strapi, ctx);
+    if (!admin) return;
+
+    const sellers = await strapi.db.query('plugin::users-permissions.user').findMany({
+      where: {
+        $or: [
+          { sellerVerificationStatus: { $in: ['pending', 'approved', 'rejected'] } },
+          { sellerNin: { $notNull: true } },
+        ],
+      },
+      select: [
+        'id',
+        'documentId',
+        'username',
+        'fullName',
+        'phone',
+        'email',
+        'sellerNin',
+        'sellerIdFrontUrl',
+        'sellerIdBackUrl',
+        'sellerVerified',
+        'sellerVerificationStatus',
+        'businessLatitude',
+        'businessLongitude',
+        'location',
+        'updatedAt',
+      ],
+      orderBy: { updatedAt: 'desc' },
+      limit: 200,
+    });
+
+    ctx.body = {
+      data: (sellers || [])
+        .filter((seller) => seller.sellerNin || seller.sellerIdFrontUrl || seller.sellerIdBackUrl)
+        .map((seller) => ({
+          id: seller.id,
+          documentId: seller.documentId,
+          name: seller.fullName || seller.username || seller.email || 'Seller',
+          phone: seller.phone || null,
+          nin: seller.sellerNin || '',
+          nationalIdFrontUrl: seller.sellerIdFrontUrl || '',
+          nationalIdBackUrl: seller.sellerIdBackUrl || '',
+          sellerVerificationStatus: seller.sellerVerificationStatus === 'approved' && seller.sellerVerified
+            ? 'approved'
+            : seller.sellerVerificationStatus === 'rejected'
+              ? 'rejected'
+              : 'pending',
+          businessLatitude: finiteCoordinate(seller.businessLatitude),
+          businessLongitude: finiteCoordinate(seller.businessLongitude),
+          location: seller.location || '',
+          updatedAt: seller.updatedAt,
+        })),
+    };
+  },
+
+  async reviewSellerVerification(ctx) {
+    const admin = await requireAdminUser(strapi, ctx);
+    if (!admin) return;
+
+    const sellerId = Number(ctx.params.id);
+    if (!Number.isFinite(sellerId)) return ctx.badRequest('Seller not found');
+
+    const body = ctx.request.body?.data || ctx.request.body || {};
+    const status = body.status === 'approved' || body.status === 'rejected' ? body.status : '';
+    if (!status) return ctx.badRequest('Choose approved or rejected');
+
+    const seller = await strapi.db.query('plugin::users-permissions.user').findOne({
+      where: { id: sellerId },
+      select: ['id', 'sellerNin', 'sellerIdFrontUrl', 'sellerIdBackUrl'],
+    });
+    if (!seller) return ctx.notFound('Seller not found');
+    if (status === 'approved' && (!seller.sellerNin || !seller.sellerIdFrontUrl || !seller.sellerIdBackUrl)) {
+      return ctx.badRequest('This seller has not submitted a NIN and both National ID photos');
+    }
+
+    await strapi.db.query('plugin::users-permissions.user').update({
+      where: { id: seller.id },
+      data: {
+        sellerVerificationStatus: status,
+        sellerVerified: status === 'approved',
+      },
+    });
+
+    ctx.body = {
+      data: {
+        id: seller.id,
+        sellerVerificationStatus: status,
+        sellerVerified: status === 'approved',
+      },
+    };
+  },
+
+  async updateSellerLocation(ctx) {
+    const currentUser = await resolveAuthUser(strapi, ctx);
+    if (!currentUser) return ctx.unauthorized();
+    if (!userIsSeller(currentUser)) return ctx.forbidden('Only seller accounts can save a business location');
+
+    const body = ctx.request.body?.data || ctx.request.body || {};
+    const latitude = finiteCoordinate(body.latitude);
+    const longitude = finiteCoordinate(body.longitude);
+
+    if (latitude == null || latitude < -90 || latitude > 90) {
+      return ctx.badRequest('A valid latitude is required');
+    }
+    if (longitude == null || longitude < -180 || longitude > 180) {
+      return ctx.badRequest('A valid longitude is required');
+    }
+
+    const businessLocationName = await reverseGeocodePlaceName(latitude, longitude).catch((error) => {
+      strapi.log.warn(`Shop place name lookup failed: ${error.message}`);
+      return '';
+    });
+
+    await strapi.db.query('plugin::users-permissions.user').update({
+      where: { id: currentUser.id },
+      data: {
+        businessLatitude: latitude,
+        businessLongitude: longitude,
+        businessLocationName: businessLocationName || null,
+      },
+    });
+
+    ctx.body = {
+      data: {
+        businessLatitude: latitude,
+        businessLongitude: longitude,
+        businessLocationName: businessLocationName || '',
+      },
+    };
   },
 
   async toggleTeacherSubscription(ctx) {

@@ -4619,6 +4619,39 @@ export interface ApiReferralReferral extends Struct.CollectionTypeSchema {
   };
 }
 
+export interface ApiSalesAgentSalesAgent extends Struct.CollectionTypeSchema {
+  collectionName: 'sales_agents';
+  info: {
+    description: 'Field sales agents who sign up marketplace sellers';
+    displayName: 'Sales Agent';
+    pluralName: 'sales-agents';
+    singularName: 'sales-agent';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    active: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<true>;
+    agentName: Schema.Attribute.String & Schema.Attribute.Required;
+    code: Schema.Attribute.String &
+      Schema.Attribute.Required &
+      Schema.Attribute.Unique;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::sales-agent.sales-agent'
+    > &
+      Schema.Attribute.Private;
+    publishedAt: Schema.Attribute.DateTime;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface ApiSearchHistorySearchHistory
   extends Struct.CollectionTypeSchema {
   collectionName: 'search_histories';
@@ -5637,6 +5670,9 @@ export interface PluginUsersPermissionsUser
     avatarUrl: Schema.Attribute.String;
     blocked: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
     bookLibraryAccessGrantedAt: Schema.Attribute.DateTime;
+    businessLatitude: Schema.Attribute.Float;
+    businessLocationName: Schema.Attribute.String;
+    businessLongitude: Schema.Attribute.Float;
     childProfiles: Schema.Attribute.Relation<
       'oneToMany',
       'api::child-profile.child-profile'
@@ -5740,6 +5776,16 @@ export interface PluginUsersPermissionsUser
       'plugin::users-permissions.role'
     >;
     schoolName: Schema.Attribute.String;
+    sellerIdBackUrl: Schema.Attribute.Text & Schema.Attribute.Private;
+    sellerIdFrontUrl: Schema.Attribute.Text & Schema.Attribute.Private;
+    sellerNin: Schema.Attribute.String & Schema.Attribute.Private;
+    sellerSalesCode: Schema.Attribute.String & Schema.Attribute.Private;
+    sellerVerificationStatus: Schema.Attribute.Enumeration<
+      ['not_submitted', 'pending', 'approved', 'rejected']
+    > &
+      Schema.Attribute.DefaultTo<'not_submitted'>;
+    sellerVerified: Schema.Attribute.Boolean &
+      Schema.Attribute.DefaultTo<false>;
     showCarMonthlyPayment: Schema.Attribute.Boolean &
       Schema.Attribute.DefaultTo<false>;
     subjectsTaught: Schema.Attribute.JSON;
@@ -5837,6 +5883,7 @@ declare module '@strapi/strapi' {
       'api::purchase.purchase': ApiPurchasePurchase;
       'api::push-subscription.push-subscription': ApiPushSubscriptionPushSubscription;
       'api::referral.referral': ApiReferralReferral;
+      'api::sales-agent.sales-agent': ApiSalesAgentSalesAgent;
       'api::search-history.search-history': ApiSearchHistorySearchHistory;
       'api::shared-link.shared-link': ApiSharedLinkSharedLink;
       'api::site-setting.site-setting': ApiSiteSettingSiteSetting;
