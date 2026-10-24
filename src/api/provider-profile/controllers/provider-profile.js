@@ -99,7 +99,11 @@ module.exports = {
       updateData.whatsappNumber = whatsappNumber || null;
     }
 
-    if (requestedProviderType === 'teacher') {
+    const updatesTeacherProfile = ['schoolName', 'educationLevels', 'educationLevelOther', 'teacherBackground', 'teachingExperience', 'subjectsTaught']
+      .some((key) => Object.prototype.hasOwnProperty.call(body, key));
+    const updatesReligion = Object.prototype.hasOwnProperty.call(body, 'religion');
+
+    if (requestedProviderType === 'teacher' && updatesTeacherProfile) {
       if (!schoolName) return ctx.badRequest('School is required for teacher accounts');
       if (educationLevels.length === 0) return ctx.badRequest('Select at least one education level');
       if (educationLevels.includes('Other') && !educationLevelOther) {
@@ -115,18 +119,24 @@ module.exports = {
       updateData.subjectsTaught = subjectsTaught;
     }
 
-    if (requestedProviderType === 'religious') {
+    if (requestedProviderType === 'religious' && updatesReligion) {
       if (!religion) return ctx.badRequest('Religion is required for religious providers');
       updateData.religion = religion;
     }
 
     if (requestedProviderType === 'seller') {
-      updateData.location = location || currentUser.location || 'Kampala';
-      updateData.paymentPhone = paymentPhone || null;
-      updateData.paymentCode = paymentCode || null;
+      if (typeof body.location === 'string') {
+        updateData.location = location || currentUser.location || 'Kampala';
+      }
+      if (typeof body.paymentPhone === 'string') {
+        updateData.paymentPhone = paymentPhone || null;
+      }
+      if (typeof body.paymentCode === 'string') {
+        updateData.paymentCode = paymentCode || null;
+      }
       if (contactPhone) {
         updateData.phone = contactPhone;
-      } else if (paymentPhone) {
+      } else if (typeof body.paymentPhone === 'string' && paymentPhone) {
         updateData.phone = normalizePhone(paymentPhone) || null;
       }
     }
