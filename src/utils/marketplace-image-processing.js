@@ -92,11 +92,18 @@ function hasFullVariantSet(entry) {
     && entry.card
     && entry.thumbnail
     && entry.card !== entry.original
+    && isWebDisplayableUrl(entry.card)
+    && isWebDisplayableUrl(entry.thumbnail)
   );
 }
 
 function isOptimizedOriginalUrl(url) {
   return /\/product-images\/optimized\//i.test(String(url || ''));
+}
+
+function isWebDisplayableUrl(url) {
+  const value = String(url || '').toLowerCase().split(/[?#]/)[0];
+  return /\.(jpe?g|png|gif|webp|avif|svg)$/.test(value);
 }
 
 function entryNeedsProcessing(entry, force) {
@@ -251,7 +258,14 @@ async function processProductImages(strapi, identifier = {}, options = {}) {
       thumbnail: entry.thumbnail || null,
     };
 
-    const missing = Object.keys(VARIANT_SPECS).filter((name) => force || !next[name]);
+    // A variant that just repeats the original, or that browsers cannot show,
+    // still needs a real webp rendition.
+    const missing = Object.keys(VARIANT_SPECS).filter((name) => (
+      force
+      || !next[name]
+      || next[name] === entry.original
+      || !isWebDisplayableUrl(next[name])
+    ));
     const shouldOptimizeOriginal = entryNeedsProcessing(entry, force);
     const sourceUrl = makeAbsoluteUrl(entry.original, baseUrl);
 
@@ -275,10 +289,11 @@ async function processProductImages(strapi, identifier = {}, options = {}) {
 
     // Re-encode the original when it is heavier than the target so detail
     // pages and grids never serve oversized images.
-    if (sourceBuffer.length > TARGET_ORIGINAL_BYTES) {
+    // Formats browsers cannot show (TIFF, HEIC, RAW, ...) are re-encoded too.
+    if (sourceBuffer.length > TARGET_ORIGINAL_BYTES || !isWebDisplayableUrl(entry.original)) {
       try {
         const optimized = await compressToTarget(sourceBuffer, TARGET_ORIGINAL_BYTES);
-        if (optimized && optimized.length < sourceBuffer.length) {
+        if (optimized && (optimized.length < sourceBuffer.length || !isWebDisplayableUrl(entry.original))) {
           const key = `${OPTIMIZED_ORIGINAL_SPEC.folder}/${identityKey}/${index + 1}.webp`;
           next.original = await uploadBuffer(storage, optimized, key);
           sourceBuffer = optimized;
@@ -291,8 +306,13 @@ async function processProductImages(strapi, identifier = {}, options = {}) {
     for (const variantName of missing) {
       const spec = VARIANT_SPECS[variantName];
       const key = `${spec.folder}/${identityKey}/${index + 1}.webp`;
-      const variantBuffer = await renderVariant(sourceBuffer, spec);
-      next[variantName] = await uploadBuffer(storage, variantBuffer, key);
+      try {
+        const variantBuffer = await renderVariant(sourceBuffer, spec);
+        next[variantName] = await uploadBuffer(storage, variantBuffer, key);
+      } catch (error) {
+        // Unreadable format: keep the original rather than failing the whole product.
+        strapi.log.warn(`[marketplace-images] Could not render ${variantName} for image ${index + 1} of product ${identityKey}: ${error.message}`);
+      }
     }
 
     next.card = next.card || next.original;
