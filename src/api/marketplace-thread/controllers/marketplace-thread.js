@@ -372,6 +372,7 @@ const THREAD_USER_SELECT = [
   'avatarUrl',
   'phone',
   'paymentPhone',
+  'whatsappNumber',
   'sellerVerified',
   'sellerVerificationStatus',
   'businessLatitude',
@@ -389,6 +390,15 @@ function participantPhone(user) {
   return String(raw).trim() || null;
 }
 
+function participantWhatsapp(user) {
+  const raw = user?.whatsappNumber || user?.paymentPhone || user?.phone || '';
+  let digits = String(raw).replace(/\D/g, '');
+  if (!digits) return null;
+  if (digits.startsWith('0') && digits.length === 10) digits = `256${digits.slice(1)}`;
+  else if (digits.length === 9) digits = `256${digits}`;
+  return digits;
+}
+
 function participantName(user, fallback) {
   return user?.fullName || user?.username || fallback;
 }
@@ -400,6 +410,7 @@ function sanitizeParticipant(user, fallback) {
     documentId: user.documentId,
     name: participantName(user, fallback),
     phone: participantPhone(user),
+    whatsapp: participantWhatsapp(user),
     avatarUrl: user.avatarUrl || null,
     lastSeenAt: user.lastSeenAt || null,
     isOnline: isOnline(user.lastSeenAt),

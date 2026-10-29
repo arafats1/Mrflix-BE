@@ -2,7 +2,6 @@
 
 const { createNotification } = require('./entrep-notifications');
 const { notifyHomesMessage } = require('./homes-notifications');
-const { notifySellerMarketplaceOrder, notifySellerMarketplaceMessage } = require('./seller-whatsapp');
 
 function threadHasProduct(thread) {
   return Boolean(thread?.product?.id || thread?.product?.documentId || thread?.product);
@@ -46,18 +45,6 @@ async function notifyMarketplaceMessage(strapi, { thread, message, sender, recip
     strapi.log.warn(`Marketplace message notification failed: ${err.message}`);
   }
 
-  const sellerId = Number(thread?.seller?.id || 0);
-  const sellerIsRecipient = message?.senderRole === 'buyer' && (!sellerId || recipientId === sellerId);
-  if (!sellerIsRecipient) return;
-
-  notifySellerMarketplaceMessage(strapi, {
-    thread,
-    message,
-    sender,
-    seller: thread?.seller || recipient,
-  }).catch((err) => {
-    strapi.log.warn(`Seller WhatsApp message notification failed: ${err.message}`);
-  });
 }
 
 async function notifyProductOrderPlaced(strapi, purchase, options = {}) {
@@ -103,9 +90,6 @@ async function notifyProductOrderPlaced(strapi, purchase, options = {}) {
         },
       }),
     ]);
-    notifySellerMarketplaceOrder(strapi, purchase).catch((err) => {
-      strapi.log.warn(`Seller WhatsApp order notification failed: ${err.message}`);
-    });
   } catch (err) {
     strapi.log.warn(`Marketplace order notification failed: ${err.message}`);
   }

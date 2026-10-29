@@ -423,6 +423,7 @@ async function enrichSellerIdentity(strapi, product) {
   const sellerDisplayName = entrepreneurProfile?.fullName || product.seller?.fullName || product.seller?.shopName || product.seller?.username || product.seller?.email || null;
   const sellerLocation = entrepreneurProfile?.location || product.seller?.location || null;
   const sellerPhone = entrepreneurProfile?.phone || product.paymentPhone || product.seller?.phone || product.seller?.paymentPhone || null;
+  const sellerWhatsapp = String(product.seller?.whatsappNumber || '').trim() || sellerPhone;
   const sellerAge = entrepreneurProfile?.age || null;
   const sellerProfilePhotoUrl = entrepreneurProfile?.profilePhotoUrl || product.seller?.avatarUrl || null;
 
@@ -432,6 +433,7 @@ async function enrichSellerIdentity(strapi, product) {
     sellerDisplayName,
     sellerLocation,
     sellerPhone,
+    sellerWhatsapp,
     sellerAge,
     sellerProfilePhotoUrl,
     ...publicSellerTrust(product.seller),
@@ -494,6 +496,7 @@ async function enrichSellerIdentities(strapi, products) {
       sellerDisplayName: entrepreneurProfile?.fullName || product.seller?.fullName || product.seller?.shopName || product.seller?.username || product.seller?.email || null,
       sellerLocation: entrepreneurProfile?.location || product.seller?.location || null,
       sellerPhone: entrepreneurProfile?.phone || product.paymentPhone || product.seller?.phone || product.seller?.paymentPhone || null,
+      sellerWhatsapp: String(product.seller?.whatsappNumber || '').trim() || entrepreneurProfile?.phone || product.paymentPhone || product.seller?.phone || product.seller?.paymentPhone || null,
       sellerAge: entrepreneurProfile?.age || null,
       sellerProfilePhotoUrl: entrepreneurProfile?.profilePhotoUrl || product.seller?.avatarUrl || null,
       ...publicSellerTrust(product.seller),
