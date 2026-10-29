@@ -48,9 +48,14 @@ module.exports = {
       select: ['id', 'fullName', 'username', 'phone', 'sellerSalesCode', 'createdAt', 'providerType'],
       limit: 5000,
     });
-    const productLinks = await strapi.db.connection('products_seller_lnk')
-      .distinct('user_id')
-      .whereNotNull('user_id');
+    // Only count sellers with at least one product live on the marketplace;
+    // drafts-only sellers are not shown to buyers, so they don't count yet.
+    const productLinks = await strapi.db.connection('products_seller_lnk as l')
+      .join('products as p', 'p.id', 'l.product_id')
+      .whereNotNull('l.user_id')
+      .whereNotNull('p.published_at')
+      .where('p.status', 'active')
+      .distinct('l.user_id');
     const sellerIdsWithProducts = new Set((productLinks || []).map((row) => Number(row.user_id)));
 
     ctx.body = {
