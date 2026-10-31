@@ -268,6 +268,22 @@ module.exports = (plugin) => {
     private: true,
   };
 
+  plugin.contentTypes.user.schema.attributes.sellerPhotoUrl = {
+    type: 'text',
+    private: true,
+  };
+
+  // Audit trail for the NIRA / credit bureau consent the seller ticked.
+  plugin.contentTypes.user.schema.attributes.sellerConsentAcceptedAt = {
+    type: 'datetime',
+    private: true,
+  };
+
+  plugin.contentTypes.user.schema.attributes.sellerConsentVersion = {
+    type: 'string',
+    private: true,
+  };
+
   plugin.contentTypes.user.schema.attributes.sellerVerified = {
     type: 'boolean',
     default: false,
@@ -447,6 +463,8 @@ module.exports = (plugin) => {
       hasSellerNin: !!userWithRole.sellerNin,
       hasNationalIdFront: !!userWithRole.sellerIdFrontUrl,
       hasNationalIdBack: !!userWithRole.sellerIdBackUrl,
+      hasSellerPhoto: !!userWithRole.sellerPhotoUrl,
+      sellerConsentAcceptedAt: userWithRole.sellerConsentAcceptedAt || null,
       businessLatitude: userWithRole.businessLatitude == null || userWithRole.businessLatitude === '' || !Number.isFinite(Number(userWithRole.businessLatitude)) ? null : Number(userWithRole.businessLatitude),
       businessLongitude: userWithRole.businessLongitude == null || userWithRole.businessLongitude === '' || !Number.isFinite(Number(userWithRole.businessLongitude)) ? null : Number(userWithRole.businessLongitude),
       businessLocationName: String(userWithRole.businessLocationName || '').trim(),

@@ -6,6 +6,9 @@ const { reverseGeocodePlaceName } = require('../../../utils/reverse-geocode');
 const EDUCATION_LEVEL_OPTIONS = ['Kindergarten', 'Primary', 'Secondary', 'Technical college', 'University', 'Other'];
 const RELIGION_OPTIONS = ['Catholic', 'Protestant', 'Pentecostal', 'Adventist', 'Orthodox', 'Muslim', 'Hindu', 'Bahai', 'Traditional', 'Other'];
 const PROVIDER_TYPE_OPTIONS = ['teacher', 'religious', 'seller', 'musician', 'creative_artist', 'comedian'];
+// Bump when the consent wording shown to sellers changes; clients send the
+// version they displayed and it is stored with the acceptance time for audit.
+const SELLER_CONSENT_VERSION = 'nira-crb-v1';
 
 function normalizeProviderTypes(input) {
   if (Array.isArray(input)) {
@@ -71,12 +74,6 @@ async function requireAdminUser(strapi, ctx) {
     return null;
   }
   return withRole;
-}
-
-function userIsSeller(user) {
-  const listedTypes = normalizeProviderTypes(user?.providerTypes);
-  if (listedTypes.includes('seller')) return true;
-  return normalizeProviderTypes(user?.providerType).includes('seller');
 }
 
 function normalizeNin(value) {
@@ -193,10 +190,11 @@ module.exports = {
     ctx.body = { data: updateData };
   },
 
+  // Any signed-in user can list on the marketplace, so any of them can verify
+  // their shop; buyer accounts that sell are not tagged with providerType.
   async submitSellerVerification(ctx) {
     const currentUser = await resolveAuthUser(strapi, ctx);
     if (!currentUser) return ctx.unauthorized();
-    if (!userIsSeller(currentUser)) return ctx.forbidden('Only seller accounts can submit verification');
 
     const body = ctx.request.body?.data || ctx.request.body || {};
     const incomingNinRaw = typeof body.nin === 'string' ? body.nin.trim() : '';
@@ -204,6 +202,7 @@ module.exports = {
     const storedNin = normalizeNin(currentUser.sellerNin);
     const nationalIdFrontUrl = typeof body.nationalIdFrontUrl === 'string' ? body.nationalIdFrontUrl.trim() : '';
     const nationalIdBackUrl = typeof body.nationalIdBackUrl === 'string' ? body.nationalIdBackUrl.trim() : '';
+    const sellerPhotoUrl = typeof body.sellerPhotoUrl === 'string' ? body.sellerPhotoUrl.trim() : '';
 
     let nin = storedNin;
     if (incomingNinRaw) {
@@ -213,6 +212,13 @@ module.exports = {
     if (!isValidNin(nin)) return ctx.badRequest('Enter a valid NIN using 8 to 20 letters or numbers');
     if (!isHttpUrl(nationalIdFrontUrl)) return ctx.badRequest('Upload the front of your National ID');
     if (!isHttpUrl(nationalIdBackUrl)) return ctx.badRequest('Upload the back of your National ID');
+    if (!isHttpUrl(sellerPhotoUrl)) return ctx.badRequest('Upload a clear photo of yourself');
+    if (body.consentAccepted !== true) {
+      return ctx.badRequest('Tick the consent box to submit your NIN for verification');
+    }
+    if (body.consentVersion !== SELLER_CONSENT_VERSION) {
+      return ctx.badRequest('The consent terms have changed. Refresh the page and review them again.');
+    }
 
     // A replacement always drops the badge until an admin approves the new photos.
     await strapi.db.query('plugin::users-permissions.user').update({
@@ -221,6 +227,9 @@ module.exports = {
         sellerNin: nin,
         sellerIdFrontUrl: nationalIdFrontUrl,
         sellerIdBackUrl: nationalIdBackUrl,
+        sellerPhotoUrl,
+        sellerConsentAcceptedAt: new Date(),
+        sellerConsentVersion: SELLER_CONSENT_VERSION,
         sellerVerificationStatus: 'pending',
         sellerVerified: false,
       },
@@ -233,6 +242,7 @@ module.exports = {
         hasSellerNin: true,
         hasNationalIdFront: true,
         hasNationalIdBack: true,
+        hasSellerPhoto: true,
       },
     };
   },
@@ -258,6 +268,9 @@ module.exports = {
         'sellerNin',
         'sellerIdFrontUrl',
         'sellerIdBackUrl',
+        'sellerPhotoUrl',
+        'sellerConsentAcceptedAt',
+        'sellerConsentVersion',
         'sellerVerified',
         'sellerVerificationStatus',
         'businessLatitude',
@@ -280,6 +293,9 @@ module.exports = {
           nin: seller.sellerNin || '',
           nationalIdFrontUrl: seller.sellerIdFrontUrl || '',
           nationalIdBackUrl: seller.sellerIdBackUrl || '',
+          sellerPhotoUrl: seller.sellerPhotoUrl || '',
+          consentAcceptedAt: seller.sellerConsentAcceptedAt || null,
+          consentVersion: seller.sellerConsentVersion || '',
           sellerVerificationStatus: seller.sellerVerificationStatus === 'approved' && seller.sellerVerified
             ? 'approved'
             : seller.sellerVerificationStatus === 'rejected'
@@ -333,7 +349,6 @@ module.exports = {
   async updateSellerLocation(ctx) {
     const currentUser = await resolveAuthUser(strapi, ctx);
     if (!currentUser) return ctx.unauthorized();
-    if (!userIsSeller(currentUser)) return ctx.forbidden('Only seller accounts can save a business location');
 
     const body = ctx.request.body?.data || ctx.request.body || {};
     const latitude = finiteCoordinate(body.latitude);

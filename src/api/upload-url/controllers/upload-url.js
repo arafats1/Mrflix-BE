@@ -35,9 +35,9 @@ async function requireUploadUser(ctx) {
   return user;
 }
 
-const OPEN_UPLOAD_FOLDERS = ['stories', 'entrep-documents', 'entrep-course-media', 'entrep-community-media', 'entrep-profile-media', 'entrep-assignments', 'entrep-lesson-question-responses', 'marketplace-chat', 'profile-pictures', 'foundation-images'];
+// seller-verification is open: any signed-in user can sell on the marketplace.
+const OPEN_UPLOAD_FOLDERS = ['seller-verification', 'stories', 'entrep-documents', 'entrep-course-media', 'entrep-community-media', 'entrep-profile-media', 'entrep-assignments', 'entrep-lesson-question-responses', 'marketplace-chat', 'profile-pictures', 'foundation-images'];
 const PROVIDER_UPLOAD_FOLDERS = ['provider-materials', 'product-images', 'product-videos'];
-const SELLER_UPLOAD_FOLDERS = ['seller-verification'];
 const HOMES_UPLOAD_FOLDERS = ['homes-kyc', 'homes-listings'];
 const CARS_UPLOAD_FOLDERS = ['cars-kyc', 'cars-loan-docs'];
 
@@ -77,17 +77,6 @@ function isHomesUploadUser(authUser) {
   return ['landlord', 'broker', 'host'].includes(authUser?.homesRole);
 }
 
-function isSellerUploadUser(authUser) {
-  const listed = Array.isArray(authUser?.providerTypes)
-    ? authUser.providerTypes
-    : typeof authUser?.providerTypes === 'string'
-      ? authUser.providerTypes.split(',')
-      : [];
-  const types = [...listed, authUser?.providerType].map((value) => String(value || '').trim());
-  if (types.includes('seller')) return true;
-  return authUser?.accountType === 'provider' || authUser?.accountType === 'both';
-}
-
 async function ensureFolderAccess(ctx, authUser, folder) {
   const folderType = resolveUploadFolderType(folder);
 
@@ -115,13 +104,6 @@ async function ensureFolderAccess(ctx, authUser, folder) {
 
   if (folderType === 'cars') {
     return true;
-  }
-
-  if (SELLER_UPLOAD_FOLDERS.some((prefix) => folderMatchesPrefix(folder, prefix))) {
-    if (isSellerUploadUser(authUser)) return true;
-    if (await isAdminUploadUser(authUser)) return true;
-    ctx.forbidden('Seller access required for this folder');
-    return false;
   }
 
   if (await isAdminUploadUser(authUser)) return true;

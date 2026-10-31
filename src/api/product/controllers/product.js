@@ -408,6 +408,9 @@ function presentPublicSeller(seller) {
   delete next.sellerNin;
   delete next.sellerIdFrontUrl;
   delete next.sellerIdBackUrl;
+  delete next.sellerPhotoUrl;
+  delete next.sellerConsentAcceptedAt;
+  delete next.sellerConsentVersion;
   delete next.sellerSalesCode;
   delete next.password;
   delete next.resetPasswordToken;

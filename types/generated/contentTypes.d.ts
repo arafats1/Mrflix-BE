@@ -5776,9 +5776,13 @@ export interface PluginUsersPermissionsUser
       'plugin::users-permissions.role'
     >;
     schoolName: Schema.Attribute.String;
+    sellerConsentAcceptedAt: Schema.Attribute.DateTime &
+      Schema.Attribute.Private;
+    sellerConsentVersion: Schema.Attribute.String & Schema.Attribute.Private;
     sellerIdBackUrl: Schema.Attribute.Text & Schema.Attribute.Private;
     sellerIdFrontUrl: Schema.Attribute.Text & Schema.Attribute.Private;
     sellerNin: Schema.Attribute.String & Schema.Attribute.Private;
+    sellerPhotoUrl: Schema.Attribute.Text & Schema.Attribute.Private;
     sellerSalesCode: Schema.Attribute.String & Schema.Attribute.Private;
     sellerVerificationStatus: Schema.Attribute.Enumeration<
       ['not_submitted', 'pending', 'approved', 'rejected']
