@@ -114,29 +114,14 @@ const SELLER_PAGE_SIZE = 50;
 // places per request; the rest fill in on later loads.
 const MAX_PLACE_LOOKUPS_PER_REQUEST = 5;
 
-function hasSellerProviderType(user) {
-  if (normalizeProviderTypes(user?.providerTypes).includes('seller')) return true;
-  return normalizeProviderTypes(user?.providerType).includes('seller');
-}
-
-/** Ids of everyone who sells: tagged as a seller or owns at least one product. */
+/** Ids of everyone with at least one live product: published and marked active. */
 async function findSellerIds(strapi) {
-  const ids = new Set();
-
-  const productOwners = await strapi.db.connection('products_seller_lnk').distinct('user_id');
-  for (const row of productOwners) {
-    if (row.user_id != null) ids.add(Number(row.user_id));
-  }
-
-  const providers = await strapi.db.query('plugin::users-permissions.user').findMany({
-    where: { $or: [{ providerType: { $notNull: true } }, { providerTypes: { $notNull: true } }] },
-    select: ['id', 'providerType', 'providerTypes'],
-  });
-  for (const user of providers || []) {
-    if (hasSellerProviderType(user)) ids.add(Number(user.id));
-  }
-
-  return [...ids];
+  const rows = await strapi.db.connection('products_seller_lnk as l')
+    .join('products as p', 'p.id', 'l.product_id')
+    .whereNotNull('p.published_at')
+    .where('p.status', 'active')
+    .distinct('l.user_id');
+  return rows.filter((row) => row.user_id != null).map((row) => Number(row.user_id));
 }
 
 /** Latest product description per seller, preferring published rows. */
@@ -145,14 +130,14 @@ async function findSampleProducts(strapi, sellerIds) {
   const rows = await strapi.db.connection('products as p')
     .join('products_seller_lnk as l', 'l.product_id', 'p.id')
     .whereIn('l.user_id', sellerIds)
-    .select('l.user_id', 'p.document_id', 'p.name', 'p.description', 'p.published_at', 'p.created_at')
+    .select('l.user_id', 'p.document_id', 'p.name', 'p.description', 'p.status', 'p.published_at', 'p.created_at')
     .orderBy('p.created_at', 'desc');
 
   const bySeller = new Map();
   for (const row of rows) {
     const sellerId = Number(row.user_id);
     const entry = bySeller.get(sellerId) || { documentIds: new Set(), sample: null };
-    if (row.published_at) entry.documentIds.add(row.document_id);
+    if (row.published_at && row.status === 'active') entry.documentIds.add(row.document_id);
     const description = String(row.description || '').trim();
     const better = !entry.sample
       || (!entry.sample.description && description)
