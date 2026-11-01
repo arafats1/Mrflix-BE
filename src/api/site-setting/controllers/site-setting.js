@@ -2,6 +2,14 @@
 
 const { createCoreController } = require('@strapi/strapi').factories;
 
+// Piggy bank deposits and marketplace orders that lost their product link
+// share the purchases table; only movie rentals count as revenue.
+function isMoviePurchase(purchase) {
+  if (String(purchase.transactionId || '').startsWith('SAV_') || purchase.savingsDepositApplied) return false;
+  if (purchase.deliveryStatus || purchase.isPayOnDelivery || purchase.serviceDate || purchase.purchaseType) return false;
+  return !['pay_on_delivery', 'manual_supplier_payment'].includes(purchase.paymentMethod);
+}
+
 module.exports = createCoreController('api::site-setting.site-setting', ({ strapi }) => ({
   async adminStats(ctx) {
     if (!ctx.state.user) {
@@ -55,7 +63,7 @@ module.exports = createCoreController('api::site-setting.site-setting', ({ strap
           providerMaterial: { $null: true },
           book: { $null: true },
         },
-        select: ['amount'],
+        select: ['amount', 'transactionId', 'savingsDepositApplied', 'deliveryStatus', 'isPayOnDelivery', 'serviceDate', 'paymentMethod', 'purchaseType'],
       }),
       strapi.db.query('api::subscription.subscription').findMany({
         where: {
@@ -80,7 +88,7 @@ module.exports = createCoreController('api::site-setting.site-setting', ({ strap
       }).catch(() => []),
     ]);
 
-    const moviePurchaseRevenue = (moviePurchaseRevenueRows || []).reduce((sum, entry) => sum + (entry.amount || 0), 0);
+    const moviePurchaseRevenue = (moviePurchaseRevenueRows || []).filter(isMoviePurchase).reduce((sum, entry) => sum + (entry.amount || 0), 0);
     const subscriptionRevenue = (subscriptionRevenueRows || []).reduce((sum, entry) => sum + (entry.amount || 0), 0);
     const exclusiveRevenue = (exclusiveRevenueRows || []).reduce((sum, entry) => sum + (entry.amount || 0), 0);
     const promotionRevenue = (promotionRevenueRows || []).reduce((sum, entry) => sum + (entry.amount || 0), 0);
