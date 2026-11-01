@@ -109,6 +109,121 @@ function resolveRequestedProviderType(currentUser, body) {
   return fallback;
 }
 
+const SELLER_PAGE_SIZE = 50;
+// Nominatim allows about one lookup per second, so name only a few missing
+// places per request; the rest fill in on later loads.
+const MAX_PLACE_LOOKUPS_PER_REQUEST = 5;
+
+function hasSellerProviderType(user) {
+  if (normalizeProviderTypes(user?.providerTypes).includes('seller')) return true;
+  return normalizeProviderTypes(user?.providerType).includes('seller');
+}
+
+/** Ids of everyone who sells: tagged as a seller or owns at least one product. */
+async function findSellerIds(strapi) {
+  const ids = new Set();
+
+  const productOwners = await strapi.db.connection('products_seller_lnk').distinct('user_id');
+  for (const row of productOwners) {
+    if (row.user_id != null) ids.add(Number(row.user_id));
+  }
+
+  const providers = await strapi.db.query('plugin::users-permissions.user').findMany({
+    where: { $or: [{ providerType: { $notNull: true } }, { providerTypes: { $notNull: true } }] },
+    select: ['id', 'providerType', 'providerTypes'],
+  });
+  for (const user of providers || []) {
+    if (hasSellerProviderType(user)) ids.add(Number(user.id));
+  }
+
+  return [...ids];
+}
+
+/** Latest product description per seller, preferring published rows. */
+async function findSampleProducts(strapi, sellerIds) {
+  if (!sellerIds.length) return new Map();
+  const rows = await strapi.db.connection('products as p')
+    .join('products_seller_lnk as l', 'l.product_id', 'p.id')
+    .whereIn('l.user_id', sellerIds)
+    .select('l.user_id', 'p.document_id', 'p.name', 'p.description', 'p.published_at', 'p.created_at')
+    .orderBy('p.created_at', 'desc');
+
+  const bySeller = new Map();
+  for (const row of rows) {
+    const sellerId = Number(row.user_id);
+    const entry = bySeller.get(sellerId) || { documentIds: new Set(), sample: null };
+    if (row.published_at) entry.documentIds.add(row.document_id);
+    const description = String(row.description || '').trim();
+    const better = !entry.sample
+      || (!entry.sample.description && description)
+      || (description && row.published_at && !entry.sample.published);
+    if (better) {
+      entry.sample = { name: row.name || '', description, published: !!row.published_at };
+    }
+    bySeller.set(sellerId, entry);
+  }
+
+  const result = new Map();
+  for (const [sellerId, entry] of bySeller) {
+    result.set(sellerId, {
+      productCount: entry.documentIds.size,
+      productName: entry.sample?.name || '',
+      productDescription: entry.sample?.description || '',
+    });
+  }
+  return result;
+}
+
+function parseJsonColumn(value) {
+  if (typeof value !== 'string') return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+
+function productThumbnail(row) {
+  const images = parseJsonColumn(row.images);
+  const first = Array.isArray(images) ? images[0] : null;
+  if (typeof first === 'string') return first;
+  if (first && typeof first === 'object') return first.thumbnail || first.card || first.original || '';
+  return row.featured_image || '';
+}
+
+/** One row per product, preferring the published copy of each document. */
+async function findSellerProducts(strapi, sellerId) {
+  const rows = await strapi.db.connection('products as p')
+    .join('products_seller_lnk as l', 'l.product_id', 'p.id')
+    .where('l.user_id', sellerId)
+    .select(
+      'p.document_id', 'p.name', 'p.description', 'p.price_ugx', 'p.currency', 'p.status',
+      'p.category', 'p.images', 'p.featured_image', 'p.stock_quantity', 'p.published_at', 'p.created_at',
+    )
+    .orderBy('p.created_at', 'desc');
+
+  const byDocument = new Map();
+  for (const row of rows) {
+    const existing = byDocument.get(row.document_id);
+    if (existing && (existing.published_at || !row.published_at)) continue;
+    byDocument.set(row.document_id, row);
+  }
+
+  return [...byDocument.values()].map((row) => ({
+    documentId: row.document_id,
+    name: row.name || 'Untitled product',
+    description: String(row.description || '').trim(),
+    priceUGX: Number(row.price_ugx) || 0,
+    currency: row.currency || 'UGX',
+    status: row.status || '',
+    category: row.category || '',
+    stockQuantity: row.stock_quantity,
+    imageUrl: productThumbnail(row),
+    published: !!row.published_at,
+    createdAt: row.created_at,
+  }));
+}
+
 module.exports = {
   async updateMe(ctx) {
     const currentUser = await resolveAuthUser(strapi, ctx);
@@ -243,6 +358,141 @@ module.exports = {
         hasNationalIdFront: true,
         hasNationalIdBack: true,
         hasSellerPhoto: true,
+      },
+    };
+  },
+
+  async listSellers(ctx) {
+    const admin = await requireAdminUser(strapi, ctx);
+    if (!admin) return;
+
+    const page = Math.max(1, Number.parseInt(ctx.query.page, 10) || 1);
+    const search = String(ctx.query.q || '').trim();
+    const sellerIds = await findSellerIds(strapi);
+
+    const where = { id: { $in: sellerIds.length ? sellerIds : [0] } };
+    if (search) {
+      where.$or = [
+        { fullName: { $containsi: search } },
+        { username: { $containsi: search } },
+        { phone: { $containsi: search } },
+        { sellerNin: { $containsi: search } },
+      ];
+    }
+
+    const userQuery = strapi.db.query('plugin::users-permissions.user');
+    const [sellers, total] = await Promise.all([
+      userQuery.findMany({
+        where,
+        select: [
+          'id', 'username', 'fullName', 'phone', 'whatsappNumber', 'avatarUrl', 'sellerNin',
+          'sellerVerified', 'sellerVerificationStatus', 'businessLatitude', 'businessLongitude',
+          'businessLocationName', 'location', 'createdAt',
+        ],
+        orderBy: { createdAt: 'desc' },
+        offset: (page - 1) * SELLER_PAGE_SIZE,
+        limit: SELLER_PAGE_SIZE,
+      }),
+      userQuery.count({ where }),
+    ]);
+
+    let lookups = 0;
+    for (const seller of sellers) {
+      const latitude = finiteCoordinate(seller.businessLatitude);
+      const longitude = finiteCoordinate(seller.businessLongitude);
+      if (latitude == null || longitude == null || String(seller.businessLocationName || '').trim()) continue;
+      if (lookups >= MAX_PLACE_LOOKUPS_PER_REQUEST) break;
+      lookups += 1;
+      const name = await reverseGeocodePlaceName(latitude, longitude).catch(() => '');
+      if (!name) continue;
+      seller.businessLocationName = name;
+      await userQuery.update({ where: { id: seller.id }, data: { businessLocationName: name } }).catch(() => {});
+    }
+
+    const products = await findSampleProducts(strapi, sellers.map((seller) => seller.id));
+
+    ctx.body = {
+      data: sellers.map((seller) => {
+        const product = products.get(seller.id) || {};
+        return {
+          id: seller.id,
+          name: seller.fullName || seller.username || 'Seller',
+          phone: seller.phone || seller.whatsappNumber || '',
+          nin: seller.sellerNin || '',
+          avatarUrl: seller.avatarUrl || '',
+          verified: seller.sellerVerificationStatus === 'approved' && seller.sellerVerified === true,
+          verificationStatus: seller.sellerVerificationStatus || 'not_submitted',
+          businessLatitude: finiteCoordinate(seller.businessLatitude),
+          businessLongitude: finiteCoordinate(seller.businessLongitude),
+          locationName: String(seller.businessLocationName || '').trim(),
+          locationText: String(seller.location || '').trim(),
+          productCount: product.productCount || 0,
+          productName: product.productName || '',
+          productDescription: product.productDescription || '',
+          joinedAt: seller.createdAt,
+        };
+      }),
+      meta: { page, pageSize: SELLER_PAGE_SIZE, total, pageCount: Math.max(1, Math.ceil(total / SELLER_PAGE_SIZE)) },
+    };
+  },
+
+  async getSeller(ctx) {
+    const admin = await requireAdminUser(strapi, ctx);
+    if (!admin) return;
+
+    const id = Number.parseInt(ctx.params.id, 10);
+    if (!Number.isFinite(id)) return ctx.badRequest('Invalid seller id');
+
+    const userQuery = strapi.db.query('plugin::users-permissions.user');
+    const seller = await userQuery.findOne({
+      where: { id },
+      select: [
+        'id', 'username', 'email', 'fullName', 'phone', 'whatsappNumber', 'avatarUrl', 'sellerNin',
+        'sellerIdFrontUrl', 'sellerIdBackUrl', 'sellerPhotoUrl', 'sellerConsentAcceptedAt', 'sellerConsentVersion',
+        'sellerVerified', 'sellerVerificationStatus', 'businessLatitude', 'businessLongitude',
+        'businessLocationName', 'location', 'paymentPhone', 'paymentCode', 'providerType', 'createdAt',
+      ],
+    });
+    if (!seller) return ctx.notFound('Seller not found');
+
+    const latitude = finiteCoordinate(seller.businessLatitude);
+    const longitude = finiteCoordinate(seller.businessLongitude);
+    let locationName = String(seller.businessLocationName || '').trim();
+    if (!locationName && latitude != null && longitude != null) {
+      locationName = await reverseGeocodePlaceName(latitude, longitude).catch(() => '');
+      if (locationName) {
+        await userQuery.update({ where: { id }, data: { businessLocationName: locationName } }).catch(() => {});
+      }
+    }
+
+    const products = await findSellerProducts(strapi, id);
+
+    ctx.body = {
+      data: {
+        id: seller.id,
+        name: seller.fullName || seller.username || 'Seller',
+        username: seller.username || '',
+        email: seller.email || '',
+        phone: seller.phone || '',
+        whatsappNumber: seller.whatsappNumber || '',
+        paymentPhone: seller.paymentPhone || '',
+        paymentCode: seller.paymentCode || '',
+        providerType: seller.providerType || '',
+        nin: seller.sellerNin || '',
+        avatarUrl: seller.avatarUrl || '',
+        nationalIdFrontUrl: seller.sellerIdFrontUrl || '',
+        nationalIdBackUrl: seller.sellerIdBackUrl || '',
+        sellerPhotoUrl: seller.sellerPhotoUrl || '',
+        consentAcceptedAt: seller.sellerConsentAcceptedAt || null,
+        consentVersion: seller.sellerConsentVersion || '',
+        verified: seller.sellerVerificationStatus === 'approved' && seller.sellerVerified === true,
+        verificationStatus: seller.sellerVerificationStatus || 'not_submitted',
+        businessLatitude: latitude,
+        businessLongitude: longitude,
+        locationName,
+        locationText: String(seller.location || '').trim(),
+        joinedAt: seller.createdAt,
+        products,
       },
     };
   },

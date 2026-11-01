@@ -22,6 +22,18 @@ module.exports = {
     },
     {
       method: 'GET',
+      path: '/provider-profile/sellers',
+      handler: 'provider-profile.listSellers',
+      config: { auth: false },
+    },
+    {
+      method: 'GET',
+      path: '/provider-profile/sellers/:id',
+      handler: 'provider-profile.getSeller',
+      config: { auth: false },
+    },
+    {
+      method: 'GET',
       path: '/provider-profile/verifications',
       handler: 'provider-profile.listSellerVerifications',
       config: { auth: false },
