@@ -4,6 +4,7 @@
  * product controller
  */
 
+const crypto = require('crypto');
 const { createCoreController } = require('@strapi/strapi').factories;
 const { scheduleProductImageProcessing, processProductImages, isVideoUrl, isImageUrl } = require('../../../utils/marketplace-image-processing');
 const { assertAdmin } = require('../../../utils/admin-auth');
@@ -402,19 +403,39 @@ async function ensureSellerPlaceNames(strapi, sellers) {
   }
 }
 
+// Seller fields that are safe to show to anyone browsing the marketplace.
+// Allow-list (not deny-list) so new user fields never leak by default; the
+// full user record also made every listing response ~40% larger.
+const PUBLIC_SELLER_FIELDS = [
+  'id',
+  'documentId',
+  'username',
+  'fullName',
+  'shopName',
+  'location',
+  'country',
+  'avatarUrl',
+  'phone',
+  'paymentPhone',
+  'paymentCode',
+  'whatsappNumber',
+  'sellerVerified',
+  'sellerVerificationStatus',
+  'businessLatitude',
+  'businessLongitude',
+  'businessLocationName',
+  'hirePurchaseTerms',
+  'hirePurchaseDepositPercent',
+  'showCarMonthlyPayment',
+  'createdAt',
+];
+
 function presentPublicSeller(seller) {
   if (!seller || typeof seller !== 'object') return seller;
-  const next = { ...seller };
-  delete next.sellerNin;
-  delete next.sellerIdFrontUrl;
-  delete next.sellerIdBackUrl;
-  delete next.sellerPhotoUrl;
-  delete next.sellerConsentAcceptedAt;
-  delete next.sellerConsentVersion;
-  delete next.sellerSalesCode;
-  delete next.password;
-  delete next.resetPasswordToken;
-  delete next.phoneOtpToken;
+  const next = {};
+  for (const field of PUBLIC_SELLER_FIELDS) {
+    if (seller[field] !== undefined) next[field] = seller[field];
+  }
   return next;
 }
 
@@ -664,6 +685,79 @@ async function attachActivePromotionState(strapi, products) {
   });
 
   return Array.isArray(products) ? enriched : enriched[0];
+}
+
+/**
+ * Batched enrichment for listing responses: one query for all seller profiles
+ * + one grouped query for all sold counts, instead of two queries per product.
+ * Combined with the batched promotion and review steps, a listing runs a small
+ * constant number of queries regardless of how many products it returns.
+ */
+async function enrichListedProducts(strapi, products) {
+  const normalizedProducts = products.map((product) => withSellerPaymentFallback(product));
+  const sellerEnrichedProducts = await enrichSellerIdentities(strapi, normalizedProducts);
+  const soldProducts = await attachSoldCounts(strapi, sellerEnrichedProducts);
+  const promotedProducts = await attachActivePromotionState(strapi, soldProducts);
+  return attachReviewSummary(strapi, promotedProducts);
+}
+
+// The web marketplace filters and searches in the browser, so it needs every
+// active product. Building that once here (and letting the Bunny CDN cache it)
+// replaces 26+ paged requests per visitor with one shared response.
+const CATALOG_TTL_MS = 60 * 1000;
+// Not used by any marketplace listing view.
+const CATALOG_DROPPED_FIELDS = ['draftMeta'];
+let marketplaceCatalog = null;
+let marketplaceCatalogBuild = null;
+
+async function buildMarketplaceCatalog(strapi) {
+  await clearExpiredProductPromotions(strapi);
+  const products = await strapi.documents('api::product.product').findMany({
+    filters: { status: 'active' },
+    populate: { seller: true },
+    sort: [{ createdAt: 'desc' }],
+    status: 'published',
+  });
+
+  const data = (await enrichListedProducts(strapi, products)).map((product) => {
+    const next = { ...product };
+    for (const field of CATALOG_DROPPED_FIELDS) delete next[field];
+    return next;
+  });
+
+  const dataJson = JSON.stringify(data);
+  const meta = JSON.stringify({ total: data.length, generatedAt: new Date().toISOString() });
+  return {
+    body: `{"data":${dataJson},"meta":${meta}}`,
+    // Products only, so an unchanged catalog keeps its tag across rebuilds.
+    etag: `"${crypto.createHash('sha1').update(dataJson).digest('base64url')}"`,
+    builtAt: Date.now(),
+  };
+}
+
+// Each Bunny edge fetches on its own; the in-process copy (and one shared
+// in-flight build) keeps that to roughly one database build per minute.
+async function getMarketplaceCatalog(strapi) {
+  if (marketplaceCatalog && Date.now() - marketplaceCatalog.builtAt < CATALOG_TTL_MS) {
+    return marketplaceCatalog;
+  }
+  if (!marketplaceCatalogBuild) {
+    marketplaceCatalogBuild = buildMarketplaceCatalog(strapi)
+      .then((catalog) => {
+        marketplaceCatalog = catalog;
+        return catalog;
+      })
+      .finally(() => {
+        marketplaceCatalogBuild = null;
+      });
+    // When the previous copy is served below, nobody awaits this build, so a
+    // failure must be handled here rather than crash the process.
+    marketplaceCatalogBuild.catch((error) => {
+      strapi.log.warn(`Marketplace catalog build failed: ${error.message}`);
+    });
+  }
+  // Serve the previous copy while a rebuild is running, if there is one.
+  return marketplaceCatalog || marketplaceCatalogBuild;
 }
 
 function sanitizeProductIdentifier(value) {
@@ -1054,16 +1148,8 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
       }),
     ]);
 
-    // Batched enrichment: one query for all seller profiles + one grouped
-    // query for all sold counts, instead of two queries per product. Combined
-    // with the already-batched promotion and review steps, a full page now runs
-    // a small constant number of queries regardless of page size.
-    const normalizedProducts = products.map((product) => withSellerPaymentFallback(product));
-    const sellerEnrichedProducts = await enrichSellerIdentities(strapi, normalizedProducts);
-    const soldProducts = await attachSoldCounts(strapi, sellerEnrichedProducts);
-    const promotedProducts = await attachActivePromotionState(strapi, soldProducts);
     return {
-      data: await attachReviewSummary(strapi, promotedProducts),
+      data: await enrichListedProducts(strapi, products),
       meta: {
         pagination: {
           page,
@@ -1073,6 +1159,34 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
         },
       },
     };
+  },
+
+  async catalog(ctx) {
+    let catalog;
+    try {
+      catalog = await getMarketplaceCatalog(strapi);
+    } catch (error) {
+      strapi.log.error(`Marketplace catalog unavailable: ${error.message}`);
+      ctx.set('Cache-Control', 'no-store');
+      return ctx.internalServerError('Could not load the marketplace catalog');
+    }
+
+    // Public data cached by Bunny: one response is reused for every site and
+    // the app, so it can't echo the caller's Origin like other endpoints do.
+    // Bunny ignores query strings, which is fine here: the response never
+    // depends on them.
+    ctx.set('Access-Control-Allow-Origin', '*');
+    ctx.remove('Access-Control-Allow-Credentials');
+    ctx.remove('Vary');
+    ctx.set('Cache-Control', 'public, max-age=60');
+    ctx.set('ETag', catalog.etag);
+
+    if (ctx.get('If-None-Match') === catalog.etag) {
+      ctx.status = 304;
+      return;
+    }
+    ctx.type = 'application/json; charset=utf-8';
+    ctx.body = catalog.body;
   },
 
   async sellerCatalog(ctx) {

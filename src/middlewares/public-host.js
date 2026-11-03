@@ -7,11 +7,14 @@ const BLOCKED_ORIGIN = 'https://mrflix-be-production.up.railway.app';
  * domain at "/" is redirected to that blocked host. Keep the visitor on the
  * host they actually opened. API responses must not be cached: a CDN that
  * ignores query strings otherwise serves page 1 for every product page.
+ * A handler can opt in by setting a `public` Cache-Control itself, which is
+ * only safe for URLs whose response doesn't depend on the query string.
  */
 module.exports = () => async (ctx, next) => {
   await next();
 
-  if (ctx.path.startsWith('/api/')) {
+  const explicitlyPublic = String(ctx.response.get('Cache-Control') || '').startsWith('public');
+  if (ctx.path.startsWith('/api/') && !explicitlyPublic) {
     ctx.set('Cache-Control', 'private, no-store');
   }
 
