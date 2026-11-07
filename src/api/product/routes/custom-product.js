@@ -34,6 +34,22 @@ module.exports = {
     },
     {
       method: 'GET',
+      path: '/products/catalog/lite',
+      handler: 'product.catalogLite',
+      config: {
+        auth: false,
+      },
+    },
+    {
+      method: 'GET',
+      path: '/products/catalog/descriptions',
+      handler: 'product.catalogDescriptions',
+      config: {
+        auth: false,
+      },
+    },
+    {
+      method: 'GET',
       path: '/products/seller-catalog/:slug',
       handler: 'product.sellerCatalog',
       config: {
