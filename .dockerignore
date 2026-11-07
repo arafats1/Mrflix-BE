@@ -1,0 +1,14 @@
+node_modules
+.tmp
+temp
+.env
+.env.*
+.git
+.strapi
+dist
+build
+public/uploads
+*.md
+.next
+docs
+test-jwt.js

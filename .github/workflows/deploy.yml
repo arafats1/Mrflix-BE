@@ -1,0 +1,53 @@
+name: Deploy to VPS
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Never run two deploys at once; queue the newer one.
+concurrency:
+  group: deploy-vps-mrflix
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      VPS_HOST: ${{ secrets.VPS_HOST }}
+      API_DOMAIN: ${{ vars.API_DOMAIN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up SSH
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+      - name: Sync code to the server
+        run: |
+          rsync -az --delete \
+            --exclude '.git' --exclude 'node_modules' --exclude '.env' --exclude '.env.*' \
+            --exclude '.tmp' --exclude '.tmp 2' --exclude '.strapi' --exclude 'dist' --exclude 'build' \
+            --exclude 'public/uploads' \
+            ./ "deploy@${VPS_HOST}:/opt/mrflix/src/"
+
+      - name: Build and restart
+        run: ssh "deploy@${VPS_HOST}" 'bash /opt/mrflix/src/deploy/remote-deploy.sh'
+
+      - name: Check the public URL
+        if: ${{ vars.API_DOMAIN != '' }}
+        run: |
+          for i in $(seq 1 10); do
+            code="$(curl -s -o /dev/null -w '%{http_code}' "https://${API_DOMAIN}/_health" || true)"
+            echo "https://${API_DOMAIN}/_health -> ${code}"
+            [ "$code" = "204" ] || [ "$code" = "200" ] && exit 0
+            sleep 6
+          done
+          echo "::warning::App is healthy on the server but https://${API_DOMAIN} is not answering yet (DNS not pointed?)"
