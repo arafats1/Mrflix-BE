@@ -329,43 +329,41 @@ async function processProductImages(strapi, identifier = {}, options = {}) {
     featuredImage: featuredVariant?.original || product.featuredImage || null,
   };
 
-  // Strapi 5 draft/publish: db.query only updates the draft row. The public API
-  // reads the published document, so we must write the published version too.
+  // Write each row by its own id. documents().update({ status: 'draft' })
+  // republishes the draft copy and can put the listing status back to draft
+  // after the seller pressed Publish. These writes touch only the photos.
   if (product.documentId) {
     // Processing takes seconds. Take this product's write turn (so a seller's
     // save can't collide with ours), then only write if the photos are still
     // the ones we processed: if the seller changed them meanwhile, writing
     // would bring back old photos, and their save already queued a new job.
     return withProductWriteLock(product.documentId, async () => {
-      const latest = await strapi.db.query('api::product.product').findOne({
+      const rows = await strapi.db.query('api::product.product').findMany({
         where: { documentId: product.documentId },
-        select: ['images', 'featuredImage'],
+        select: ['id', 'images', 'featuredImage'],
       });
-      const latestEntries = Array.isArray(latest?.images)
-        ? latest.images.map(normalizeImageEntry).filter(Boolean)
-        : [];
-      if (latestEntries.length === 0 && latest?.featuredImage) {
-        const featuredEntry = normalizeImageEntry(latest.featuredImage);
-        if (featuredEntry) latestEntries.push(featuredEntry);
-      }
-      if (JSON.stringify(latestEntries.map((entry) => entry.original)) !== processedOriginals) {
+      if (!rows?.length) return false;
+
+      const originalsOf = (row) => {
+        const entries = Array.isArray(row?.images)
+          ? row.images.map(normalizeImageEntry).filter(Boolean)
+          : [];
+        if (entries.length === 0 && row?.featuredImage) {
+          const featuredEntry = normalizeImageEntry(row.featuredImage);
+          if (featuredEntry) entries.push(featuredEntry);
+        }
+        return JSON.stringify(entries.map((entry) => entry.original));
+      };
+
+      if (rows.some((row) => originalsOf(row) !== processedOriginals)) {
         return false;
       }
 
-      await strapi.documents('api::product.product').update({
-        documentId: product.documentId,
-        data: imagePayload,
-        status: 'published',
-      });
-
-      try {
-        await strapi.documents('api::product.product').update({
-          documentId: product.documentId,
+      for (const row of rows) {
+        await strapi.db.query('api::product.product').update({
+          where: { id: row.id },
           data: imagePayload,
-          status: 'draft',
         });
-      } catch (_) {
-        // Draft row may not exist for every product; published write is what matters.
       }
       return true;
     });

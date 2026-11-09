@@ -6,6 +6,9 @@ const BLOCKED_ORIGIN = 'https://mrflix-be-production.up.railway.app';
 // (purchases, subscriptions, streams, chats, profiles, settings) is not listed
 // and stays uncacheable.
 const BROWSER_CACHEABLE = /^\/api\/(movies|products|marketplace-ads|books|cars|stories|musics|education-subjects|education-courses)(\/|$)/;
+// A seller's own listings change on every save; a cached copy shows a
+// published item as the draft it was a minute ago.
+const NEVER_BROWSER_CACHED = /^\/api\/products\/(mine|seller-catalog)(\/|$)/;
 
 // Reuse for 60s with no request at all, then show the stored copy for up to
 // 10 minutes while the browser fetches a fresh one in the background.
@@ -29,7 +32,8 @@ module.exports = () => async (ctx, next) => {
 
   const explicitlyPublic = String(ctx.response.get('Cache-Control') || '').startsWith('public');
   if (ctx.path.startsWith('/api/') && !explicitlyPublic) {
-    const cacheable = ctx.method === 'GET' && ctx.status === 200 && BROWSER_CACHEABLE.test(ctx.path);
+    const cacheable = ctx.method === 'GET' && ctx.status === 200 && BROWSER_CACHEABLE.test(ctx.path)
+      && !NEVER_BROWSER_CACHED.test(ctx.path);
     if (cacheable) {
       ctx.set('Cache-Control', BROWSER_CACHE_CONTROL);
       ctx.vary('Authorization');

@@ -774,6 +774,12 @@ function toLiteCatalogProduct(product) {
   return next;
 }
 
+// A seller who just published must find the item on the next marketplace load,
+// not after the copy expires.
+function invalidateMarketplaceCatalog() {
+  marketplaceCatalog = null;
+}
+
 // Each Bunny edge fetches on its own; the in-process copy (and one shared
 // in-flight build) keeps that to roughly one database build per minute.
 async function getMarketplaceCatalog(strapi) {
@@ -909,7 +915,9 @@ async function sendMarketplaceCatalog(ctx, pick) {
   ctx.set('Access-Control-Allow-Origin', '*');
   ctx.remove('Access-Control-Allow-Credentials');
   ctx.remove('Vary');
-  ctx.set('Cache-Control', 'public, max-age=60');
+  // Browsers revalidate on every load (an unchanged catalog is a 304); only
+  // the CDN may hold it for a minute.
+  ctx.set('Cache-Control', 'public, max-age=0, s-maxage=60, must-revalidate');
   ctx.set('ETag', payload.etag);
 
   if (ctx.get('If-None-Match') === payload.etag) {
@@ -1050,6 +1058,24 @@ function validateProductForPublish(payload = {}, existingProduct = null) {
   }
 
   return errors;
+}
+
+// Document Service keeps a draft row and a published row. A later image job
+// used to republish the draft row, which put listing status back to "draft"
+// on the row sellers actually see. Write the listing status onto every row.
+async function persistListingStatus(strapi, documentId, listingStatus) {
+  if (!documentId || !listingStatus) return;
+  const rows = await strapi.db.query('api::product.product').findMany({
+    where: { documentId },
+    select: ['id', 'status'],
+  });
+  for (const row of rows || []) {
+    if (row.status === listingStatus) continue;
+    await strapi.db.query('api::product.product').update({
+      where: { id: row.id },
+      data: { status: listingStatus },
+    });
+  }
 }
 
 function finalizeProductWritePayload(input = {}, existingProduct = null) {
@@ -1251,6 +1277,10 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
       return ctx.badRequest(message || 'Could not create product');
     }
 
+    await persistListingStatus(strapi, created.documentId, payload.status);
+    if (created && payload.status) created.status = payload.status;
+    invalidateMarketplaceCatalog();
+
     if (Array.isArray(payload.images) && payload.images.length > 0) {
       scheduleProductImageProcessing(strapi, { documentId: created.documentId, id: created.id });
     }
@@ -1449,6 +1479,10 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
       return ctx.badRequest(message || 'Could not update product');
     }
 
+    await persistListingStatus(strapi, updated.documentId, payload.status);
+    if (updated && payload.status) updated.status = payload.status;
+    invalidateMarketplaceCatalog();
+
     if (Object.prototype.hasOwnProperty.call(input, 'images') && Array.isArray(payload.images) && payload.images.length > 0) {
       scheduleProductImageProcessing(strapi, { documentId: updated.documentId, id: updated.id });
     }
@@ -1475,6 +1509,7 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
     await strapi.documents('api::product.product').delete({
       documentId: existingProduct.documentId,
     });
+    invalidateMarketplaceCatalog();
 
     return { data: { documentId: existingProduct.documentId, deleted: true } };
   },
