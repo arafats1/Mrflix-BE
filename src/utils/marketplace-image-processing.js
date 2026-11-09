@@ -2,6 +2,7 @@
 
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 const sharp = require('sharp');
+const { withProductWriteLock } = require('./product-write-lock');
 
 // Lightweight variants served in marketplace grids / lists.
 const VARIANT_SPECS = {
@@ -236,6 +237,7 @@ async function processProductImages(strapi, identifier = {}, options = {}) {
   }
 
   if (entries.length === 0) return false;
+  const processedOriginals = JSON.stringify(entries.map((entry) => entry.original));
 
   const needsWork = force || entries.some((entry) => entryNeedsProcessing(entry, force));
   if (!needsWork) return false;
@@ -330,21 +332,43 @@ async function processProductImages(strapi, identifier = {}, options = {}) {
   // Strapi 5 draft/publish: db.query only updates the draft row. The public API
   // reads the published document, so we must write the published version too.
   if (product.documentId) {
-    await strapi.documents('api::product.product').update({
-      documentId: product.documentId,
-      data: imagePayload,
-      status: 'published',
-    });
+    // Processing takes seconds. Take this product's write turn (so a seller's
+    // save can't collide with ours), then only write if the photos are still
+    // the ones we processed: if the seller changed them meanwhile, writing
+    // would bring back old photos, and their save already queued a new job.
+    return withProductWriteLock(product.documentId, async () => {
+      const latest = await strapi.db.query('api::product.product').findOne({
+        where: { documentId: product.documentId },
+        select: ['images', 'featuredImage'],
+      });
+      const latestEntries = Array.isArray(latest?.images)
+        ? latest.images.map(normalizeImageEntry).filter(Boolean)
+        : [];
+      if (latestEntries.length === 0 && latest?.featuredImage) {
+        const featuredEntry = normalizeImageEntry(latest.featuredImage);
+        if (featuredEntry) latestEntries.push(featuredEntry);
+      }
+      if (JSON.stringify(latestEntries.map((entry) => entry.original)) !== processedOriginals) {
+        return false;
+      }
 
-    try {
       await strapi.documents('api::product.product').update({
         documentId: product.documentId,
         data: imagePayload,
-        status: 'draft',
+        status: 'published',
       });
-    } catch (_) {
-      // Draft row may not exist for every product; published write is what matters.
-    }
+
+      try {
+        await strapi.documents('api::product.product').update({
+          documentId: product.documentId,
+          data: imagePayload,
+          status: 'draft',
+        });
+      } catch (_) {
+        // Draft row may not exist for every product; published write is what matters.
+      }
+      return true;
+    });
   } else {
     await strapi.db.query('api::product.product').update({
       where: { id: product.id },
@@ -359,17 +383,42 @@ async function processProductImages(strapi, identifier = {}, options = {}) {
  * Fire-and-forget wrapper so product create/update responses stay fast while
  * variant generation happens in the background.
  */
+// Each job downloads and re-encodes every photo of a product, which takes a lot
+// of memory. Every save with images (draft autosaves included) schedules one,
+// so a burst of sellers saving at once used to start them all together on a
+// server shared with other apps. Run at most two at a time, and keep a product
+// queued once (its latest save wins).
+const MAX_CONCURRENT_IMAGE_JOBS = 2;
+const queuedImageJobs = new Map();
+let runningImageJobs = 0;
+
+function runQueuedImageJobs(strapi) {
+  while (runningImageJobs < MAX_CONCURRENT_IMAGE_JOBS && queuedImageJobs.size > 0) {
+    const [key, job] = queuedImageJobs.entries().next().value;
+    queuedImageJobs.delete(key);
+    runningImageJobs += 1;
+
+    const label = job.identifier.documentId || job.identifier.id;
+    processProductImages(strapi, job.identifier, job.options)
+      .then((updated) => {
+        if (updated) {
+          strapi.log.info(`[marketplace-images] Generated lightweight variants for product ${label}.`);
+        }
+      })
+      .catch((error) => {
+        strapi.log.error(`[marketplace-images] Background variant generation failed for product ${label}: ${error.message}`);
+      })
+      .finally(() => {
+        runningImageJobs -= 1;
+        runQueuedImageJobs(strapi);
+      });
+  }
+}
+
 function scheduleProductImageProcessing(strapi, identifier = {}, options = {}) {
-  setImmediate(async () => {
-    try {
-      const updated = await processProductImages(strapi, identifier, options);
-      if (updated) {
-        strapi.log.info(`[marketplace-images] Generated lightweight variants for product ${identifier.documentId || identifier.id}.`);
-      }
-    } catch (error) {
-      strapi.log.error(`[marketplace-images] Background variant generation failed for product ${identifier.documentId || identifier.id}: ${error.message}`);
-    }
-  });
+  const key = String(identifier.documentId || identifier.id || '') || Symbol('product');
+  queuedImageJobs.set(key, { identifier, options });
+  setImmediate(() => runQueuedImageJobs(strapi));
 }
 
 module.exports = {

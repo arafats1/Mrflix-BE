@@ -57,6 +57,23 @@ module.exports = {
       },
     },
     {
+      // Before /products/:id, which would otherwise take "admin" as an id.
+      method: 'GET',
+      path: '/products/admin/most-viewed',
+      handler: 'product.adminMostViewed',
+      config: {
+        auth: false,
+      },
+    },
+    {
+      method: 'POST',
+      path: '/products/:id/view',
+      handler: 'product.recordView',
+      config: {
+        auth: false,
+      },
+    },
+    {
       method: 'GET',
       path: '/products/:id',
       handler: 'product.findOne',

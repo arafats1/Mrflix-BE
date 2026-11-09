@@ -11,6 +11,7 @@ const { assertAdmin } = require('../../../utils/admin-auth');
 const { resolveAuthUser } = require('../../../utils/resolve-auth-user');
 const { notifySellerMissingShopLocation } = require('../../../utils/marketplace-notifications');
 const { reverseGeocodePlaceName } = require('../../../utils/reverse-geocode');
+const { withProductWriteLock } = require('../../../utils/product-write-lock');
 const { isCarCategory, carProductFilters, calculateHirePurchaseMonthly } = require('../../../utils/cars');
 
 async function requireAuthUser(strapi, ctx) {
@@ -705,8 +706,9 @@ async function enrichListedProducts(strapi, products) {
 // active product. Building that once here (and letting the Bunny CDN cache it)
 // replaces 26+ paged requests per visitor with one shared response.
 const CATALOG_TTL_MS = 60 * 1000;
-// Not used by any marketplace listing view.
-const CATALOG_DROPPED_FIELDS = ['draftMeta'];
+// Not used by any marketplace listing view. viewCount changes on every product
+// view, so keeping it would also change the catalog's ETag all the time.
+const CATALOG_DROPPED_FIELDS = ['draftMeta', 'viewCount'];
 let marketplaceCatalog = null;
 let marketplaceCatalogBuild = null;
 
@@ -733,6 +735,8 @@ async function buildMarketplaceCatalog(strapi) {
 
   return {
     ...catalogPayload(data, { total: data.length, generatedAt }),
+    // Kept as objects too, so shuffled pages can be served without a query.
+    data,
     lite: catalogPayload(data.map(toLiteCatalogProduct), { total: data.length, generatedAt }),
     descriptions: catalogPayload(descriptions, { total: Object.keys(descriptions).length, generatedAt }),
     builtAt: Date.now(),
@@ -793,6 +797,99 @@ async function getMarketplaceCatalog(strapi) {
   }
   // Serve the previous copy while a rebuild is running, if there is one.
   return marketplaceCatalog || marketplaceCatalogBuild;
+}
+
+// Marketplace browse order: promoted listings first, then every other product
+// in an order that reshuffles at midnight and midday Uganda time (UTC+3), so
+// older listings keep getting seen instead of only the newest ones. Everyone
+// gets the same order within a period, so paging through it is stable. The web
+// marketplace (Movies-App lib/marketplaceShuffle.js) uses the same rule.
+const SHUFFLE_PERIOD_MS = 12 * 60 * 60 * 1000;
+const SHUFFLE_UTC_OFFSET_MS = 3 * 60 * 60 * 1000;
+
+function currentShufflePeriod(now = Date.now()) {
+  return Math.floor((now + SHUFFLE_UTC_OFFSET_MS) / SHUFFLE_PERIOD_MS);
+}
+
+// FNV-1a over "period:documentId": cheap, stable and well spread.
+function shuffleKey(period, id) {
+  const text = `${period}:${id}`;
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < text.length; i += 1) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return hash >>> 0;
+}
+
+function compareShuffled(left, right, period, now) {
+  const leftPromoted = toTimestamp(left.promotedUntil) > now;
+  const rightPromoted = toTimestamp(right.promotedUntil) > now;
+  if (leftPromoted !== rightPromoted) return leftPromoted ? -1 : 1;
+  if (leftPromoted) {
+    // Same as before for paid placements: whole-shop promotions, then newest.
+    const leftSellerWide = left.promotionKind === 'seller' ? 1 : 0;
+    const rightSellerWide = right.promotionKind === 'seller' ? 1 : 0;
+    if (leftSellerWide !== rightSellerWide) return rightSellerWide - leftSellerWide;
+    return toTimestamp(right.createdAt) - toTimestamp(left.createdAt);
+  }
+  const leftId = String(left.documentId || left.id);
+  const rightId = String(right.documentId || right.id);
+  return (shuffleKey(period, leftId) - shuffleKey(period, rightId)) || leftId.localeCompare(rightId);
+}
+
+// The filters the marketplace browse lists send, matched against a catalog
+// product. Returns null for anything else so the caller can fall back to a
+// normal database query.
+function matchCatalogFilter(product, field, condition) {
+  const value = product[field];
+  if (condition === null || typeof condition !== 'object') return String(value ?? '') === String(condition);
+  const keys = Object.keys(condition);
+  if (keys.length !== 1) return null;
+  if (keys[0] === '$eq') return String(value ?? '') === String(condition.$eq);
+  if (keys[0] === '$in') {
+    const options = Array.isArray(condition.$in) ? condition.$in : Object.values(condition.$in || {});
+    return options.map(String).includes(String(value ?? ''));
+  }
+  return null;
+}
+
+const SHUFFLE_FILTER_FIELDS = new Set(['status', 'audience', 'itemType', 'category']);
+
+async function findShuffledPage(strapi, filters, page, pageSize) {
+  const status = filters.status?.$eq ?? filters.status;
+  // The catalog only holds active products.
+  if (status !== 'active') return null;
+  if (Object.keys(filters).some((field) => !SHUFFLE_FILTER_FIELDS.has(field))) return null;
+
+  const catalog = await getMarketplaceCatalog(strapi);
+  const matching = [];
+  for (const product of catalog.data) {
+    let keep = true;
+    for (const [field, condition] of Object.entries(filters)) {
+      if (field === 'status') continue;
+      const match = matchCatalogFilter(product, field, condition);
+      if (match === null) return null;
+      if (!match) {
+        keep = false;
+        break;
+      }
+    }
+    if (keep) matching.push(product);
+  }
+
+  const period = currentShufflePeriod();
+  const now = Date.now();
+  matching.sort((left, right) => compareShuffled(left, right, period, now));
+
+  const total = matching.length;
+  return {
+    data: matching.slice((page - 1) * pageSize, page * pageSize),
+    meta: {
+      pagination: { page, pageSize, pageCount: Math.ceil(total / pageSize), total },
+      shufflePeriod: period,
+    },
+  };
 }
 
 // Sends one variant of the catalog (`pick` chooses full, lite or descriptions).
@@ -1194,13 +1291,19 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
       filters.status = 'active';
     }
 
+    const shuffle = ctx.query.sort === 'shuffle';
+    if (shuffle) {
+      const shuffled = await findShuffledPage(strapi, filters, page, pageSize);
+      if (shuffled) return shuffled;
+    }
+
     const [products, total] = await Promise.all([
       strapi.documents('api::product.product').findMany({
         filters,
         populate: {
           seller: true,
         },
-        sort: ctx.query.sort || [{ promotedUntil: 'desc' }, { createdAt: 'desc' }],
+        sort: (!shuffle && ctx.query.sort) || [{ promotedUntil: 'desc' }, { createdAt: 'desc' }],
         start: (page - 1) * pageSize,
         limit: pageSize,
         status: 'published',
@@ -1326,14 +1429,16 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
 
     try {
       payload = finalizeProductWritePayload(input, existingProduct);
-      updated = await strapi.documents('api::product.product').update({
+      // One write per product at a time, so this can't collide with the
+      // background image job (see utils/product-write-lock).
+      updated = await withProductWriteLock(existingProduct.documentId, () => strapi.documents('api::product.product').update({
         documentId: existingProduct.documentId,
         data: payload,
         populate: {
           seller: true,
         },
         status: 'published',
-      });
+      }));
     } catch (err) {
       if (err.name === 'ValidationError') return ctx.badRequest(err.message);
       strapi.log.error(`[product.update] ${err.message}`);
@@ -1508,19 +1613,103 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
     };
   },
 
+  /**
+   * Counts one view of a product page. The website and app call this when a
+   * buyer opens a product, at most once per product per device every 30
+   * minutes. A raw increment so concurrent views never overwrite each other
+   * and the product's updatedAt (which the marketplace uses) is left alone.
+   * Every row of the document (draft and published) is bumped, so publishing
+   * a seller's edit doesn't reset the count.
+   */
+  async recordView(ctx) {
+    const id = sanitizeProductIdentifier(ctx.params.id);
+    if (!id) return ctx.badRequest('Product id is required');
+
+    const knex = strapi.db.connection;
+    let documentId = id;
+    if (/^\d+$/.test(id)) {
+      const row = await knex('products').where({ id: Number(id) }).first('document_id');
+      documentId = row?.document_id;
+    }
+    if (!documentId) return ctx.notFound('Product not found');
+
+    const updated = await knex('products')
+      .where({ document_id: documentId })
+      .update({ view_count: knex.raw('COALESCE(view_count, 0) + 1') });
+    if (!updated) return ctx.notFound('Product not found');
+
+    ctx.status = 204;
+  },
+
+  /**
+   * Admin: published products ranked by views, most viewed first.
+   */
+  async adminMostViewed(ctx) {
+    if (!(await assertAdmin(ctx, strapi))) return;
+
+    const page = Math.max(1, Number.parseInt(ctx.query.page || '1', 10) || 1);
+    const pageSize = Math.min(100, Math.max(1, Number.parseInt(ctx.query.pageSize || '50', 10) || 50));
+    const knex = strapi.db.connection;
+
+    const viewed = () => knex('products as p')
+      .whereNotNull('p.published_at')
+      .where('p.view_count', '>', 0);
+
+    const [rows, totals] = await Promise.all([
+      viewed()
+        .leftJoin('products_seller_lnk as l', 'l.product_id', 'p.id')
+        .leftJoin('up_users as u', 'u.id', 'l.user_id')
+        .orderBy([{ column: 'p.view_count', order: 'desc' }, { column: 'p.id', order: 'asc' }])
+        .offset((page - 1) * pageSize)
+        .limit(pageSize)
+        .select(
+          'p.document_id as documentId',
+          'p.name',
+          'p.category',
+          'p.status',
+          'p.price_ugx as priceUGX',
+          'p.featured_image as featuredImage',
+          'p.view_count as viewCount',
+          'p.created_at as createdAt',
+          'u.full_name as sellerFullName',
+          'u.username as sellerUsername',
+        ),
+      viewed().count({ products: 'p.id' }).sum({ views: 'p.view_count' }).first(),
+    ]);
+
+    const total = Number(totals?.products || 0);
+    ctx.body = {
+      data: rows.map((row) => ({
+        documentId: row.documentId,
+        name: row.name,
+        category: row.category,
+        status: row.status,
+        priceUGX: Number(row.priceUGX || 0),
+        featuredImage: row.featuredImage || '',
+        viewCount: Number(row.viewCount || 0),
+        createdAt: row.createdAt,
+        sellerName: row.sellerFullName || row.sellerUsername || '',
+      })),
+      meta: {
+        totalViews: Number(totals?.views || 0),
+        pagination: { page, pageSize, pageCount: Math.ceil(total / pageSize), total },
+      },
+    };
+  },
+
   async likeVideo(ctx) {
     const product = await findProductByIdentifier(strapi, ctx.params.id);
     if (!product) return ctx.notFound('Product not found');
     if (!product.productVideoUrl) return ctx.badRequest('This product has no video');
 
-    const updated = await strapi.documents('api::product.product').update({
+    const updated = await withProductWriteLock(product.documentId, () => strapi.documents('api::product.product').update({
       documentId: product.documentId,
       data: {
         productVideoLikes: Math.max(0, Number(product.productVideoLikes || 0)) + 1,
       },
       populate: { seller: true },
       status: 'published',
-    });
+    }));
 
     return { data: await attachReviewSummary(strapi, await withSoldCount(strapi, updated)) };
   },
@@ -1546,14 +1735,14 @@ module.exports = createCoreController('api::product.product', ({ strapi }) => ({
       createdAt: new Date().toISOString(),
     };
 
-    const updated = await strapi.documents('api::product.product').update({
+    const updated = await withProductWriteLock(product.documentId, () => strapi.documents('api::product.product').update({
       documentId: product.documentId,
       data: {
         productVideoComments: normalizeProductVideoComments([...currentComments, nextComment]),
       },
       populate: { seller: true },
       status: 'published',
-    });
+    }));
 
     return { data: await attachReviewSummary(strapi, await withSoldCount(strapi, updated)) };
   },

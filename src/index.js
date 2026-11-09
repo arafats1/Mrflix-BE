@@ -167,6 +167,16 @@ module.exports = {
   async register(/*{ strapi }*/) {},
 
   async bootstrap({ strapi }) {
+    // On the VPS, Caddy keeps idle connections to this app open for up to 2
+    // minutes and reuses them, but Node closes them after 5 seconds. A request
+    // sent on a connection Node had just closed was reset ("connection reset by
+    // peer" in Caddy, "Failed to fetch" in the browser). Outlive Caddy instead.
+    const httpServer = strapi.server?.httpServer;
+    if (httpServer) {
+      httpServer.keepAliveTimeout = 130 * 1000;
+      httpServer.headersTimeout = 131 * 1000; // must exceed keepAliveTimeout
+    }
+
     await ensureRolePermissions(strapi, 'admin', ADMIN_ACADEMY_ACTIONS);
     await ensureRolePermissions(strapi, 'authenticated', AUTHENTICATED_ACTIONS);
     await ensureRolePermissions(strapi, 'admin', AUTHENTICATED_ACTIONS);

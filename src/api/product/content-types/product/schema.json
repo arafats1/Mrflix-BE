@@ -76,6 +76,11 @@
       "default": 0,
       "min": 0
     },
+    "viewCount": {
+      "type": "integer",
+      "default": 0,
+      "min": 0
+    },
     "productVideoComments": {
       "type": "json"
     },
