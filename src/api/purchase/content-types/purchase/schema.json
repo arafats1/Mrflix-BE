@@ -66,6 +66,14 @@
       "enum": ["pending_delivery", "delivered", "not_delivered"],
       "default": "pending_delivery"
     },
+    "buyerReceiptStatus": {
+      "type": "enumeration",
+      "enum": ["pending", "received", "not_received"],
+      "default": "pending"
+    },
+    "buyerComment": {
+      "type": "text"
+    },
     "downloadCount": {
       "type": "integer",
       "default": 0

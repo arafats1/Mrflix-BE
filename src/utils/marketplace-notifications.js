@@ -126,6 +126,44 @@ async function notifyBuyerOrderStatus(strapi, purchase, sellerId, nextStatus) {
   }
 }
 
+async function notifySellerBuyerReceiptUpdate(strapi, purchase, buyerId, nextStatus, buyerComment = '') {
+  const sellerId = Number(purchase.product?.seller?.id || purchase.product?.seller || 0);
+  const actorId = Number(buyerId || purchase.buyer?.id || purchase.buyer || 0);
+  if (!sellerId || !actorId) return;
+
+  const productName = purchase.product?.name || 'an order';
+  const buyerName = purchase.buyer?.fullName || purchase.buyer?.username || 'A buyer';
+  const statusLabel = nextStatus === 'received'
+    ? 'Received'
+    : nextStatus === 'not_received'
+      ? 'Not Received'
+      : 'updated';
+  const commentPreview = String(buyerComment || '').trim();
+  const message = commentPreview
+    ? `${buyerName} marked ${productName} as ${statusLabel}: "${commentPreview.slice(0, 140)}"`
+    : `${buyerName} marked ${productName} as ${statusLabel}.`;
+
+  try {
+    await createNotification(strapi, {
+      recipientId: sellerId,
+      actorId,
+      type: 'system',
+      title: 'Buyer order update',
+      message,
+      actionUrl: '/providers/orders',
+      metadata: {
+        category: 'marketplace_buyer_receipt',
+        purchaseId: purchase.documentId,
+        productId: purchase.product?.documentId || null,
+        buyerReceiptStatus: nextStatus,
+        buyerComment: commentPreview || null,
+      },
+    });
+  } catch (err) {
+    strapi.log.warn(`Marketplace buyer receipt notification failed: ${err.message}`);
+  }
+}
+
 function sellerHasShopCoordinates(seller) {
   const latitude = seller?.businessLatitude;
   const longitude = seller?.businessLongitude;
@@ -165,6 +203,7 @@ module.exports = {
   notifyMarketplaceMessage,
   notifyProductOrderPlaced,
   notifyBuyerOrderStatus,
+  notifySellerBuyerReceiptUpdate,
   notifySellerMissingShopLocation,
   sellerHasShopCoordinates,
 };

@@ -4459,6 +4459,11 @@ export interface ApiPurchasePurchase extends Struct.CollectionTypeSchema {
       'manyToOne',
       'plugin::users-permissions.user'
     >;
+    buyerComment: Schema.Attribute.Text;
+    buyerReceiptStatus: Schema.Attribute.Enumeration<
+      ['pending', 'received', 'not_received']
+    > &
+      Schema.Attribute.DefaultTo<'pending'>;
     childProfile: Schema.Attribute.Relation<
       'manyToOne',
       'api::child-profile.child-profile'

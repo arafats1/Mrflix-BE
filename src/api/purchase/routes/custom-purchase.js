@@ -29,6 +29,14 @@ module.exports = {
       },
     },
     {
+      method: 'PUT',
+      path: '/purchases/:id/buyer-receipt-status',
+      handler: 'api::purchase.purchase.updateBuyerReceiptStatus',
+      config: {
+        auth: false,
+      },
+    },
+    {
       method: 'GET',
       path: '/purchases/:id',
       handler: 'api::purchase.purchase.findOne',

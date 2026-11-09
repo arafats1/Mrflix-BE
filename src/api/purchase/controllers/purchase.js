@@ -3,7 +3,7 @@
 const { createCoreController } = require('@strapi/strapi').factories;
 const { submitPayment, checkPaymentStatus, getActiveGateway, gatewayNeedsPhone, buildGatewayTrackingUpdate, toStoredPaymentMethod, resolveRecordGateway, formatPaymentInitiationError } = require('../../../utils/payment-gateway');
 const { recordProviderMaterialSale } = require('../../../utils/provider-material-sales');
-const { notifyBuyerOrderStatus, notifyProductOrderPlaced } = require('../../../utils/marketplace-notifications');
+const { notifyBuyerOrderStatus, notifyProductOrderPlaced, notifySellerBuyerReceiptUpdate } = require('../../../utils/marketplace-notifications');
 
 function getDiscountedProductAmount(product) {
   const basePrice = Number(product?.priceUGX || 0);
@@ -172,6 +172,13 @@ function normalizeDeliveryStatus(status) {
   if (value === 'delivered') return 'delivered';
   if (value === 'not_delivered' || value === 'not delivered') return 'not_delivered';
   return 'pending_delivery';
+}
+
+function normalizeBuyerReceiptStatus(status) {
+  const value = String(status || '').trim().toLowerCase().replace(/\s+/g, '_');
+  if (value === 'received') return 'received';
+  if (value === 'not_received' || value === 'notreceived') return 'not_received';
+  return 'pending';
 }
 
 async function resolveRequestUser(strapi, ctx) {
@@ -411,6 +418,8 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
       data: sellerPurchases.map((purchase) => ({
         ...purchase,
         deliveryStatus: normalizeDeliveryStatus(purchase.deliveryStatus),
+        buyerReceiptStatus: normalizeBuyerReceiptStatus(purchase.buyerReceiptStatus),
+        buyerComment: typeof purchase.buyerComment === 'string' ? purchase.buyerComment : '',
         buyer: purchase.buyer
           ? {
               ...purchase.buyer,
@@ -484,6 +493,85 @@ module.exports = createCoreController('api::purchase.purchase', ({ strapi }) => 
       data: {
         ...updated,
         deliveryStatus: normalizeDeliveryStatus(updated.deliveryStatus),
+      },
+    };
+  },
+
+  async updateBuyerReceiptStatus(ctx) {
+    const requestUser = await resolveRequestUser(strapi, ctx);
+    if (!requestUser) {
+      return ctx.unauthorized('You must be logged in');
+    }
+
+    const purchaseId = ctx.params?.id;
+    const body = ctx.request.body.data || ctx.request.body || {};
+    const nextStatus = normalizeBuyerReceiptStatus(body.buyerReceiptStatus);
+    const nextComment = typeof body.buyerComment === 'string'
+      ? body.buyerComment.trim().slice(0, 2000)
+      : '';
+
+    if (!purchaseId) {
+      return ctx.badRequest('Missing purchase id');
+    }
+
+    if (nextStatus === 'pending') {
+      return ctx.badRequest('Choose Received or Not Received');
+    }
+
+    const purchase = await strapi.documents('api::purchase.purchase').findOne({
+      documentId: purchaseId,
+      populate: {
+        product: {
+          populate: {
+            seller: true,
+          },
+        },
+        buyer: true,
+      },
+    });
+
+    if (!purchase) {
+      return ctx.notFound('Order not found');
+    }
+
+    if (!purchase.product) {
+      return ctx.badRequest('Only marketplace product orders support buyer receipt updates');
+    }
+
+    const buyerId = Number(purchase.buyer?.id || purchase.buyer || 0);
+    if (!buyerId || buyerId !== Number(requestUser.id)) {
+      return ctx.forbidden('You can only update your own purchases');
+    }
+
+    const previousStatus = normalizeBuyerReceiptStatus(purchase.buyerReceiptStatus);
+    const previousComment = typeof purchase.buyerComment === 'string' ? purchase.buyerComment.trim() : '';
+
+    const updated = await strapi.documents('api::purchase.purchase').update({
+      documentId: purchase.documentId,
+      data: {
+        buyerReceiptStatus: nextStatus,
+        buyerComment: nextComment,
+      },
+      populate: {
+        product: {
+          populate: {
+            seller: true,
+          },
+        },
+        buyer: true,
+      },
+    });
+
+    if (previousStatus !== nextStatus || previousComment !== nextComment) {
+      await notifySellerBuyerReceiptUpdate(strapi, updated, requestUser.id, nextStatus, nextComment);
+    }
+
+    return {
+      data: {
+        ...updated,
+        deliveryStatus: normalizeDeliveryStatus(updated.deliveryStatus),
+        buyerReceiptStatus: normalizeBuyerReceiptStatus(updated.buyerReceiptStatus),
+        buyerComment: typeof updated.buyerComment === 'string' ? updated.buyerComment : '',
       },
     };
   },
