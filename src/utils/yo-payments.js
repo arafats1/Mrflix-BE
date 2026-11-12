@@ -142,11 +142,30 @@ async function requestDeposit({
  * @param {string} [params.privateTransactionReference] – your externalReference
  */
 async function checkStatus({ transactionReference, privateTransactionReference }) {
-  return yoCall('actransactioncheckstatus', {
-    TransactionReference: transactionReference,
-    PrivateTransactionReference: privateTransactionReference,
-    DepositTransactionType: 'PULL',
-  });
+  try {
+    return await yoCall('actransactioncheckstatus', {
+      TransactionReference: transactionReference,
+      PrivateTransactionReference: privateTransactionReference,
+      DepositTransactionType: 'PULL',
+    });
+  } catch (err) {
+    // For a failed payment Yo answers Status=ERROR *with* TransactionStatus=FAILED
+    // (e.g. "Mobile Provider Transaction Processing System is Busy"). That is a
+    // real answer, not a failed lookup: hand it back so callers mark the payment
+    // failed. Throwing here left those payments "pending" forever and the
+    // customer stuck on "Waiting for payment".
+    if (err?.transactionStatus) {
+      return {
+        status: 'ERROR',
+        statusCode: err.statusCode,
+        transactionStatus: err.transactionStatus,
+        transactionReference: extractTag(err.rawXml || '', 'TransactionReference') || transactionReference,
+        failureReason: err.message,
+        raw: err.rawXml,
+      };
+    }
+    throw err;
+  }
 }
 
 module.exports = {

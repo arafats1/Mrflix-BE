@@ -27,6 +27,8 @@ module.exports = [
   'strapi::errors',
   'global::airtel-callback-head',
   'global::public-host',
+  // Strips paid video links from API responses for viewers without access.
+  'global::movie-playback-guard',
   {
     name: 'strapi::security',
     config: {
