@@ -25,7 +25,24 @@ function toStoredPaymentMethod(paymentMethod) {
 /**
  * Build a user-facing payment initiation error (avoid generic "try again" when Airtel gives a reason).
  */
+// Shown to customers when the payment failed because of our own setup
+// (expired or missing gateway credentials, server IP not whitelisted, ...).
+// The customer can do nothing about these, and the raw gateway text
+// ("API credentials expired: regenerate them in the portal...") is meant
+// for us, not them. The details are still in the server logs.
+const MERCHANT_SIDE_PAYMENT_ERROR =
+  'An error occured! Our technical team has been notified and this will be resolved shortly. Contact 0784528444 for assistance';
+
+const MERCHANT_SIDE_ERROR_PATTERN = /credential|api access|regenerate|authenticat|unauthori[sz]ed|invalid (api )?(user(name)?|password|key|token)|ip address not allowed|not whitelisted|environment variables are not set|account (is )?(suspended|disabled|inactive)|merchant (account )?(suspended|disabled|inactive)/i;
+
+function isMerchantSidePaymentError(err) {
+  const message = String(err?.message || '');
+  return MERCHANT_SIDE_ERROR_PATTERN.test(message);
+}
+
 function formatPaymentInitiationError(err) {
+  if (isMerchantSidePaymentError(err)) return MERCHANT_SIDE_PAYMENT_ERROR;
+
   const code = err?.code || err?.raw?.status?.response_code || err?.raw?.status?.code || err?.raw?.status_code || null;
   const fromCode = code ? describeAirtelResponseCode(code) : null;
   const message = String(err?.message || '').trim();
